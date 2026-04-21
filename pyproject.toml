@@ -13,9 +13,11 @@ requires-python = ">=3.11"
 dependencies = [
     "epub>=0.5.2",
     "qdrant-client>=1.12.0",
-    "requests>=2.31.0",
+    "requests>=2.32.0",
     "python-dotenv>=1.0.0",
     "click>=8.1.0",
+    "arxiv>=3.0.0",
+    "feedparser>=6.0.10",
 ]
 
 [project.scripts]

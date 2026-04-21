@@ -1,0 +1,3 @@
+[submodule "ai-agent-papers"]
+	path = ai-agent-papers
+	url = https://github.com/masamasa59/ai-agent-papers.git
