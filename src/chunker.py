@@ -19,6 +19,10 @@ class Chunk:
     section_index: int
     chunk_index: int
     token_count: int
+    # Book-level metadata for payload
+    publisher: Optional[str] = None
+    language: Optional[str] = None
+    isbn: Optional[str] = None
     vector: Optional[List[float]] = None
 
 
@@ -37,6 +41,10 @@ def chunk_section(
     section: Section,
     chunk_size: int = 500,
     chunk_overlap: int = 100,
+    book_title: str = "",
+    publisher: Optional[str] = None,
+    language: Optional[str] = None,
+    isbn: Optional[str] = None,
 ) -> list[Chunk]:
     """Split a single section into chunks.
 
@@ -67,7 +75,13 @@ def chunk_section(
 
     def _flush(text: str) -> None:
         nonlocal chunk_index, global_counter
-        chunks.append(_make_chunk(text, section, chunk_index, global_counter))
+        chunks.append(_make_chunk(
+            text, section, chunk_index, global_counter,
+            book_title=book_title,
+            publisher=publisher,
+            language=language,
+            isbn=isbn,
+        ))
         chunk_index += 1
         global_counter += 1
 
@@ -144,16 +158,23 @@ def _make_chunk(
     section: Section,
     chunk_index: int,
     global_counter: int,
+    book_title: str = "",
+    publisher: Optional[str] = None,
+    language: Optional[str] = None,
+    isbn: Optional[str] = None,
 ) -> Chunk:
     """Create a Chunk from text and section metadata."""
     # Qdrant requires integer or UUID IDs
     return Chunk(
         id=str(global_counter),
         text=text,
-        book_title=section.title,  # will be overridden by caller
+        book_title=book_title or section.title,
         chapter_index=section.chapter_index,
         section_title=section.title,
         section_index=section.section_index,
         chunk_index=chunk_index,
         token_count=_count_tokens(text),
+        publisher=publisher,
+        language=language,
+        isbn=isbn,
     )

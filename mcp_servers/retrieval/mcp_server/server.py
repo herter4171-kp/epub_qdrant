@@ -144,6 +144,18 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "list_books",
+        "description": (
+            "List all available books in the knowledge base with metadata "
+            "including title, author, publisher, language, ISBN, and chunk count."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 
@@ -262,11 +274,24 @@ def _handle_list_collections(_args: dict) -> dict:
     return {"collections": storage.list_collections()}
 
 
+def _handle_list_books(_args: dict) -> dict:
+    """Handle the list_books tool call."""
+    storage = get_storage()
+    books = storage.list_books()
+    total_chunks = sum(b.get("chunk_count", 0) for b in books)
+    return {
+        "books": books,
+        "total_books": len(books),
+        "total_chunks": total_chunks,
+    }
+
+
 HANDLERS = {
     "search": _handle_search,
     "answer": _handle_answer,
     "get_context": _handle_get_context,
     "list_collections": _handle_list_collections,
+    "list_books": _handle_list_books,
 }
 
 
@@ -300,6 +325,18 @@ def create_app() -> FastAPI:
             "collection": settings.QDRANT_COLLECTION,
             "tools": [t["name"] for t in TOOLS],
         }
+
+    @app.get("/books")
+    async def list_books_endpoint() -> JSONResponse:
+        """REST endpoint for listing available books."""
+        storage = get_storage()
+        books = storage.list_books()
+        total_chunks = sum(b.get("chunk_count", 0) for b in books)
+        return JSONResponse(content={
+            "total_books": len(books),
+            "total_chunks": total_chunks,
+            "books": books,
+        })
 
     @app.post("/mcp")
     async def mcp_endpoint(request: Request) -> JSONResponse:

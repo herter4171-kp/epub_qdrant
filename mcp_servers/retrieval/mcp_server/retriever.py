@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from qdrant_client.models import FieldCondition, MatchValue
+
 from src.embedder import Embedder
 from src.storage import Storage
 from mcp_server.config import settings
@@ -22,6 +24,9 @@ class ChunkResult:
     chapter_index: int
     section_index: int
     chunk_index: int
+    publisher: Optional[str] = None
+    language: Optional[str] = None
+    isbn: Optional[str] = None
     vector: Optional[List[float]] = None
 
 
@@ -109,6 +114,9 @@ class Retriever:
                 chapter_index=r.get("chapter_index", 0),
                 section_index=r.get("section_index", 0),
                 chunk_index=r.get("chunk_index", 0),
+                publisher=r.get("publisher"),
+                language=r.get("language"),
+                isbn=r.get("isbn"),
             ))
 
         # 3. Expand with context (surrounding chunks from same book/chapter)
@@ -155,6 +163,9 @@ class Retriever:
                 "chapter_index": r.get("chapter_index", 0),
                 "section_index": r.get("section_index", 0),
                 "chunk_index": r.get("chunk_index", 0),
+                "publisher": r.get("publisher", ""),
+                "language": r.get("language", ""),
+                "isbn": r.get("isbn", ""),
             })
         return output
 
@@ -341,6 +352,92 @@ class Retriever:
         grouped.sort(key=lambda x: x.best_score, reverse=True)
         return grouped
 
+    def search_with_metadata_filter(
+        self,
+        query: str,
+        filter_by: Optional[Dict[str, str]] = None,
+        top_k: Optional[int] = None,
+    ) -> EvidenceBundle:
+        """Search with metadata filtering support.
+
+        Uses metadata filtering at the Qdrant level to narrow results
+        before semantic search, improving relevance for domain-specific queries.
+
+        Args:
+            query: Search query string.
+            filter_by: Dict of metadata key->value pairs to filter on.
+                       e.g. {"publisher": "Apress", "language": "en"}
+            top_k: Override default top-k count.
+
+        Returns:
+            EvidenceBundle with filtered grouped results.
+        """
+        top_k = top_k or self._top_k
+
+        # 1. Build metadata filter
+        query_filter = None
+        if filter_by:
+            conditions = []
+            for key, value in filter_by.items():
+                conditions.append(
+                    FieldCondition(key=key, match=MatchValue(value=value))
+                )
+            if conditions:
+                from qdrant_client.models import Filter
+                query_filter = Filter(must=conditions)
+
+        # 2. Generate query embedding
+        query_vector = self._embedder.embed_single(query)
+
+        # 3. Query Qdrant with filter
+        results = self._storage._client.query_points(
+            collection_name=self._collection,
+            query=query_vector,
+            limit=top_k,
+            query_filter=query_filter,
+        )
+
+        # 4. Convert to ChunkResult objects
+        chunk_results = []
+        for point in results.points:
+            chunk_results.append(ChunkResult(
+                score=point.score if hasattr(point, "score") else 0,
+                text=point.payload.get("text", ""),
+                book_title=point.payload.get("book_title", ""),
+                section_title=point.payload.get("section_title", ""),
+                source_file=point.payload.get("source_file", ""),
+                chapter_index=point.payload.get("chapter_index", 0),
+                section_index=point.payload.get("section_index", 0),
+                chunk_index=point.payload.get("chunk_index", 0),
+                publisher=point.payload.get("publisher"),
+                language=point.payload.get("language"),
+                isbn=point.payload.get("isbn"),
+            ))
+
+        if not chunk_results:
+            return EvidenceBundle(
+                query=query,
+                groups=[],
+                total_chunks=0,
+                prompt_context="",
+            )
+
+        # 5. Expand with context
+        expanded_results = self._expand_with_context(chunk_results)
+
+        # 6. Group by chapter or book
+        groups = self._group_results(expanded_results, self._group_by)
+
+        # 7. Assemble prompt context
+        prompt_context = self._build_prompt_context(groups)
+
+        return EvidenceBundle(
+            query=query,
+            groups=groups,
+            total_chunks=len(expanded_results),
+            prompt_context=prompt_context,
+        )
+
     def _build_prompt_context(self, groups: List[GroupedResult]) -> str:
         """Build a prompt-ready context string from grouped results.
 
@@ -353,7 +450,16 @@ class Retriever:
         for i, group in enumerate(groups, 1):
             parts.append(f"\n=== {group.group_label} ({group.book_title}) ===")
             for chunk in group.results:
-                parts.append(f"[score:{chunk.score:.4f}] {chunk.text}")
+                meta_parts = []
+                if chunk.publisher:
+                    meta_parts.append(f"publisher:{chunk.publisher}")
+                if chunk.language:
+                    meta_parts.append(f"lang:{chunk.language}")
+                if chunk.isbn:
+                    meta_parts.append(f"isbn:{chunk.isbn}")
+                meta_str = " ".join(meta_parts)
+                meta_prefix = f" [{meta_str}]" if meta_str else ""
+                parts.append(f"[score:{chunk.score:.4f}] {chunk.text}{meta_prefix}")
             parts.append("")
 
         return "\n".join(parts).strip()

@@ -19,11 +19,16 @@ class Section:
 
 @dataclass
 class Book:
-    """Represent a parsed EPUB book."""
+    """Represent a parsed EPUB book with full OPF metadata."""
     title: str
     creator: str
     sections: List[Section]
     source_file: str
+    publisher: Optional[str] = None
+    publication_date: Optional[str] = None
+    language: Optional[str] = None
+    rights: Optional[str] = None
+    isbn: Optional[str] = None
 
 
 def _clean_html_text(html_text: str) -> str:
@@ -98,10 +103,29 @@ def parse_epub(epub_path: str) -> Book:
     book_file = epub.open_epub(str(path))
 
     # Extract metadata from OPF
-    titles = book_file.opf.metadata.titles
-    creators = book_file.opf.metadata.creators
+    meta = book_file.opf.metadata
+    titles = meta.titles
+    creators = meta.creators
     book_title = titles[0][0] if titles else path.stem
     book_creator = creators[0][0] if creators else "Unknown"
+
+    # Extract additional metadata
+    publisher = meta.publisher or None
+    dates = meta.dates
+    publication_date = dates[0][0] if dates else None
+    languages = meta.languages
+    language = languages[0] if languages else None
+    rights = meta.right or None
+
+    # Get ISBN from identifiers (try to find isbn scheme first, fall back to any)
+    isbn = None
+    for ident_id, scheme, props in meta.identifiers:
+        if scheme and 'isbn' in scheme.lower():
+            isbn = ident_id
+            break
+    # Fallback: use first identifier if no ISBN found
+    if not isbn and meta.identifiers:
+        isbn = meta.identifiers[0][0]
 
     # Iterate through spine items
     sections: List[Section] = []
@@ -143,4 +167,9 @@ def parse_epub(epub_path: str) -> Book:
         creator=book_creator,
         sections=sections,
         source_file=str(path.name),
+        publisher=publisher,
+        publication_date=publication_date,
+        language=language,
+        rights=rights,
+        isbn=isbn,
     )

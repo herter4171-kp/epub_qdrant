@@ -3,7 +3,7 @@
 import hashlib
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -68,7 +68,8 @@ class Storage:
                 ),
             )
             # Create payload indexes for metadata filtering
-            for field in ("source_file", "book_title", "section_title"):
+            for field in ("source_file", "book_title", "section_title",
+                          "publisher", "language", "isbn"):
                 self._client.create_payload_index(
                     collection_name=collection_name,
                     field_name=field,
@@ -132,6 +133,9 @@ class Storage:
                     "chunk_index": chunk.chunk_index,
                     "token_count": chunk.token_count,
                     "source_file": str(path.name),
+                    "publisher": chunk.publisher,
+                    "language": chunk.language,
+                    "isbn": chunk.isbn,
                 },
             )
             points.append(point)
@@ -185,6 +189,9 @@ class Storage:
                 "book_title": point.payload.get("book_title", ""),
                 "section_title": point.payload.get("section_title", ""),
                 "chunk_index": point.payload.get("chunk_index", 0),
+                "publisher": point.payload.get("publisher", ""),
+                "language": point.payload.get("language", ""),
+                "isbn": point.payload.get("isbn", ""),
             })
 
         return output
@@ -193,6 +200,61 @@ class Storage:
         """Return list of all collection names."""
         collections = self._client.get_collections()
         return [c.name for c in collections.collections]
+
+    def list_books(self, collection_name: Optional[str] = None) -> List[dict]:
+        """List all unique books in the collection with metadata and chunk counts.
+
+        Uses Qdrant's scroll API to gather distinct source_file entries
+        and aggregates their metadata.
+
+        Args:
+            collection_name: Override the default collection name.
+
+        Returns:
+            List of dicts with book metadata and statistics.
+        """
+        name = collection_name or _sanitize_collection_name(
+            settings.QDRANT_COLLECTION
+        )
+
+        # Scroll through all points and aggregate by source_file
+        books: Dict[str, dict] = {}
+        offset = 0
+        limit = 100
+
+        while True:
+            records, _ = self._client.scroll(
+                collection_name=name,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not records:
+                break
+            for record in records:
+                payload = record.payload
+                src = payload.get("source_file", "")
+                if not src:
+                    continue
+                if src not in books:
+                    books[src] = {
+                        "source_file": src,
+                        "book_title": payload.get("book_title", ""),
+                        "publisher": payload.get("publisher", ""),
+                        "language": payload.get("language", ""),
+                        "isbn": payload.get("isbn", ""),
+                        "chunk_count": 0,
+                    }
+                books[src]["chunk_count"] += 1
+            offset += limit
+            if len(records) < limit:
+                break
+
+        # Sort by book_title
+        result = sorted(books.values(), key=lambda x: x.get("book_title", ""))
+        logger.info(f"Listed {len(result)} books from collection '{name}'")
+        return result
 
     def delete_collection(self, collection_name: str) -> None:
         """Delete a collection."""

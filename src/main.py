@@ -48,6 +48,14 @@ def _process_book(
     logger.info(
         f"  Title: {book.title} by {book.creator}"
     )
+    if book.publisher:
+        logger.info(f"  Publisher: {book.publisher}")
+    if book.publication_date:
+        logger.info(f"  Date: {book.publication_date}")
+    if book.language:
+        logger.info(f"  Language: {book.language}")
+    if book.isbn:
+        logger.info(f"  ISBN: {book.isbn}")
     logger.info(f"  Sections: {len(book.sections)}")
 
     # 2. Chunk all sections
@@ -57,10 +65,11 @@ def _process_book(
             section,
             chunk_size=settings.CHUNK_SIZE,
             chunk_overlap=settings.CHUNK_OVERLAP,
+            book_title=book.title,
+            publisher=book.publisher,
+            language=book.language,
+            isbn=book.isbn,
         )
-        # Override book_title
-        for c in chunks:
-            c.book_title = book.title
         all_chunks.extend(chunks)
 
     logger.info(f"  Chunks: {len(all_chunks)}")
@@ -141,6 +150,12 @@ def search(query: str, collection: str, top_k: int) -> None:
         click.echo(f"  Book: {r['book_title']}")
         click.echo(f"  Section: {r['section_title']}")
         click.echo(f"  Chunk: {r['chunk_index']}")
+        if r.get('publisher'):
+            click.echo(f"  Publisher: {r['publisher']}")
+        if r.get('language'):
+            click.echo(f"  Language: {r['language']}")
+        if r.get('isbn'):
+            click.echo(f"  ISBN: {r['isbn']}")
         # Show first 200 chars of text
         text_preview = r['text'][:200].replace('\n', ' ')
         if len(r['text']) > 200:
@@ -168,6 +183,36 @@ def delete_collection_command(collection: str) -> None:
     storage = Storage()
     storage.delete_collection(collection)
     click.echo(f"Deleted collection: {collection}")
+
+
+@cli.command(name="list-books")
+@click.option("--collection", help="Qdrant collection name (overrides env)", default=None)
+def list_books_command(collection: str) -> None:
+    """List all available books in the knowledge base."""
+    storage = Storage()
+    books = storage.list_books(collection_name=collection)
+
+    if not books:
+        click.echo("No books found in the knowledge base.")
+        return
+
+    name = collection or settings.QDRANT_COLLECTION
+    click.echo(f"\nBooks in collection: {name}")
+    click.echo(f"{'Title':<45} {'Publisher':<12} {'Lang':<5} {'ISBN':<25} {'Chunks':>6}")
+    click.echo("─" * 96)
+
+    for b in books:
+        title = (b.get("book_title", "") or b.get("source_file", ""))[:44]
+        title = title.replace('\n', ' ')
+        publisher = (b.get("publisher", "") or "")[:11]
+        language = b.get("language", "") or ""
+        isbn = (b.get("isbn", "") or "")[:24]
+        chunks = b.get("chunk_count", 0)
+        click.echo(f"{title:<45} {publisher:<12} {language:<5} {isbn:<25} {chunks:>6}")
+
+    total_chunks = sum(b.get("chunk_count", 0) for b in books)
+    click.echo("─" * 96)
+    click.echo(f"Total: {len(books)} book(s), {total_chunks} chunks")
 
 
 if __name__ == "__main__":
