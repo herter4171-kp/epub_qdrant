@@ -13,6 +13,7 @@ if _env_path.exists():
 
 class Settings:
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://192.168.68.75:6333")
+    QDRANT_COLLECTION: str = os.getenv("QDRANT_COLLECTION", "books")
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://192.168.68.75:11434")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "embeddinggemma:300m")
 

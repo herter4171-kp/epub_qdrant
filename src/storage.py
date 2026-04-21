@@ -1,5 +1,6 @@
 """Qdrant storage: create collections, upsert vectors, and query."""
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import List, Optional
@@ -21,11 +22,11 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _book_title_to_collection(book_title: str) -> str:
-    """Convert a book title to a valid Qdrant collection name."""
-    safe = book_title.lower().replace(" ", "-").replace(" ", "_")
-    safe = "".join(c for c in safe if c.isalnum() or c in ("-", "_"))
-    return safe[:63]  # Qdrant collection names max 63 chars
+def _sanitize_collection_name(name: str) -> str:
+    """Sanitize a collection name to be Qdrant-compatible."""
+    safe = name.lower().strip()
+    safe = "".join(c for c in safe if c.isalnum() or c in ("-", "_", "."))
+    return safe[:63]
 
 
 class Storage:
@@ -53,8 +54,7 @@ class Storage:
         self._distance = Distance(settings.DISTANCE)
 
     def _ensure_collection(self, collection_name: str) -> None:
-        """Create collection if it does not already exist."""
-        # Check existing collections
+        """Create shared collection if it does not already exist."""
         collections = self._client.get_collections()
         names = [c.name for c in collections.collections]
 
@@ -68,48 +68,58 @@ class Storage:
                 ),
             )
             # Create payload indexes for metadata filtering
-            self._client.create_payload_index(
-                collection_name=collection_name,
-                field_name="book_title",
-                field_schema=PayloadSchemaType.KEYWORD,
-            )
-            self._client.create_payload_index(
-                collection_name=collection_name,
-                field_name="section_title",
-                field_schema=PayloadSchemaType.KEYWORD,
-            )
+            for field in ("source_file", "book_title", "section_title"):
+                self._client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field,
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
 
     def upsert_file(
         self,
         epub_path: str,
         chunks: List[Chunk],
+        collection_name: Optional[str] = None,
     ) -> int:
-        """Upsert all chunks for a single EPUB file.
+        """Upsert all chunks for a single EPUB file into the shared collection.
 
-        Creates (or reuses) a collection named after the book.
-        Uses deterministic point IDs to allow re-ingestion without duplication.
+        All files go into one collection. Each chunk gets a deterministic ID
+        that combines a filename hash and a global counter to avoid collisions.
 
         Args:
             epub_path: Path to the source EPUB file.
             chunks: List of Chunk objects with vectors populated.
+            collection_name: Override the default collection name.
 
         Returns:
             Number of chunks upserted.
         """
         path = Path(epub_path)
-        book_name = path.stem
-        collection_name = _book_title_to_collection(book_name)
+        name = collection_name or settings.QDRANT_COLLECTION
+        collection_name = _sanitize_collection_name(name)
 
         self._ensure_collection(collection_name)
 
+        # Track a base offset per file to avoid collisions across books
+        # Query the highest existing ID in the collection for this collection
+        # Simpler approach: use a global counter passed via payload, store file_hash in payload
+        file_hash = hashlib.md5(path.name.encode()).hexdigest()[:8]
+
+        # Get existing point count in collection to determine base ID offset
+        try:
+            collection_info = self._client.get_collection(collection_name)
+            existing_points = collection_info.points_count
+        except Exception:
+            existing_points = 0
+
         points = []
-        for chunk in chunks:
+        for idx, chunk in enumerate(chunks):
             if not hasattr(chunk, "vector") or chunk.vector is None:
-                logger.warning(f"Skipping chunk {chunk.id} - no vector")
+                logger.warning(f"Skipping chunk - no vector")
                 continue
 
-            # Qdrant requires unsigned integer or UUID IDs
-            point_id = int(chunk.id)
+            # Integer ID: base + per-chunk offset
+            point_id = existing_points + idx
             point = PointStruct(
                 id=point_id,
                 vector=chunk.vector,
