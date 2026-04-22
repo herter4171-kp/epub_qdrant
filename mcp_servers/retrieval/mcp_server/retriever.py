@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+import numpy as np
 from qdrant_client.models import FieldCondition, MatchValue
 
 from src.embedder import Embedder
@@ -233,6 +234,10 @@ class Retriever:
     ) -> EvidenceBundle:
         """Search across ALL configured collections and merge results.
 
+        Applies per-collection z-score normalization to enable fair cross-collection
+        ranking, since scores from different collections live in different semantic
+        spaces (e.g. 90K papers vs 6K books).
+
         Args:
             query: Search query string.
             top_k: Total results per collection (merged total = top_k * num_collections).
@@ -252,15 +257,16 @@ class Retriever:
                 query=query, groups=[], total_chunks=0, prompt_context="",
             )
 
-        all_results: List[ChunkResult] = []
+        # Collect raw results per collection (with original scores)
+        collection_results: Dict[str, List[ChunkResult]] = {}
         for col in target_collections:
             try:
                 if filter_by:
                     raw = self._storage.search_with_filter(col, query, top_k=top_k, filter_by=filter_by)
                 else:
                     raw = self._storage.search(col, query, top_k=top_k)
-                for r in raw:
-                    all_results.append(ChunkResult(
+                collection_results[col] = [
+                    ChunkResult(
                         score=r.get("score", 0),
                         text=r.get("text", ""),
                         source_file=r.get("source_file", ""),
@@ -282,16 +288,56 @@ class Retriever:
                         publish_date=r.get("publish_date"),
                         authors=r.get("authors"),
                         year=r.get("year"),
-                    ))
+                    )
+                    for r in raw
+                ]
             except Exception as e:
                 logger.warning(f"search_collections failed for '{col}': {e}")
 
-        if not all_results:
+        if not collection_results:
             return EvidenceBundle(
                 query=query, groups=[], total_chunks=0, prompt_context="",
             )
 
-        # Sort globally by score, then group
+        # Per-collection z-score normalization.
+        # Each collection's scores are normalized independently so that a score of
+        # 0.55 in papers (90K points) is comparable to 0.55 in books (6K points).
+        all_results: List[ChunkResult] = []
+        q_lower = query.lower()
+        for col, results in collection_results.items():
+            scores = np.array([r.score for r in results])
+            mean_score = float(np.mean(scores))
+            std_score = float(np.std(scores)) + 1e-8  # avoid div-by-zero for single-result collections
+
+            for r in results:
+                z_score = (r.score - mean_score) / std_score
+                # Apply metadata boost for explicit query references
+                boost = self._compute_metadata_boost(r, q_lower)
+                all_results.append(ChunkResult(
+                    score=z_score + boost,
+                    text=r.text,
+                    source_file=r.source_file,
+                    title=r.title,
+                    section=r.section,
+                    doc_type=r.doc_type,
+                    book_title=r.book_title,
+                    section_title=r.section_title,
+                    chapter_index=r.chapter_index,
+                    section_index=r.section_index,
+                    chunk_index=r.chunk_index,
+                    token_count=r.token_count,
+                    publisher=r.publisher,
+                    language=r.language,
+                    isbn=r.isbn,
+                    arxiv_id=r.arxiv_id,
+                    category=r.category,
+                    subcategory=r.subcategory,
+                    publish_date=r.publish_date,
+                    authors=r.authors,
+                    year=r.year,
+                ))
+
+        # Sort globally by normalized+boosted score, then group
         all_results.sort(key=lambda x: x.score, reverse=True)
 
         # Build bibliography from unique sources
@@ -305,6 +351,35 @@ class Retriever:
             prompt_context=prompt_context, collections_queried=target_collections,
             sources=sources,
         )
+
+    def _compute_metadata_boost(self, chunk: ChunkResult, q_lower: str) -> float:
+        """Boost score if the query explicitly references the chunk's metadata.
+
+        Boost values are hardcoded for now; consider making configurable via
+        RETRIEVAL_BOOST_* settings in a future phase.
+
+        Returns:
+            Boost amount in [0, 0.15].
+        """
+        boost = 0.0
+
+        # Publisher mention (highest boost — often the most discriminative field)
+        if chunk.publisher and chunk.publisher.lower() in q_lower:
+            boost += 0.15
+
+        # Category mention (papers)
+        if chunk.category and chunk.category.lower() in q_lower:
+            boost += 0.10
+
+        # Subcategory mention (papers)
+        if chunk.subcategory and chunk.subcategory.lower() in q_lower:
+            boost += 0.10
+
+        # Doc_type mention (e.g. "book", "paper")
+        if chunk.doc_type and chunk.doc_type.lower() in q_lower:
+            boost += 0.05
+
+        return boost
 
     def search_raw(
         self,
