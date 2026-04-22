@@ -8,6 +8,7 @@ Standalone pipeline that reads EPUB files and PDF papers, generates embeddings v
 - [EPUB Ingestion](#epub-ingestion)
 - [Paper Embedding](#paper-embedding)
 - [Search (CLI)](#search-cli)
+- [Benchmark (LLM-as-Judge Evaluation)](#benchmark-llm-as-judge-evaluation)
 - [List Collections](#list-collections)
 - [List Books](#list-books)
 - [Delete a Collection](#delete-a-collection)
@@ -118,6 +119,95 @@ python -m src.main list-books --collection epub_kb
 ```bash
 python -m src.main delete-collection <collection-name>
 ```
+
+## Benchmark (LLM-as-Judge Evaluation)
+
+Evaluate retrieval quality using **LLM-as-judge pairwise comparison** — no human-labeled test set needed. Compares a baseline method against any new retrieval phase and reports win rates.
+
+### Setup
+
+```bash
+# Ensure litellm is installed (for the LLM judge)
+pip install litellm
+
+# Configure the judge's LLM endpoint in .env
+# OPENAI_API_BASE=http://192.168.68.75:4000/v1  (or your LiteLLM endpoint)
+# LITELLM_API_KEY=your-key
+```
+
+### Running
+
+```bash
+# Run baseline evaluation (compares current retriever vs itself — all ties expected)
+python3 scripts/evaluate.py baseline
+
+# Run a new phase and compare against the stored baseline
+python3 scripts/evaluate.py phase_2_hybrid
+
+# Use a different baseline for comparison
+python3 scripts/evaluate.py phase_2_hybrid --baseline phase_0
+
+# Custom output path
+python3 scripts/evaluate.py phase_2_hybrid --output results_new.json
+```
+
+### Query Set
+
+30 tailored queries across three categories:
+
+| Category | Count | Example Queries |
+|----------|-------|-----------------|
+| **Cross-collection** | 10 | "agentic AI patterns", "multi-agent collaboration strategies", "agent memory systems" |
+| **Books-focused** | 10 | "Apress books about agentic AI design", "enterprise patterns for generative AI systems" |
+| **Papers-focused** | 10 | "arxiv papers on agent framework architecture", "embodied agents research papers" |
+
+### Output
+
+Results are saved to `results.json` (or custom path):
+
+```json
+{
+  "version": "1.0",
+  "model": "openai/qwen36",
+  "evaluated_at": "2026-04-22T21:33:53.994071+00:00",
+  "baseline_method": "baseline",
+  "num_queries": 30,
+  "per_query_scores": {
+    "agentic AI patterns": {
+      "baseline": { "top5_avg_score": 2.1614, "cross_collection_ratio": 1.0 },
+      "phase_2_hybrid": { "top5_avg_score": 2.3451, "judge_wins_against_baseline": true },
+      "judgment": { "winner": "phase_2_hybrid", "reason": "..." }
+    }
+  },
+  "aggregate": {
+    "phase_2_hybrid": {
+      "wins_against_baseline": 18,
+      "losses_against_baseline": 10,
+      "ties": 2,
+      "win_rate": 0.60,
+      "avg_score_improvement": 0.1234,
+      "elapsed_seconds": 185.3
+    }
+  }
+}
+```
+
+### Metrics Explained
+
+| Metric | Description |
+|--------|-------------|
+| **win_rate** | Proportion of queries where the new method won pairwise judgment |
+| **avg_score_improvement** | Mean delta in top-5 average score vs baseline |
+| **cross_collection_ratio** | Balance of results across collections (1.0 = perfectly balanced) |
+
+### Phases
+
+| Phase | Description | Target Win Rate |
+|-------|-------------|-----------------|
+| `baseline` | Current flat cosine search (reference) | — |
+| `phase_0` | Z-score normalization + metadata boost | >55% |
+| `phase_2_hybrid` | MiniCOIL sparse + dense vectors with RRF fusion | >60% |
+| `phase_3_filter` | LLM-driven metadata filter extraction | >65% |
 
 ## MCP Retrieval Server
 
