@@ -18,6 +18,7 @@ from qdrant_client.models import (
 
 from src.chunker import Chunk
 from src.config import settings
+from src.paper_chunker import PaperChunk
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +54,17 @@ class Storage:
         self._vector_size = settings.VECTOR_SIZE
         self._distance = Distance(settings.DISTANCE)
 
-    def _ensure_collection(self, collection_name: str) -> None:
-        """Create shared collection if it does not already exist."""
+    def _ensure_collection(
+        self,
+        collection_name: str,
+        index_fields: Optional[list[str]] = None,
+    ) -> None:
+        """Create collection if it does not already exist.
+
+        Args:
+            collection_name: Name of the Qdrant collection.
+            index_fields: List of payload field names to index as KEYWORD.
+        """
         collections = self._client.get_collections()
         names = [c.name for c in collections.collections]
 
@@ -67,9 +77,14 @@ class Storage:
                     distance=self._distance,
                 ),
             )
+            # Default index fields for books
+            if index_fields is None:
+                index_fields = [
+                    "source_file", "book_title", "section_title",
+                    "publisher", "language", "isbn",
+                ]
             # Create payload indexes for metadata filtering
-            for field in ("source_file", "book_title", "section_title",
-                          "publisher", "language", "isbn"):
+            for field in index_fields:
                 self._client.create_payload_index(
                     collection_name=collection_name,
                     field_name=field,
@@ -184,14 +199,32 @@ class Storage:
         output = []
         for point in results.points:
             output.append({
-                "score": point.score if hasattr(point, "score") else None,
+                "score": float(point.score) if hasattr(point, "score") else 0.0,
                 "text": point.payload.get("text", ""),
+                # Unified fields (for cross-collection compat)
+                "doc_id": point.payload.get("doc_id", ""),
+                "doc_type": point.payload.get("doc_type", ""),
+                "title": point.payload.get("title", ""),
+                "section": point.payload.get("section", ""),
+                "authors": point.payload.get("authors", []),
+                "year": point.payload.get("year", 0),
+                # Legacy EPUB fields
                 "book_title": point.payload.get("book_title", ""),
                 "section_title": point.payload.get("section_title", ""),
+                "chapter_index": point.payload.get("chapter_index", 0),
+                "section_index": point.payload.get("section_index", 0),
                 "chunk_index": point.payload.get("chunk_index", 0),
+                "token_count": point.payload.get("token_count", 0),
+                "source_file": point.payload.get("source_file", ""),
                 "publisher": point.payload.get("publisher", ""),
                 "language": point.payload.get("language", ""),
                 "isbn": point.payload.get("isbn", ""),
+                # Paper-specific fields
+                "arxiv_id": point.payload.get("arxiv_id", ""),
+                "category": point.payload.get("category", ""),
+                "subcategory": point.payload.get("subcategory", ""),
+                "publish_date": point.payload.get("publish_date", ""),
+                "chunk_count": point.payload.get("chunk_count", 0),
             })
 
         return output
@@ -201,60 +234,169 @@ class Storage:
         collections = self._client.get_collections()
         return [c.name for c in collections.collections]
 
-    def list_books(self, collection_name: Optional[str] = None) -> List[dict]:
-        """List all unique books in the collection with metadata and chunk counts.
-
-        Uses Qdrant's scroll API to gather distinct source_file entries
-        and aggregates their metadata.
-
-        Args:
-            collection_name: Override the default collection name.
+    def list_collections_info(self) -> List[dict]:
+        """Return per-collection metadata stats (point count, etc.).
 
         Returns:
-            List of dicts with book metadata and statistics.
+            List of dicts with collection name, point count, and vector config.
         """
-        name = collection_name or _sanitize_collection_name(
-            settings.QDRANT_COLLECTION
+        collections = self._client.get_collections()
+        result = []
+        for c in collections.collections:
+            try:
+                info = self._client.get_collection(c.name)
+                result.append({
+                    "name": c.name,
+                    "points": info.points_count if hasattr(info, "points_count") else 0,
+                    "vector_size": self._vector_size,
+                    "distance": info.distance.value if hasattr(info, "distance") else "Cosine",
+                })
+            except Exception as e:
+                logger.warning(f"Could not get info for collection '{c.name}': {e}")
+                result.append({"name": c.name, "points": 0, "error": str(e)})
+        return result
+
+    def search_with_filter(
+        self,
+        collection_name: str,
+        query_text: str,
+        top_k: int = 10,
+        filter_by: Optional[Dict[str, str]] = None,
+    ) -> List[dict]:
+        """Search a collection with optional metadata pre-filtering.
+
+        Args:
+            collection_name: Qdrant collection to search.
+            query_text: Query string.
+            top_k: Number of results to return.
+            filter_by: Optional dict of metadata key->value pairs for pre-filtering.
+
+        Returns:
+            List of dicts with score, text, and payload.
+        """
+        from src.embedder import Embedder
+        from qdrant_client.models import FieldCondition, MatchValue, Filter
+
+        embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
+        query_vector = embedder.embed_single(query_text)
+
+        query_filter = None
+        if filter_by:
+            conditions = [
+                FieldCondition(key=k, match=MatchValue(value=v))
+                for k, v in filter_by.items()
+            ]
+            if conditions:
+                query_filter = Filter(must=conditions)
+
+        results = self._client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=top_k,
+            query_filter=query_filter,
         )
 
-        # Scroll through all points and aggregate by source_file
-        books: Dict[str, dict] = {}
-        offset = 0
-        limit = 100
+        output = []
+        for point in results.points:
+            output.append({
+                "score": float(point.score) if hasattr(point, "score") else 0.0,
+                "text": point.payload.get("text", ""),
+                "doc_id": point.payload.get("doc_id", ""),
+                "doc_type": point.payload.get("doc_type", ""),
+                "title": point.payload.get("title", ""),
+                "section": point.payload.get("section", ""),
+                "chunk_index": point.payload.get("chunk_index", 0),
+                "source_file": point.payload.get("source_file", ""),
+                "token_count": point.payload.get("token_count", 0),
+                # Preserve legacy fields for backward compat
+                "book_title": point.payload.get("book_title", ""),
+                "section_title": point.payload.get("section_title", ""),
+                "publisher": point.payload.get("publisher", ""),
+                "language": point.payload.get("language", ""),
+                "isbn": point.payload.get("isbn", ""),
+                "arxiv_id": point.payload.get("arxiv_id", ""),
+                "category": point.payload.get("category", ""),
+            })
 
-        while True:
-            records, _ = self._client.scroll(
-                collection_name=name,
-                limit=limit,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False,
+        return output
+
+    def upsert_paper_file(
+        self,
+        pdf_path: str,
+        chunks: List[PaperChunk],
+        collection_name: Optional[str] = None,
+    ) -> int:
+        """Upsert all chunks for a single PDF paper into the shared papers collection.
+
+        Uses integer point IDs generated from arxiv_id hash for Qdrant compatibility.
+        The arxiv_id is stored in payload for traceability.
+
+        Args:
+            pdf_path: Path to the source PDF file.
+            chunks: List of PaperChunk objects with vectors populated.
+            collection_name: Override the papers collection name.
+
+        Returns:
+            Number of chunks upserted.
+        """
+        path = Path(pdf_path)
+        name = collection_name or settings.QDRANT_PAPERS_COLLECTION
+        collection_name = _sanitize_collection_name(name)
+
+        # Use paper-specific index fields
+        self._ensure_collection(
+            collection_name,
+            index_fields=["arxiv_id", "category", "title", "source_file"],
+        )
+
+        # Get existing point count to use as base ID for this paper batch
+        try:
+            collection_info = self._client.get_collection(collection_name)
+            existing_points = collection_info.points_count
+        except Exception:
+            existing_points = 0
+
+        points = []
+        for chunk in chunks:
+            if not hasattr(chunk, "vector") or chunk.vector is None:
+                logger.warning(f"Skipping chunk {chunk.id} - no vector")
+                continue
+
+            # Simple sequential integer ID starting from existing_points
+            point_id = existing_points + chunk.chunk_index
+
+            point = PointStruct(
+                id=point_id,
+                vector=chunk.vector,
+                payload={
+                    "text": chunk.text,
+                    "arxiv_id": chunk.arxiv_id,
+                    "title": chunk.title,
+                    "category": chunk.category,
+                    "subcategory": chunk.subcategory,
+                    "authors": chunk.authors,
+                    "publish_date": chunk.publish_date,
+                    "chunk_index": chunk.chunk_index,
+                    "chunk_count": chunk.chunk_count,
+                    "token_count": chunk.token_count,
+                    "source_file": str(path.name),
+                },
             )
-            if not records:
-                break
-            for record in records:
-                payload = record.payload
-                src = payload.get("source_file", "")
-                if not src:
-                    continue
-                if src not in books:
-                    books[src] = {
-                        "source_file": src,
-                        "book_title": payload.get("book_title", ""),
-                        "publisher": payload.get("publisher", ""),
-                        "language": payload.get("language", ""),
-                        "isbn": payload.get("isbn", ""),
-                        "chunk_count": 0,
-                    }
-                books[src]["chunk_count"] += 1
-            offset += limit
-            if len(records) < limit:
-                break
+            points.append(point)
 
-        # Sort by book_title
-        result = sorted(books.values(), key=lambda x: x.get("book_title", ""))
-        logger.info(f"Listed {len(result)} books from collection '{name}'")
-        return result
+        if not points:
+            logger.warning(f"No valid points to upsert for {collection_name}")
+            return 0
+
+        self._client.upsert(
+            collection_name=collection_name,
+            points=points,
+        )
+
+        logger.info(
+            f"Upserted {len(points)} paper chunks into collection '{collection_name}'"
+        )
+        return len(points)
 
     def delete_collection(self, collection_name: str) -> None:
         """Delete a collection."""
