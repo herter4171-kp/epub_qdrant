@@ -11,7 +11,7 @@ We have two Qdrant collections with wildly different metadata schemas but zero c
 **The fix, in phases of increasing impact and complexity:**
 
 1. **Phase 0 — Z-score normalization** — fix cross-collection ranking immediately. No re-embedding needed. Scores from different collections live in different semantic spaces; z-score normalizes per-collection for fair cross-collection ranking.
-2. **Phase 1 — LLM-as-judge pairwise pipeline** — set up evaluation using LLM judge to compare old vs new retrieval. No human-labeled test set needed. 30 random queries, pairwise comparison, win rate target >60%. Fast (~15 min of LLM calls).
+2. **Phase 1 — LLM-as-judge pairwise pipeline** — set up evaluation using LLM judge to compare old vs new retrieval. No human-labeled test set needed. 30 designated queries, pairwise comparison, win rate target >60%, always track responses for future comparison. Fast (~15 min of LLM calls).
 3. **Phase 2 — MiniCOIL sparse re-embed + hybrid search** — store both dense (semantic) and sparse (keyword/metadata) vectors per point. ~96K points re-embed in minutes via ONNX/GPU. Fuse via Reciprocal Rank Fusion. Per-collection chunking (books = header-aware, papers = section-aware).
 4. **Phase 3 — LLM-driven metadata filter extraction** — scroll-discover distinct values on startup, map natural language to structured Qdrant filters, inject resolved metadata into retrieval prompts as scope context.
 

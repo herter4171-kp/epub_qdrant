@@ -1,0 +1,441 @@
+{
+  "version": "1.0",
+  "model": "openai/qwen36",
+  "evaluated_at": "2026-04-22T21:33:53.994071+00:00",
+  "baseline_method": "baseline",
+  "num_queries": 30,
+  "per_query_scores": {
+    "agentic AI patterns": {
+      "baseline": {
+        "top5_avg_score": 2.1614,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, snippets, and metadata, providing the exact same level of relevance and informativeness for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, snippets, and metadata, providing the exact same level of relevance and informativeness for the query."
+      }
+    },
+    "how do agents use tools and APIs": {
+      "baseline": {
+        "top5_avg_score": 2.0224,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, and metadata, providing the exact same information for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, and metadata, providing the exact same information for the query."
+      }
+    },
+    "multi-agent collaboration strategies": {
+      "baseline": {
+        "top5_avg_score": 2.095,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, and snippets, making them equally relevant and informative for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, and snippets, making them equally relevant and informative for the query."
+      }
+    },
+    "agent memory systems and knowledge retention": {
+      "baseline": {
+        "top5_avg_score": 1.7298,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are identical in content, scores, and metadata, providing the exact same information and relevance to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are identical in content, scores, and metadata, providing the exact same information and relevance to the query."
+      }
+    },
+    "planning and reasoning in AI agents": {
+      "baseline": {
+        "top5_avg_score": 2.305,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, snippets, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, snippets, and metadata, making them equally relevant to the query."
+      }
+    },
+    "agent self-correction and reflection": {
+      "baseline": {
+        "top5_avg_score": 2.0546,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, ordering, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, ordering, and metadata, making them equally relevant to the query."
+      }
+    },
+    "RAG systems with agentic workflows": {
+      "baseline": {
+        "top5_avg_score": 1.8385,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A and Result Set B contain identical documents, scores, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Result Set A and Result Set B contain identical documents, scores, and metadata, making them equally relevant to the query."
+      }
+    },
+    "emergent capabilities in agentic systems": {
+      "baseline": {
+        "top5_avg_score": 2.1477,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A and Result Set B are completely identical in content, scores, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Result Set A and Result Set B are completely identical in content, scores, and metadata, making them equally relevant to the query."
+      }
+    },
+    "safety and alignment of autonomous agents": {
+      "baseline": {
+        "top5_avg_score": 2.0042,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical items, scores, and metadata, making them equally relevant and informative for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical items, scores, and metadata, making them equally relevant and informative for the query."
+      }
+    },
+    "evaluation metrics for AI agents": {
+      "baseline": {
+        "top5_avg_score": 2.2291,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "could not parse LLM response: "
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "could not parse LLM response: "
+      }
+    },
+    "Apress books about agentic AI design": {
+      "baseline": {
+        "top5_avg_score": 2.0211,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A and Result Set B contain exactly the same items, scores, text snippets, and metadata. There is no difference in relevance, quality, or metadata alignment between the two sets."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Result Set A and Result Set B contain exactly the same items, scores, text snippets, and metadata. There is no difference in relevance, quality, or metadata alignment between the two sets."
+      }
+    },
+    "enterprise patterns for generative AI systems": {
+      "baseline": {
+        "top5_avg_score": 2.0083,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in terms of items, scores, titles, and metadata, providing the exact same level of semantic relevance and informativeness for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in terms of items, scores, titles, and metadata, providing the exact same level of semantic relevance and informativeness for the query."
+      }
+    },
+    "book on practical agent implementation": {
+      "baseline": {
+        "top5_avg_score": 1.8918,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, metadata, and ordering, making them equally relevant and useful for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, metadata, and ordering, making them equally relevant and useful for the query."
+      }
+    },
+    "how to build agentic AI in production": {
+      "baseline": {
+        "top5_avg_score": 2.4057,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, and metadata, making them equally relevant and useful for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, and metadata, making them equally relevant and useful for the query."
+      }
+    },
+    "agentic AI for software engineering": {
+      "baseline": {
+        "top5_avg_score": 2.0217,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, metadata, and snippets, making them equally relevant and informative for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, metadata, and snippets, making them equally relevant and informative for the query."
+      }
+    },
+    "design patterns for AI agents book": {
+      "baseline": {
+        "top5_avg_score": 1.982,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, and metadata, making them equally relevant to the query."
+      }
+    },
+    "agentic AI in finance use cases": {
+      "baseline": {
+        "top5_avg_score": 1.9706,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A and Result Set B are completely identical in terms of document titles, scores, metadata, and snippets, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Result Set A and Result Set B are completely identical in terms of document titles, scores, metadata, and snippets, making them equally relevant to the query."
+      }
+    },
+    "stateful agents and context management": {
+      "baseline": {
+        "top5_avg_score": 2.168,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, snippets, and metadata, making them equally relevant and informative for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, snippets, and metadata, making them equally relevant and informative for the query."
+      }
+    },
+    "agentic AI architecture patterns": {
+      "baseline": {
+        "top5_avg_score": 2.0548,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical items, scores, metadata, and text snippets, making them equally relevant and informative for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical items, scores, metadata, and text snippets, making them equally relevant and informative for the query."
+      }
+    },
+    "multiagent system orchestration": {
+      "baseline": {
+        "top5_avg_score": 2.273,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, and metadata, making them equally relevant and useful for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, and metadata, making them equally relevant and useful for the query."
+      }
+    },
+    "arxiv papers on agent framework architecture": {
+      "baseline": {
+        "top5_avg_score": 2.3012,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in items, scores, snippets, and metadata, resulting in equal relevance."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in items, scores, snippets, and metadata, resulting in equal relevance."
+      }
+    },
+    "research on agentic RAG surveys": {
+      "baseline": {
+        "top5_avg_score": 2.0608,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, and metadata, making them equally relevant to the query."
+      }
+    },
+    "capability-papers about planning": {
+      "baseline": {
+        "top5_avg_score": 2.1064,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain identical documents, scores, metadata, and text snippets, making them equally relevant and informative for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain identical documents, scores, metadata, and text snippets, making them equally relevant and informative for the query."
+      }
+    },
+    "agent memory systems research": {
+      "baseline": {
+        "top5_avg_score": 2.1523,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are identical in content, scores, and metadata, providing the exact same information for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are identical in content, scores, and metadata, providing the exact same information for the query."
+      }
+    },
+    "paper on tool-use patterns for agents": {
+      "baseline": {
+        "top5_avg_score": 2.0729,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, and metadata, offering the exact same relevance and informativeness for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, and metadata, offering the exact same relevance and informativeness for the query."
+      }
+    },
+    "embodied agents research papers": {
+      "baseline": {
+        "top5_avg_score": 2.1307,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A and Result Set B contain the exact same documents, scores, and metadata, making them equally relevant to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Result Set A and Result Set B contain the exact same documents, scores, and metadata, making them equally relevant to the query."
+      }
+    },
+    "multi-agent systems from application-papers": {
+      "baseline": {
+        "top5_avg_score": 2.1559,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in terms of items, scores, metadata, and text snippets, offering no difference in relevance or quality."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in terms of items, scores, metadata, and text snippets, offering no difference in relevance or quality."
+      }
+    },
+    "self-evolution in AI agents": {
+      "baseline": {
+        "top5_avg_score": 2.1064,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets contain exactly the same items, scores, metadata, and snippets. There is no difference in semantic relevance, quality, diversity, or metadata alignment between them."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets contain exactly the same items, scores, metadata, and snippets. There is no difference in semantic relevance, quality, diversity, or metadata alignment between them."
+      }
+    },
+    "perception and prediction capability papers": {
+      "baseline": {
+        "top5_avg_score": 2.0339,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Both result sets are completely identical in content, scores, and metadata, offering no difference in relevance, quality, or diversity for the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Both result sets are completely identical in content, scores, and metadata, offering no difference in relevance, quality, or diversity for the query."
+      }
+    },
+    "safety benchmarks for agent systems": {
+      "baseline": {
+        "top5_avg_score": 2.2212,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result sets A and B are completely identical in content, scores, and metadata, resulting in equal relevance to the query."
+      },
+      "judgment": {
+        "winner": "tie",
+        "reason": "Result sets A and B are completely identical in content, scores, and metadata, resulting in equal relevance to the query."
+      }
+    }
+  },
+  "aggregate": {
+    "baseline": {
+      "wins_against_baseline": 0,
+      "losses_against_baseline": 0,
+      "ties": 30,
+      "win_rate": 0.0,
+      "total_comparisons": 30,
+      "avg_score_improvement": 0.0,
+      "avg_cross_collection_improvement": 0.0,
+      "elapsed_seconds": 177.7
+    }
+  }
+}
