@@ -43,8 +43,14 @@ class LLMClient:
             system_prompt = (
                 "You are a knowledge base assistant. Answer the user's question "
                 "based solely on the provided context. If the context doesn't "
-                "contain relevant information, say so clearly. Cite sources "
-                "by book title and chapter when possible."
+                "contain relevant information, say so clearly.\n\n"
+                "CITATION RULES:\n"
+                "- Use bracketed numbers matching the Sources list, e.g. [1], [2].\n"
+                "- Each [Source: n] tag in the context corresponds to the numbered "
+                "entry in the Sources section.\n"
+                "- At the end of your answer, include a Sources section listing "
+                "only the references you actually cited.\n"
+                "- Be precise: cite the specific source number, not just a title."
             )
 
         messages = [

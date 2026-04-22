@@ -28,22 +28,22 @@ uv mcp_server
 
 | Tool | Description | Args | Returns |
 |------|-------------|------|---------|
-| `search` | Semantic search across configured collections → grouped chunks | `query`, `top_k`, `group_by`, `collection`, `collections`, `filter_by` | Grouped evidence with scores |
-| `answer` | Search + LLM answer | `query`, `top_k`, `group_by`, `collection`, `collections`, `filter_by` | Streaming LLM answer |
-| `get_context` | Surrounding chunks around a section | `source_file`, `section_title`, `radius`, `collection` | Context window of chunks |
+| `query` | Unified search + answer tool with `mode` parameter | `query`, `mode`, `top_k`, `group_by`, `collection`, `collections`, `filter_by` | Grouped evidence (search) or LLM answer (answer) |
+| `get_context` | Surrounding chunks around a section with semantic fallback anchoring | `source_file`, `section_title`, `query`, `radius`, `collection` | Context window of chunks |
 | `list_collections` | Read-only: list all Qdrant collections | (none) | Collection names, point counts, vector config |
 
 ### Tool Arguments
 
-#### `search`
+#### `query`
 
-Search semantically relevant chunks grouped by section or book with similarity scores.
+Unified tool for both raw search results and LLM-powered answers. Use `mode="search"` for raw chunk results with similarity scores, or `mode="answer"` to generate an LLM answer grounded in retrieved evidence.
 
 ```json
 {
-  "name": "search",
+  "name": "query",
   "arguments": {
     "query": "what is quantum entanglement",
+    "mode": "search",
     "top_k": 10,
     "group_by": "section"
   }
@@ -52,33 +52,37 @@ Search semantically relevant chunks grouped by section or book with similarity s
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `query` | string | Yes | — | The search query |
-| `top_k` | integer | No | 15 | Number of results per collection |
+| `query` | string | Yes | — | The search query or question |
+| `mode` | string | No | "search" | "search" returns raw chunk results. "answer" generates an LLM answer. |
+| `top_k` | integer | No | 15 | Number of results per collection (overrides setting) |
 | `group_by` | string | No | "section" | How to group: "section" or "book" |
 | `collection` | string | No | default | Target a specific collection |
 | `collections` | string | No | all | Comma-separated list of collections to search |
 | `filter_by` | string | No | — | JSON metadata filter, e.g. `{"doc_type": "paper"}` |
 
-#### `answer`
-
-Answer a question using the knowledge base. Retrieves relevant chunks, assembles evidence, and generates an LLM answer.
+**Example — LLM Answer:**
 
 ```json
 {
-  "name": "answer",
+  "name": "query",
   "arguments": {
     "query": "explain transformer attention mechanisms",
+    "mode": "answer",
     "top_k": 20,
     "group_by": "book"
   }
 }
 ```
 
-Same parameters as `search`. Returns the LLM-generated answer grounded in retrieved evidence.
+Returns the LLM-generated answer grounded in retrieved evidence with source citations.
 
 #### `get_context`
 
-Get surrounding chunks around a specific section. Useful for reading the full context of a known chapter.
+Get surrounding chunks around a specific section or topic within a source file. Uses a three-tier anchoring strategy:
+
+1. **Exact match** — tries `section_title` against stored metadata
+2. **Semantic fallback** — if exact match fails or title is a known-bad sentinel (like `"(no title)"`, `"front matter"`), performs a lightweight vector search scoped to the source file
+3. **Natural-language query** — accepts an optional `query` parameter to anchor the lookup when `section_title` is unreliable
 
 ```json
 {
@@ -91,10 +95,24 @@ Get surrounding chunks around a specific section. Useful for reading the full co
 }
 ```
 
+**Example — semantic fallback with natural language query:**
+
+```json
+{
+  "name": "get_context",
+  "arguments": {
+    "source_file": "masteringretrieval-augmentedgeneration.epub",
+    "query": "entity linking and deduplication",
+    "radius": 2
+  }
+}
+```
+
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `source_file` | string | Yes | — | Filename (EPUB or PDF) |
-| `section_title` | string | Yes | — | Chapter/section title |
+| `section_title` | string | No | — | Chapter/section title for exact match (tried first, falls back to semantic) |
+| `query` | string | No | — | Natural language query to anchor the lookup instead of section_title |
 | `radius` | integer | No | 2 | Surrounding chunks per side |
 | `collection` | string | No | default | Target a specific collection |
 
@@ -111,19 +129,42 @@ List all available Qdrant collections with metadata.
 
 Returns collection names, point counts, and vector configuration.
 
+### Response Format
+
+The `query` tool returns a `sources` array in its responses:
+
+```json
+{
+  "sources": [
+    {
+      "id": 1,
+      "authors": "Smith, J. and Jones, A.",
+      "title": "Agent Memory Survey",
+      "year": "2023",
+      "arxiv_id": "2302.01560",
+      "source_file": "2302_01560.pdf",
+      "formatted": "[1] Smith, J. and Jones, A. Agent Memory Survey. arXiv:2302.01560, 2023."
+    }
+  ]
+}
+```
+
+The `prompt_context` field includes `[Source: n]` inline tags on each chunk and a `**Sources:**` bibliography section at the end.
+
 ## Multi-Collection Behavior
 
 ### Default: Cross-collection search
 
-When `QDRANT_COLLECTIONS=epub_kb,papers` is configured, `search` and `answer` search **all** collections by default, merge results globally by score, and group them.
+When `QDRANT_COLLECTIONS=epub_kb,papers` is configured, `query` searches **all** collections by default, merges results globally by score, and groups them.
 
 ### Target a single collection
 
 ```json
 {
-  "name": "search",
+  "name": "query",
   "arguments": {
     "query": "transformer attention",
+    "mode": "search",
     "collection": "papers"
   }
 }
@@ -133,9 +174,10 @@ When `QDRANT_COLLECTIONS=epub_kb,papers` is configured, `search` and `answer` se
 
 ```json
 {
-  "name": "search",
+  "name": "query",
   "arguments": {
     "query": "agent memory",
+    "mode": "search",
     "collections": "papers,epub_kb"
   }
 }
@@ -145,9 +187,10 @@ When `QDRANT_COLLECTIONS=epub_kb,papers` is configured, `search` and `answer` se
 
 ```json
 {
-  "name": "search",
+  "name": "query",
   "arguments": {
     "query": "reasoning",
+    "mode": "search",
     "filter_by": "{\"doc_type\": \"paper\"}"
   }
 }
@@ -174,7 +217,7 @@ Returns:
   "status": "ok",
   "collections": ["epub_kb", "papers"],
   "default_collection": "epub_kb",
-  "version": "0.2.0"
+  "version": "0.3.0"
 }
 ```
 
@@ -198,9 +241,10 @@ curl -X POST http://localhost:8090/mcp \
     "id": 1,
     "method": "tools/call",
     "params": {
-      "name": "search",
+      "name": "query",
       "arguments": {
         "query": "what is quantum entanglement",
+        "mode": "search",
         "top_k": 10
       }
     }
@@ -213,9 +257,10 @@ curl -X POST http://localhost:8090/mcp \
 curl -X POST http://localhost:8090/mcp \
   -H "Content-Type: application/json" \
   -d '{
-    "method": "search",
+    "method": "query",
     "arguments": {
       "query": "what is quantum entanglement",
+      "mode": "search",
       "top_k": 10
     }
   }'
@@ -233,6 +278,21 @@ curl -X POST http://localhost:8090/mcp \
   }'
 ```
 
+## Breaking Changes (v0.3.0)
+
+- `search` and `answer` tools merged into single `query` tool with `mode` parameter
+  - `mode="search"` = old `search` behavior
+  - `mode="answer"` = old `answer` behavior
+- `get_context` enhanced with semantic fallback anchoring (accepts new `query` parameter)
+
+## Available Tools (v0.3.0)
+
+| Tool | Description |
+|------|-------------|
+| `query` | Unified search + answer tool with `mode` parameter |
+| `get_context` | Section context with semantic fallback anchoring |
+| `list_collections` | List Qdrant collections |
+
 ## Configuration
 
 | Env Var | Default | Required | Description |
@@ -243,7 +303,7 @@ curl -X POST http://localhost:8090/mcp \
 | `OLLAMA_URL` | `http://localhost:11434` | No | Ollama embedding endpoint |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | No | Embedding model name |
 | `LITELLM_API_URL` | `https://litellm.twr.church/v1` | No | LiteLLM ChatCompletion endpoint |
-| `LITELLM_API_KEY` | — | No* | *Required for `answer` tool |
+| `LITELLM_API_KEY` | — | No* | *Required for `query` with `mode="answer"` |
 | `LITELLM_MODEL` | `qwen36` | No | LLM model for answers (via llama.cpp through LiteLLM) |
 | `MCP_PORT` | `8090` | No | HTTP listen port |
 | `MCP_HOST` | `0.0.0.0` | No | HTTP listen host |
@@ -251,7 +311,7 @@ curl -X POST http://localhost:8090/mcp \
 | `RETRIEVAL_CONTEXT_RADIUS` | `2` | No | Surrounding chunks per side |
 | `RETRIEVAL_GROUP_BY` | `section` | No | Group results by `section` or `book` |
 
-\* The server starts without `LITELLM_API_KEY` but the `answer` tool will fail gracefully.
+\* The server starts without `LITELLM_API_KEY` but `query` with `mode="answer"` will fail gracefully.
 
 ## Architecture
 
