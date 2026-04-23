@@ -28,8 +28,8 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.config import settings
-from src.embedder import Embedder
-from src.paper_chunker import PaperChunk, chunk_paper
+from src.embedding.dense_embedder import Embedder
+from src.ingestion.paper_loader import chunk_paper
 from src.storage import Storage
 
 logger = logging.getLogger(__name__)

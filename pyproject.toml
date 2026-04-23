@@ -22,4 +22,5 @@ dependencies = [
 ]
 
 [project.scripts]
-epub_qdrant = "src.main:cli"
+epub_qdrant = "src.cli.main:cli"
+epubq = "src.cli.main:cli"

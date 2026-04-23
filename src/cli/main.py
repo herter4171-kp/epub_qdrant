@@ -8,9 +8,9 @@ from typing import List
 import click
 
 from src.config import settings
-from src.epub_parser import parse_epub
-from src.chunker import chunk_section
-from src.embedder import Embedder
+from src.ingestion.epub_parser import parse_epub
+from src.ingestion.chunker import chunk_section
+from src.embedding.dense_embedder import Embedder
 from src.storage import Storage
 
 logging.basicConfig(
@@ -112,9 +112,8 @@ def ingest(directory: str, url: str, limit: int, collection: str) -> None:
 
     click.echo(f"Found {len(epubs)} EPUB file(s). Starting ingest...")
 
-    # Setup components
     embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
-    storage = Storage(url=url)
+    storage = Storage()
 
     total = 0
     for i, epub in enumerate(epubs, 1):

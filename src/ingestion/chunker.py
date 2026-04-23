@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from typing import List, Optional
 
-from src.epub_parser import Section
+from src.ingestion.epub_parser import Section
 
 
 @dataclass

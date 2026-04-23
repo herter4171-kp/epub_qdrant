@@ -5,7 +5,7 @@ from typing import List
 
 import requests
 
-from src.chunker import Chunk
+from src.ingestion.chunker import Chunk
 
 logger = logging.getLogger(__name__)
 

@@ -25,7 +25,7 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-_mcp_server_dir = _project_root / "mcp_servers" / "retrieval"
+_mcp_server_dir = _project_root / "servers" / "retrieval_mcp"
 if str(_mcp_server_dir) not in sys.path:
     sys.path.insert(0, str(_mcp_server_dir))
 
@@ -45,7 +45,7 @@ from qdrant_client.models import (
     Modifier,
 )
 
-from mcp_servers.minicoil_server.client import get_sparse_vectors
+from src.embedding.client import get_sparse_vectors
 
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ def scroll_and_embed(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    from mcp_servers.minicoil_server.client import health_check
+    from src.embedding.client import health_check
     if not health_check():
         logger.error("MiniCOIL server is not reachable. Aborting.")
         sys.exit(1)

@@ -1,7 +1,7 @@
 """Thin client for the MiniCOIL sparse embedding server on the GPU box.
 
 Usage:
-    from mcp_servers.minicoil_server.client import get_sparse_vectors
+    from src.embedding.client import get_sparse_vectors
     vectors = get_sparse_vectors(["hello world"], is_query=False)
 """
 

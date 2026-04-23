@@ -11,7 +11,7 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 
 from qdrant_client import QdrantClient
-from mcp_servers.minicoil_server.client import get_sparse_vectors
+from src.embedding.client import get_sparse_vectors
 from qdrant_client.models import SparseVector
 from collections import defaultdict
 
@@ -45,7 +45,7 @@ for query in queries:
     print(f"{'='*70}")
 
     # Embed dense query via Ollama on GPU box
-    from src.embedder import Embedder
+    from src.embedding.dense_embedder import Embedder
     embedder = Embedder("http://192.168.68.75:11434", "embeddinggemma:300m")
     dense_vec = embedder.embed_single(query)
     print(f"Dense vector dim: {len(dense_vec)}")
