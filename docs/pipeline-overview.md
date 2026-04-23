@@ -3,8 +3,8 @@
 ## Architecture
 
 ```
-test_books/*.epub  ──→  epub_parser  ──→  chunker  ──→  embedding server  ──→  Qdrant
-downloads/*.pdf    ──→  paper_loader ──→  chunker  ──→  embedding server  ──→  Qdrant
+test_books/*.epub  ──→  epub_parser  ──→  semantic_chunker  ──→  embedding server  ──→  Qdrant
+downloads/*.pdf    ──→  paper_section_splitter ──→ semantic_chunker ──→ embedding server ──→ Qdrant
 downloads/*.json   (metadata sidecar, read during paper ingestion)
 ```
 
@@ -12,13 +12,15 @@ downloads/*.json   (metadata sidecar, read during paper ingestion)
 
 | Component | Location | Role |
 |-----------|----------|------|
-| EPUB parser | `src/ingestion/epub_parser.py` | Extracts sections + OPF metadata (title, creator, publisher, date, language, ISBN) from `.epub` files |
-| Paper loader | `src/ingestion/paper_loader.py` | Chunks raw PDF text with metadata (arxiv_id, category, authors, etc.) |
-| Chunker | `src/ingestion/chunker.py` | Splits sections into overlapping token-window chunks (default 500 tokens, 100 overlap) |
+| EPUB parser | `src/ingestion/epub_parser.py` | Extracts sections with real heading titles from raw HTML + OPF metadata |
+| Paper section splitter | `src/ingestion/paper_section_splitter.py` | Splits PDF text into named academic sections, excludes References/Bibliography/Appendix |
+| Semantic chunker | `src/ingestion/semantic_chunker.py` | Three-layer pipeline: structural → semantic boundary detection → recursive splitting via semchunk |
 | Embedding server | `servers/embedding_server/` | FastAPI service on GPU box exposing `/embed_dense` (embeddinggemma-300m, 768d) and `/embed_sparse` (MiniCOIL) |
 | Embedding client | `servers/embedding_server/client.py` | Thin HTTP client — `get_dense_vectors()`, `get_sparse_vectors()`, `health_check()` |
 | Storage | `src/storage/` | Qdrant client wrapper — collection lifecycle, upsert, search, scroll |
-| Config | `src/config.py` | Reads `.env` for `QDRANT_URL`, `EMBEDDING_SERVER_URL`, `CHUNK_SIZE`, etc. |
+| Config | `src/config.py` | Reads `.env` for `QDRANT_URL`, `EMBEDDING_SERVER_URL`, `CHUNK_SIZE`, `TOKENIZER_JSON`, etc. |
+| Old chunker (compat) | `src/ingestion/chunker.py` | Legacy fixed-window chunker — no longer imported by loaders |
+| Old paper loader (compat) | `src/ingestion/paper_loader.py` | Legacy paper chunker — no longer imported by loaders |
 
 ### Entry Points
 
@@ -65,9 +67,7 @@ Per the unified-embedding-server spec, Qdrant supports upserting named vectors i
 
 ## Known Issues
 
-1. **CLI `ingest` command is broken**: `src/cli/main.py` imports `src.embedding.dense_embedder.Embedder` which no longer exists (only a stale `.pyc` remains). The embedding layer was migrated to `servers/embedding_server/` but the CLI was not updated. Fix: update the CLI to use `servers.embedding_server.client.get_dense_vectors()` directly.
-
-2. **Paper pipeline downloads to flat `downloads/`**: `embed_papers.py` writes PDFs and JSON metadata flat under `downloads/`. The `embed_papers_to_qdrant.py` script expects this layout. The `process_category()` function also creates category subdirectories but the actual PDFs land in the root `downloads/` dir.
+1. **Paper pipeline downloads to flat `downloads/`**: `embed_papers.py` writes PDFs and JSON metadata flat under `downloads/`. The `embed_papers_to_qdrant.py` script expects this layout.
 
 ## Environment
 
@@ -75,6 +75,9 @@ Required in `.env`:
 ```
 QDRANT_URL=http://192.168.68.75:6333
 EMBEDDING_SERVER_URL=http://192.168.68.75:8100
+TOKENIZER_JSON=tokenizer.json
 ```
+
+`TOKENIZER_JSON` points to the embeddinggemma-300m `tokenizer.json` file. Defaults to `./tokenizer.json` in the project root. Also accepted via `--tokenizer-json` CLI flag.
 
 The embedding server must be running on the GPU box with both dense (embeddinggemma-300m) and sparse (MiniCOIL) models loaded. Check with `curl http://192.168.68.75:8100/health`.

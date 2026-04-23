@@ -58,9 +58,15 @@ def _find_files(directory: str) -> List[Path]:
 # ── CLI group ─────────────────────────────────────────────────────────────────
 
 @click.group()
-def cli():
+@click.option("--tokenizer-json", default=None, envvar="TOKENIZER_JSON",
+              help="Path to tokenizer.json for real token counting")
+@click.pass_context
+def cli(ctx, tokenizer_json):
     """EPUB/PDF → Qdrant ingestion pipeline."""
-    pass
+    ctx.ensure_object(dict)
+    if tokenizer_json:
+        import os
+        os.environ["TOKENIZER_JSON"] = tokenizer_json
 
 
 # ── health ────────────────────────────────────────────────────────────────────
@@ -115,8 +121,12 @@ def create_collection_cmd(collection: str):
 @click.argument("directory")
 @click.option("--collection", required=True, help="Target collection name")
 @click.option("--limit", type=int, default=None, help="Max files to process")
-def ingest_dense_cmd(directory: str, collection: str, limit: int):
+@click.option("--tokenizer-json", default=None, help="Path to tokenizer.json")
+def ingest_dense_cmd(directory: str, collection: str, limit: int, tokenizer_json: str):
     """Pass 1: load files, chunk, embed dense vectors, upsert."""
+    import os
+    if tokenizer_json:
+        os.environ["TOKENIZER_JSON"] = tokenizer_json
     from qdrant_client.models import PointStruct
     from servers.embedding_server.client import get_dense_vectors
     from src.ingestion.loader import DocumentLoader
@@ -254,8 +264,12 @@ def ingest_sparse_cmd(collection: str):
 @click.argument("directory")
 @click.option("--collection", required=True, help="Target collection name")
 @click.option("--limit", type=int, default=None, help="Max files to process")
-def ingest(directory: str, collection: str, limit: int):
+@click.option("--tokenizer-json", default=None, help="Path to tokenizer.json")
+def ingest(directory: str, collection: str, limit: int, tokenizer_json: str):
     """Full ingest: create collection + dense pass + sparse pass."""
+    import os
+    if tokenizer_json:
+        os.environ["TOKENIZER_JSON"] = tokenizer_json
     from click.testing import CliRunner
     runner = CliRunner()
 

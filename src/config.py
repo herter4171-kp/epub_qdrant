@@ -49,6 +49,15 @@ class Settings:
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
 
+    # Semantic chunking
+    TOKENIZER_JSON: str = os.getenv("TOKENIZER_JSON", "")
+    CHUNK_OVERLAP_RATIO: float = float(os.getenv("CHUNK_OVERLAP_RATIO", "0.2"))
+    SIMILARITY_PERCENTILE: float = float(os.getenv("SIMILARITY_PERCENTILE", "95.0"))
+    MIN_DISTANCE_FLOOR: float = float(os.getenv("MIN_DISTANCE_FLOOR", "0.1"))
+    MIN_SENTENCES_FOR_SEMANTIC: int = int(os.getenv("MIN_SENTENCES_FOR_SEMANTIC", "10"))
+    MIN_CHUNK_TOKENS: int = int(os.getenv("MIN_CHUNK_TOKENS", "50"))
+    SEMANTIC_CHUNKING_ENABLED: bool = os.getenv("SEMANTIC_CHUNKING_ENABLED", "true").lower() in ("true", "1", "yes")
+
     # Qdrant
     VECTOR_SIZE: int = int(os.getenv("VECTOR_SIZE", "768"))
     DISTANCE: str = os.getenv("DISTANCE", "Cosine")

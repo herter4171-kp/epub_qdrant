@@ -160,3 +160,44 @@ Internet sources:
 - [semchunk on PyPI](https://pypi.org/project/semchunk/) v4.0.0 — hierarchical chunking benchmarks
 - [semantic-text-splitter on PyPI](https://pypi.org/project/semantic-text-splitter/) v0.30.1 — Rust-backed Unicode-aware splitting
 - [langchain-text-splitters on PyPI](https://pypi.org/project/langchain-text-splitters/) v1.1.2
+
+
+## Implementation
+
+The semantic chunking pipeline is now implemented in `src/ingestion/semantic_chunker.py`. Here's how it works.
+
+### Three-Layer Pipeline
+
+1. **Structural (Layer 1)**: Sections arrive pre-split by heading. EPUB headings extracted from raw HTML; PDF sections split by academic header regex.
+2. **Semantic (Layer 2)**: For sections with ≥10 sentences, embed sentences via `/embed_dense`, compute pairwise cosine similarity, detect topic boundaries at adaptive percentile threshold (default 95th percentile, floored at 0.1 cosine distance). Splits at those boundaries.
+3. **Recursive (Layer 3)**: Each semantic segment is sub-split via `semchunk` with the real tokenizer to enforce token limits (default 500 tokens, 20% overlap).
+
+Heading-as-context-bridge: `"## {title}\n\n"` prepended to each chunk. Token overlap only within-segment (not at heading or semantic boundaries). Runt chunks (< 50 tokens) merged into adjacent.
+
+### Config Defaults
+
+| Setting | Default | Env var |
+|---------|---------|---------|
+| `CHUNK_SIZE` | 500 | `CHUNK_SIZE` |
+| `CHUNK_OVERLAP_RATIO` | 0.2 | `CHUNK_OVERLAP_RATIO` |
+| `SIMILARITY_PERCENTILE` | 95.0 | `SIMILARITY_PERCENTILE` |
+| `MIN_DISTANCE_FLOOR` | 0.1 | `MIN_DISTANCE_FLOOR` |
+| `MIN_SENTENCES_FOR_SEMANTIC` | 10 | `MIN_SENTENCES_FOR_SEMANTIC` |
+| `MIN_CHUNK_TOKENS` | 50 | `MIN_CHUNK_TOKENS` |
+| `SEMANTIC_CHUNKING_ENABLED` | true | `SEMANTIC_CHUNKING_ENABLED` |
+| `TOKENIZER_JSON` | `./tokenizer.json` | `TOKENIZER_JSON` |
+
+### Tokenizer
+
+Uses the real embeddinggemma-300m tokenizer loaded via `tokenizers.Tokenizer.from_file()`. No `len(text)//4` approximation. Same callable passed to both the chunker and `semchunk.chunkerify()` for consistent counts.
+
+### PDF References Exclusion
+
+`paper_section_splitter.py` drops sections matching "References", "Bibliography", or "Appendix" (case-insensitive). These pollute the embedding space with arxiv IDs and author name lists.
+
+### Error Resilience
+
+- Embedding server down → logs warning, falls back to recursive-only splitting
+- Malformed EPUB HTML → falls back to `(no title)` single section
+- Short content (< `min_chunk_tokens`) → returned as single chunk
+- No PDF section headers → single "Full Text" section

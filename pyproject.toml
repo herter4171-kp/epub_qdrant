@@ -19,8 +19,19 @@ dependencies = [
     "arxiv>=3.0.0",
     "feedparser>=6.0.10",
     "pypdf>=5.0.0",
+    "semchunk>=4.0.0",
+    "tokenizers>=0.15.0",
+    "numpy>=1.24.0",
 ]
 
 [project.scripts]
 epub_qdrant = "src.cli.main:cli"
 epubq = "src.cli.main:cli"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

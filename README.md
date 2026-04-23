@@ -156,6 +156,17 @@ Mac (dev)                              GPU Box (192.168.68.75)
 | `DISTANCE` | `Cosine` | Vector distance metric |
 | `PAPER_EMBED_ALL` | `0` | Set to `1` to embed all PDFs |
 
+## The Machine(s) it Worked On
+* M2 Pro Mac Mini
+  * Local machine
+  * Hosts the MCP server in dev for now
+* GPU machine
+  * RTX 5090
+  * 128 GB DDR5
+  * AMD Ryzen 9 7900X 12-Core Processor
+  * Debian-based Linux
+
+
 ## Evaluation
 
 ```bash

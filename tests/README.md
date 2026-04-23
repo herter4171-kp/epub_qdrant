@@ -13,6 +13,7 @@ Integration tests that validate the full ingestion → embedding → retrieval p
 - **MiniCOIL server** running on `192.168.68.75:9000` (sparse embeddings)
 - **MCP server** running on `localhost:8090` (optional, for Stage 4 tests)
 - Python 3.11+ with `.venv` activated
+- **tokenizer.json** in the project root — copy the embeddinggemma-300m `tokenizer.json` into the workspace root (e.g. `cp /tank/huggingface/embeddinggemma-300m/tokenizer.json .`). Required by `test_semantic_chunker.py` and all downstream chunking tests. Set `TOKENIZER_JSON` env var to override the path.
 
 ## Data Sources
 
