@@ -19,9 +19,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from src.storage import Storage
-from mcp_server.config import settings
-from mcp_server.retriever import Retriever
-from mcp_server.llm_client import LLMClient
+from servers.mcp_server.config import settings
+from servers.mcp_server.retriever import Retriever
+from servers.mcp_server.llm_client import LLMClient
 
 logging.basicConfig(
     level=logging.INFO,

@@ -12,12 +12,12 @@ from typing import Dict, List, Optional
 import numpy as np
 from qdrant_client.models import FieldCondition, MatchValue, SparseVector
 
-from src.embedder import Embedder
+from src.embedding import Embedder
 from src.storage import Storage
-from mcp_server.config import settings
+from servers.mcp_server.config import settings
 
 try:
-    from mcp_servers.minicoil_server.client import get_sparse_vectors
+    from src.embedding.client import get_sparse_vectors
     _HAS_MINICOIL = True
 except ImportError:
     _HAS_MINICOIL = False

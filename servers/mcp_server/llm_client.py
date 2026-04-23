@@ -5,7 +5,7 @@ from typing import AsyncIterator, Optional
 
 from litellm import acompletion
 
-from mcp_server.config import settings
+from servers.mcp_server.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,6 @@
 
 from typing import List, Optional, Tuple
 
-from qdrant_client.models import PointId, ScrollByFilter
-
-
 def scroll_all(client, collection_name: str,
                batch_size: int = 256,
                with_payload: bool = True,
