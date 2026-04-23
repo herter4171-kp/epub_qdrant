@@ -44,44 +44,52 @@ from mcp_server.llm_client import LLMClient
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("evaluate")
 
-# ─── Query Set (30 tailored queries) ──────────────────────────────────────
+# ─── Query Set (30 agent-architecture-focused queries) ─────────────────────
 
 QUERIES: List[Dict[str, Any]] = [
-    # Cross-collection agnostic (10)
-    {"query": "agentic AI patterns", "tags": ["cross", "broad"]},
-    {"query": "how do agents use tools and APIs", "tags": ["cross", "tool-use"]},
-    {"query": "multi-agent collaboration strategies", "tags": ["cross", "multi-agent"]},
-    {"query": "agent memory systems and knowledge retention", "tags": ["cross", "memory"]},
-    {"query": "planning and reasoning in AI agents", "tags": ["cross", "planning"]},
-    {"query": "agent self-correction and reflection", "tags": ["cross", "self-correction"]},
-    {"query": "RAG systems with agentic workflows", "tags": ["cross", "rag"]},
-    {"query": "emergent capabilities in agentic systems", "tags": ["cross", "capability"]},
-    {"query": "safety and alignment of autonomous agents", "tags": ["cross", "safety"]},
-    {"query": "evaluation metrics for AI agents", "tags": ["cross", "evaluation"]},
+    # Planning & task decomposition (5)
+    {"query": "Help me design a planning module for an LLM agent that can break a long task into executable subtasks without overplanning.", "tags": ["cross", "planning"]},
+    {"query": "What is the current best practice for giving an agent reasoning structure without forcing brittle chain-of-thought templates?", "tags": ["cross", "reasoning"]},
+    {"query": "Show me how to build an agent that decides when to use a tool versus when to answer directly.", "tags": ["cross", "tool-use"]},
+    {"query": "How should I architect multi-tool orchestration so an agent can chain search, code execution, and document drafting safely?", "tags": ["cross", "tool-use"]},
+    {"query": "What scaffolding do strong terminal-based coding agents use around the model itself?", "tags": ["cross", "scaffolding"]},
 
-    # Books-focused (10)
-    {"query": "Apress books about agentic AI design", "tags": ["books", "publisher"]},
-    {"query": "enterprise patterns for generative AI systems", "tags": ["books", "enterprise"]},
-    {"query": "book on practical agent implementation", "tags": ["books", "practical"]},
-    {"query": "how to build agentic AI in production", "tags": ["books", "implementation"]},
-    {"query": "agentic AI for software engineering", "tags": ["books", "software"]},
-    {"query": "design patterns for AI agents book", "tags": ["books", "patterns"]},
-    {"query": "agentic AI in finance use cases", "tags": ["books", "finance"]},
-    {"query": "stateful agents and context management", "tags": ["books", "memory"]},
-    {"query": "agentic AI architecture patterns", "tags": ["books", "architecture"]},
-    {"query": "multiagent system orchestration", "tags": ["books", "multi-agent"]},
+    # Memory design (4)
+    {"query": "What is a good memory design for an agent that needs short-term working memory and long-term user memory?", "tags": ["cross", "memory"]},
+    {"query": "How do I stop an agent's memory from turning into a junk drawer full of redundant or low-value facts?", "tags": ["cross", "memory"]},
+    {"query": "I want an agent that can localize bugs in a large repository. What retrieval and hypothesis-testing loop should I start with?", "tags": ["papers", "retrieval"]},
+    {"query": "How would you benchmark an agent that performs refactors rather than one-off bug fixes?", "tags": ["papers", "evaluation"]},
 
-    # Papers-focused (10)
-    {"query": "arxiv papers on agent framework architecture", "tags": ["papers", "frameworks"]},
-    {"query": "research on agentic RAG surveys", "tags": ["papers", "rag"]},
-    {"query": "capability-papers about planning", "tags": ["papers", "planning"]},
-    {"query": "agent memory systems research", "tags": ["papers", "memory"]},
-    {"query": "paper on tool-use patterns for agents", "tags": ["papers", "tool-use"]},
-    {"query": "embodied agents research papers", "tags": ["papers", "embodied"]},
-    {"query": "multi-agent systems from application-papers", "tags": ["papers", "multi-agent"]},
-    {"query": "self-evolution in AI agents", "tags": ["papers", "self-evolution"]},
-    {"query": "perception and prediction capability papers", "tags": ["papers", "capability"]},
-    {"query": "safety benchmarks for agent systems", "tags": ["papers", "safety"]},
+    # Self-correction & evaluation (4)
+    {"query": "I want an agent that can notice its own mistakes and retry with a different strategy. What self-correction loop should I use?", "tags": ["cross", "self-correction"]},
+    {"query": "How do I make a coding agent ask clarifying questions only when needed instead of either guessing wildly or stopping constantly?", "tags": ["cross", "tool-use"]},
+    {"query": "What should I measure to catch post-merge quality problems in agent-generated pull requests?", "tags": ["cross", "evaluation"]},
+    {"query": "How would you build a GUI agent that can operate a clunky enterprise web app with inconsistent layouts?", "tags": ["papers", "gui"]},
+
+    # Domain-specific agents (6)
+    {"query": "What are the main failure modes of web agents in realistic browsing tasks, and how should I evaluate them?", "tags": ["papers", "evaluation"]},
+    {"query": "I want a mobile agent that can carry out a multi-step task across apps. What architecture would make that robust?", "tags": ["cross", "mobile"]},
+    {"query": "How should an enterprise agent handle permissions, approvals, and audit logs when acting on behalf of employees?", "tags": ["books", "enterprise"]},
+    {"query": "What is the cleanest way to build an API agent that can discover schema details and recover from malformed tool responses?", "tags": ["cross", "api"]},
+    {"query": "I need a data agent that can query a warehouse, validate the SQL, and then generate charts with commentary. How would you structure it?", "tags": ["cross", "data"]},
+    {"query": "What would a serious research agent pipeline look like for literature review, source ranking, note synthesis, and citation tracking?", "tags": ["cross", "research"]},
+
+    # Deep research & scientific (4)
+    {"query": "How do deep research agents verify intermediate conclusions instead of just producing polished nonsense?", "tags": ["papers", "research"]},
+    {"query": "I'm interested in agentic scientific simulation. How would an agent iteratively propose, run, and revise model configurations?", "tags": ["cross", "science"]},
+    {"query": "What are the tradeoffs between a single AI scientist agent and a multi-agent scientific discovery pipeline?", "tags": ["cross", "science"]},
+    {"query": "How should sub-agent creation work in a larger orchestration system so I do not end up with agent sprawl?", "tags": ["cross", "orchestration"]},
+
+    # Multi-agent & self-evolution (4)
+    {"query": "I want to experiment with multi-agent problem solving where agents debate, specialize, and then converge. What patterns are worth trying first?", "tags": ["cross", "multi-agent"]},
+    {"query": "How do self-evolving agents accumulate reusable skills without drifting into unstable behavior?", "tags": ["papers", "self-evolution"]},
+    {"query": "What safeguards are needed when agents can modify their own prompts, memories, or tool policies over time?", "tags": ["cross", "safety"]},
+    {"query": "Help me think through safety for agents that can browse the web, run code, and call external APIs.", "tags": ["cross", "safety"]},
+
+    # Production & tuning (3)
+    {"query": "How does agent tuning look like in practice for a smaller open model that needs to behave more like a reliable operator?", "tags": ["papers", "tuning"]},
+    {"query": "How should I evaluate agents in production beyond task success rate—latency, cost, recovery rate, human override rate, what else?", "tags": ["cross", "evaluation"]},
+    {"query": "Can you sketch a benchmark for comparing a data-analysis agent against human analysts on realistic business tasks?", "tags": ["papers", "evaluation"]},
 ]
 
 # ─── Data Classes ──────────────────────────────────────────────────────────
@@ -181,13 +189,27 @@ class RetrieverRunner:
         query: str,
         method: str = "baseline",
     ) -> QueryResult:
-        """Run retrieval for a query and return a QueryResult."""
+        """Run retrieval for a query and return a QueryResult.
+
+        For phase_2_hybrid: targets books-named/papers-named collections
+        which have dense+sparse named vectors and use RRF fusion.
+        """
         retriever = self._get_retriever()
+
+        # Baseline explicitly targets original collections (dense-only + z-score)
+        # Hybrid explicitly targets -named collections (dense+sparse + RRF)
+        # This ensures they use different code paths.
+        collections = None
+        if method == "phase_2_hybrid":
+            collections = ["books-named", "papers-named"]
+        elif method == "baseline":
+            collections = ["books", "papers"]
 
         # Use cross-collection search for full coverage
         bundle = retriever.search_collections(
             query=query,
             top_k=20,  # grab more than 5 to compute meaningful metrics
+            collections=collections,
         )
 
         # Flatten groups into a single list, sorted by score
@@ -267,10 +289,10 @@ decide which is more relevant and useful.
 
 Query: {query}
 
-Result Set A (baseline):
+Result Set A (baseline — dense semantic + z-score normalization):
 {format_context(baseline_chunks, "A")}
 
-Result Set B (new method):
+Result Set B (hybrid — dense semantic + sparse keyword + RRF fusion):
 {format_context(new_chunks, "B")}
 
 Which result set is more relevant to the query? Consider:
@@ -348,9 +370,12 @@ async def evaluate_phase(
         judgment = await judge.judge(query, baseline_qr.chunks, new_qr.chunks)
         winner = judgment.get("winner", "tie")
 
-        if winner == baseline_name:
+        # Map judge's "A"/"B" result set labels to our method names.
+        # The judge prompt labels sets as "A (baseline)" and "B (new method)",
+        # so "A" → baseline, "B" → new method.
+        if winner in ("A", baseline_name):
             wins[baseline_name] += 1
-        elif winner == phase_name:
+        elif winner in ("B", phase_name):
             wins[phase_name] += 1
         else:
             ties += 1
@@ -467,12 +492,15 @@ async def run_evaluation(
     # Run evaluation
     er = await evaluate_phase(runner, judge, phase_name, baseline_name, baseline_results)
 
-    # Merge with previous results
+    # Merge with previous results: keep old aggregate data (previous phases),
+    # but ONLY for the current phase+baseline keys — don't overwrite with stale data.
+    # previous.per_query_scores contains OLD baseline+OLD phase data that we don't want.
+    # We only want previous aggregate entries for OTHER phases.
     if previous:
-        er.per_query_scores.update(previous.per_query_scores)
-        er.aggregate.update(previous.aggregate)
-        # Update version timestamp
-        er.evaluated_at = er.evaluated_at  # keep the latest run timestamp
+        for k, v in previous.aggregate.items():
+            if k != baseline_name and k != phase_name:
+                er.aggregate[k] = v
+        # Do NOT merge per_query_scores — those are all fresh from this run
 
     # Set baseline method name
     er.baseline_method = baseline_name

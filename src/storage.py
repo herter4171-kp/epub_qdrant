@@ -169,6 +169,21 @@ class Storage:
         )
         return len(points)
 
+    def _get_vector_name(self, collection_name: str) -> Optional[str]:
+        """Check if a collection uses named vectors. Returns vector name or None for unnamed."""
+        try:
+            info = self._client.get_collection(collection_name)
+            if hasattr(info, "config") and info.config:
+                # Named vectors dict: {"dense": ..., "sparse": ...}
+                vectors = info.config.params.vectors
+                if isinstance(vectors, dict) and len(vectors) > 0:
+                    # First key is the default named vector
+                    return list(vectors.keys())[0]
+            # NamedVector is None or special — means unnamed vector
+        except Exception:
+            pass
+        return None
+
     def search(
         self,
         collection_name: str,
@@ -176,6 +191,9 @@ class Storage:
         top_k: int = 10,
     ) -> List[dict]:
         """Search a collection for text similar to query_text.
+
+        Handles both unnamed-vector collections (default vector) and
+        named-vector collections (e.g. "dense" vector in -named collections).
 
         Args:
             collection_name: Qdrant collection to search.
@@ -185,16 +203,20 @@ class Storage:
         Returns:
             List of dicts with score, text, and payload.
         """
-        # Generate query embedding
         from src.embedder import Embedder
+
         embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
         query_vector = embedder.embed_single(query_text)
 
-        results = self._client.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            limit=top_k,
-        )
+        # Detect named vectors — if the collection has them, use `using=` param.
+        vector_name = self._get_vector_name(collection_name)
+        query_param = query_vector  # raw vector always works with `using=`
+
+        kwargs: dict = {"collection_name": collection_name, "query": query_param, "limit": top_k}
+        if vector_name:
+            kwargs["using"] = vector_name
+
+        results = self._client.query_points(**kwargs)
 
         output = []
         for point in results.points:
@@ -289,12 +311,12 @@ class Storage:
             if conditions:
                 query_filter = Filter(must=conditions)
 
-        results = self._client.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            limit=top_k,
-            query_filter=query_filter,
-        )
+        # Detect named vectors for filter queries too — use `using=` param (NamedVector not serializable over MCP transport)
+        vector_name = self._get_vector_name(collection_name)
+        kwargs = {"collection_name": collection_name, "query": query_vector, "limit": top_k, "query_filter": query_filter}
+        if vector_name:
+            kwargs["using"] = vector_name
+        results = self._client.query_points(**kwargs)
 
         output = []
         for point in results.points:

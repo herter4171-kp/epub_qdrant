@@ -9,6 +9,7 @@ Standalone pipeline that reads EPUB files and PDF papers, generates embeddings v
 - [Paper Embedding](#paper-embedding)
 - [Search (CLI)](#search-cli)
 - [Benchmark (LLM-as-Judge Evaluation)](#benchmark-llm-as-judge-evaluation)
+- [Phase 2: Hybrid Search](#phase-2-hybrid-search)
 - [List Collections](#list-collections)
 - [List Books](#list-books)
 - [Delete a Collection](#delete-a-collection)
@@ -209,6 +210,75 @@ Results are saved to `results.json` (or custom path):
 | `phase_2_hybrid` | MiniCOIL sparse + dense vectors with RRF fusion | >60% |
 | `phase_3_filter` | LLM-driven metadata filter extraction | >65% |
 
+## Phase 2: Hybrid Search
+
+Phase 2 adds **MiniCOIL sparse vectors** alongside existing dense (semantic) vectors, enabling **hybrid search** via Reciprocal Rank Fusion (RRF).
+
+### Prerequisites
+
+The MiniCOIL embedding server must be running on the GPU box:
+
+```bash
+# On the Linux GPU box (192.168.68.75):
+pip install fastembed-gpu fastapi uvicorn
+uvicorn mcp_servers.minicoil_server.server:app --host 0.0.0.0 --port 9000
+```
+
+Verify from the Mac:
+
+```bash
+curl http://192.168.68.75:9000/health
+# → {"status":"ok","ready":true}
+```
+
+### Sparse Collections
+
+Phase 2 creates new collections with **named vectors** (`dense` + `sparse`):
+
+| Collection | Vectors | Description |
+|-----------|---------|-------------|
+| `books` | dense only | Original baseline (read-only reference) |
+| `books-named` | dense + sparse | Hybrid search target |
+| `papers` | dense only | Original baseline (read-only reference) |
+| `papers-named` | dense + sparse | Hybrid search target |
+
+### Running the Hybrid Search Test
+
+To verify hybrid search is working and compare dense vs sparse vs hybrid results:
+
+```bash
+# Use the project's .venv (Python 3.14.4) — NOT system Python
+cd /Users/justinherter/projects/epub_qdrant
+.venv/bin/python3 scripts/test_hybrid_search.py
+```
+
+This script:
+1. Queries collection configs (verifies sparse vectors are stored)
+2. Embeds test queries with Ollama (dense) and MiniCOIL (sparse)
+3. Runs dense-only, sparse-only, and RRF-fused hybrid search on `books-named`
+4. Prints side-by-side top-10 comparisons
+5. Reports overlap statistics between dense and sparse results
+
+**Example output:**
+```
+Dense top 10 IDs:   [0, 62, 322, 1139, 2112, 2176, 2185, 2197, 2484, 3971]
+Sparse top 10 IDs:  [58, 62, 86, 310, 2184, 2185, 2198, 2206, 2725, 5414]
+Hybrid top 10 IDs:  [0, 62, 86, 322, 2112, 2184, 2185, 2206, 2725, 5414]
+Dense intersect Sparse top 20: 6/34
+  *** MODERATE OVERLAP - sparse contributes distinct signal ***
+```
+
+### Migrating Sparse Vectors to New Collections
+
+If you need to (re)create the `-named` collections:
+
+```bash
+cd /Users/justinherter/projects/epub_qdrant
+.venv/bin/python3 scripts/embed_sparse_vectors.py
+```
+
+This scrolls existing collections, computes MiniCOIL sparse vectors via the embedding server, and upserts into `books-named` / `papers-named` with named vector configs. (~3-6 minutes for all ~96K points on GPU).
+
 ## MCP Retrieval Server
 
 A standalone MCP server provides knowledge-base tools over Streamable HTTP for use by n8n, LLM clients, or any MCP-compatible tool. It supports **multi-collection search** across all configured Qdrant collections.
@@ -366,13 +436,20 @@ src/
 scripts/
   embed_papers.py         # Paper download + metadata extraction
   embed_papers_to_qdrant.py  # PDF embedding pipeline (downloads → Qdrant)
+  embed_sparse_vectors.py  # Phase 2: scroll + re-embed sparse vectors into -named collections
+  test_hybrid_search.py    # Phase 2: verify hybrid search (dense vs sparse vs RRF)
+  evaluate.py              # LLM-as-judge evaluation harness
 
-mcp_servers/retrieval/
-  mcp_server/
-    server.py             # MCP server (FastAPI + Streamable HTTP, v0.2.0)
-    retriever.py          # Retrieval layer: search → group → evidence
-    llm_client.py         # LiteLLM streaming client
-    config.py             # MCP server settings
+mcp_servers/
+  minicoil_server/
+    server.py             # MiniCOIL sparse embedding server (runs on GPU box :9000)
+    client.py             # HTTP client for sparse embeddings (shared by indexing script + retriever)
+  retrieval/
+    mcp_server/
+      server.py           # MCP server (FastAPI + Streamable HTTP, v0.2.0)
+      retriever.py        # Retrieval layer: search → group → evidence (hybrid search)
+      llm_client.py       # LiteLLM streaming client
+      config.py           # MCP server settings
 ```
 
 ### EPUB Ingestion Flow
@@ -393,6 +470,14 @@ Each EPUB chunk carries metadata: `source_file`, `book_title`, `section_title`, 
 5. **Store**: `storage.py.upsert_paper_file()` upserts into `QDRANT_PAPERS_COLLECTION`
 
 Each paper chunk carries metadata: `arxiv_id`, `title`, `category`, `subcategory`, `authors`, `publish_date`, `chunk_index`, `chunk_count`, `token_count`, `source_file`.
+
+### Phase 2: Hybrid Search Flow
+
+1. **Scroll**: `embed_sparse_vectors.py` scrolls original collections in batches
+2. **Embed**: MiniCOIL server (`:9000`) computes sparse vectors via GPU (FastEmbed + ONNX Runtime)
+3. **Upsert**: New collections get **named vectors** — `dense` (768-d cosine) + `sparse` (variable-d IDF)
+4. **Search**: `retriever.hybrid_search()` runs both dense and sparse queries, fuses via RRF (k_rrf=60)
+5. **Normalize**: Z-score normalization applied across fused results for cross-collection fairness
 
 ### Multi-Collection Retrieval
 

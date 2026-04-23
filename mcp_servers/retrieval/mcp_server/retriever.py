@@ -5,15 +5,24 @@ configured collections in the MCP server.
 """
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import numpy as np
-from qdrant_client.models import FieldCondition, MatchValue
+from qdrant_client.models import FieldCondition, MatchValue, SparseVector
 
 from src.embedder import Embedder
 from src.storage import Storage
 from mcp_server.config import settings
+
+try:
+    from mcp_servers.minicoil_server.client import get_sparse_vectors
+    _HAS_MINICOIL = True
+except ImportError:
+    _HAS_MINICOIL = False
+    logger = logging.getLogger(__name__)
+    logger.warning("MiniCOIL client not available — hybrid search disabled.")
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +148,24 @@ class Retriever:
         # Resolve to a single collection name; fall back to default or first configured
         target = collection or settings.DEFAULT_COLLECTION
         if not target:
-            target = settings.QDRANT_COLLECTION  # legacy single-col fallback
+            target = settings.QDRANT_COLLECTIONS.split(",")[0].strip()  # legacy single-col fallback
         self._collection = target
         self._top_k = settings.RETRIEVAL_TOP_K
         self._context_radius = settings.RETRIEVAL_CONTEXT_RADIUS
         self._group_by = settings.RETRIEVAL_GROUP_BY
+
+    def _embed(self, text: str) -> List[float]:
+        """Get dense embedding for a single text string."""
+        return self._embedder.embed_single(text)
+
+    def _embed_sparse(self, text: str) -> Dict:
+        """Get sparse MiniCOIL embedding for a single text string (query mode).
+
+        Returns a dict with 'indices' (List[int]) and 'values' (List[float]) keys.
+        """
+        if not _HAS_MINICOIL:
+            raise RuntimeError("MiniCOIL client not available — sparse search disabled.")
+        return get_sparse_vectors([text], is_query=True)[0]
 
     def search(
         self,
@@ -224,6 +246,151 @@ class Retriever:
             prompt_context=prompt_context, sources=sources,
         )
 
+    def hybrid_search(
+        self,
+        query: str,
+        collection: str,
+        top_k: int = 20,
+        filter_by: Optional[Dict[str, str]] = None,
+        sparse_weight: float = 0.25,
+    ) -> List[ChunkResult]:
+        """Search with dense + sparse vectors, fuse via Reciprocal Rank Fusion.
+
+        Targets the -named collections (books-named, papers-named) which have
+        both "dense" and "sparse" named vectors.
+
+        Args:
+            query: Search query string.
+            collection: Collection name (should be a -named collection).
+            top_k: Number of results to return after RRF fusion.
+            filter_by: Optional metadata pre-filter.
+            sparse_weight: Multiplier for sparse vector in RRF fusion (default 0.25).
+                Set to 0 for dense-only, increase to give sparse more weight.
+
+        Returns:
+            List of ChunkResult sorted by RRF score.
+        """
+        if not _HAS_MINICOIL:
+            # Fallback: pure dense search
+            if filter_by:
+                raw = self._storage.search_with_filter(collection, query, top_k=top_k * 2, filter_by=filter_by)
+            else:
+                raw = self._storage.search(collection, query, top_k=top_k * 2)
+            return [
+                ChunkResult(
+                    score=r.get("score", 0),
+                    text=r.get("text", ""),
+                    source_file=r.get("source_file", ""),
+                    title=r.get("title", "") or r.get("book_title", "") or r.get("section_title", ""),
+                    section=r.get("section", "") or r.get("section_title", ""),
+                    doc_type=r.get("doc_type", ""),
+                    book_title=r.get("book_title", ""),
+                    section_title=r.get("section_title", ""),
+                    chapter_index=r.get("chapter_index", 0),
+                    section_index=r.get("section_index", 0),
+                    chunk_index=r.get("chunk_index", 0),
+                    token_count=r.get("token_count", 0),
+                    publisher=r.get("publisher"),
+                    language=r.get("language"),
+                    isbn=r.get("isbn"),
+                    arxiv_id=r.get("arxiv_id"),
+                    category=r.get("category"),
+                    subcategory=r.get("subcategory"),
+                    publish_date=r.get("publish_date"),
+                    authors=r.get("authors"),
+                    year=r.get("year"),
+                )
+                for r in raw
+            ]
+
+        # Build Qdrant filter from filter_by dict
+        qdrant_filter = None
+        if filter_by:
+            from qdrant_client.models import FieldCondition, MatchValue, Filter
+            conditions = [
+                FieldCondition(key=k, match=MatchValue(value=v))
+                for k, v in filter_by.items()
+            ]
+            if conditions:
+                qdrant_filter = Filter(must=conditions)
+
+        # Generate dense query vector
+        embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
+        query_dense = embedder.embed_single(query)
+
+        # Generate sparse query vector via MiniCOIL
+        sparse_query = get_sparse_vectors([query], is_query=True)[0]
+
+        # Dense search (top k*2 for fusion headroom)
+        # Use using="dense" + raw list[float] — NOT NamedVector
+        dense_hits = self._client.query_points(
+            collection_name=collection,
+            query=query_dense,
+            using="dense",
+            limit=top_k * 2,
+            query_filter=qdrant_filter,
+        )
+
+        # Sparse search (top k*2 for fusion headroom)
+        # Pass SparseVector directly — it's accepted by query_points natively
+        sparse_hits = self._client.query_points(
+            collection_name=collection,
+            query=SparseVector(
+                indices=sparse_query["indices"],
+                values=sparse_query["values"],
+            ),
+            using="sparse",
+            limit=top_k * 2,
+            query_filter=qdrant_filter,
+        )
+
+        # Reciprocal Rank Fusion
+        rrf_scores = defaultdict(float)
+        k_rrf = 60
+
+        for rank, hit in enumerate(dense_hits.points):
+            rrf_scores[hit.id] += 1.0 / (k_rrf + rank + 1)
+        for rank, hit in enumerate(sparse_hits.points):
+            rrf_scores[hit.id] += sparse_weight * (1.0 / (k_rrf + rank + 1))
+
+        # Merge: build a lookup from id → full hit (prefer dense for metadata)
+        all_points = list(dense_hits.points) + list(sparse_hits.points)
+        id_to_point = {}
+        for p in all_points:
+            id_to_point[p.id] = p
+
+        # Sort by RRF score descending, take top_k
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: -rrf_scores[x])[:top_k]
+
+        results = []
+        for point_id in sorted_ids:
+            point = id_to_point[point_id]
+            results.append(ChunkResult(
+                score=rrf_scores[point_id],
+                text=point.payload.get("text", ""),
+                source_file=point.payload.get("source_file", ""),
+                title=point.payload.get("title", "") or point.payload.get("book_title", "") or point.payload.get("section_title", ""),
+                section=point.payload.get("section", "") or point.payload.get("section_title", ""),
+                doc_type=point.payload.get("doc_type", ""),
+                book_title=point.payload.get("book_title", ""),
+                section_title=point.payload.get("section_title", ""),
+                chapter_index=point.payload.get("chapter_index", 0),
+                section_index=point.payload.get("section_index", 0),
+                chunk_index=point.payload.get("chunk_index", 0),
+                token_count=point.payload.get("token_count", 0),
+                publisher=point.payload.get("publisher"),
+                language=point.payload.get("language"),
+                isbn=point.payload.get("isbn"),
+                arxiv_id=point.payload.get("arxiv_id"),
+                category=point.payload.get("category"),
+                subcategory=point.payload.get("subcategory"),
+                publish_date=point.payload.get("publish_date"),
+                authors=point.payload.get("authors"),
+                year=point.payload.get("year"),
+            ))
+
+        return results
+
     def search_collections(
         self,
         query: str,
@@ -231,12 +398,16 @@ class Retriever:
         group_by: Optional[str] = None,
         collections: Optional[List[str]] = None,
         filter_by: Optional[Dict[str, str]] = None,
+        sparse_weight: float = 0.25,
     ) -> EvidenceBundle:
-        """Search across ALL configured collections and merge results.
+        """Search across ALL configured collections with hybrid (dense+sparse) search.
 
-        Applies per-collection z-score normalization to enable fair cross-collection
-        ranking, since scores from different collections live in different semantic
-        spaces (e.g. 90K papers vs 6K books).
+        Uses RRF fusion of dense semantic + sparse keyword vectors when MiniCOIL
+        client is available. Falls back to pure dense + z-score normalization
+        if MiniCOIL is unavailable.
+
+        For -named collections (books-named, papers-named): uses hybrid_search().
+        For original collections (books, papers): uses pure dense + z-score.
 
         Args:
             query: Search query string.
@@ -244,6 +415,7 @@ class Retriever:
             group_by: Override default grouping.
             collections: Override which collections to search. Defaults to configured list.
             filter_by: Optional metadata key->value pre-filter.
+            sparse_weight: Multiplier for sparse vector in RRF fusion (default 0.25).
 
         Returns:
             EvidenceBundle with cross-collection grouped results.
@@ -257,40 +429,54 @@ class Retriever:
                 query=query, groups=[], total_chunks=0, prompt_context="",
             )
 
-        # Collect raw results per collection (with original scores)
+        # Use collection names exactly as provided by the caller — no silent redirects.
+        effective_collections = list(target_collections)
+
+        # Collect raw results per collection
         collection_results: Dict[str, List[ChunkResult]] = {}
-        for col in target_collections:
+        q_lower = query.lower()
+
+        for col in effective_collections:
             try:
-                if filter_by:
+                if _HAS_MINICOIL and "-named" in col:
+                    # Hybrid search with RRF fusion
+                    raw = self.hybrid_search(query, col, top_k=top_k * 2, filter_by=filter_by, sparse_weight=sparse_weight)
+                elif filter_by:
                     raw = self._storage.search_with_filter(col, query, top_k=top_k, filter_by=filter_by)
                 else:
                     raw = self._storage.search(col, query, top_k=top_k)
-                collection_results[col] = [
-                    ChunkResult(
-                        score=r.get("score", 0),
-                        text=r.get("text", ""),
-                        source_file=r.get("source_file", ""),
-                        title=r.get("title", "") or r.get("book_title", "") or r.get("section_title", ""),
-                        section=r.get("section", "") or r.get("section_title", ""),
-                        doc_type=r.get("doc_type", ""),
-                        book_title=r.get("book_title", ""),
-                        section_title=r.get("section_title", ""),
-                        chapter_index=r.get("chapter_index", 0),
-                        section_index=r.get("section_index", 0),
-                        chunk_index=r.get("chunk_index", 0),
-                        token_count=r.get("token_count", 0),
-                        publisher=r.get("publisher"),
-                        language=r.get("language"),
-                        isbn=r.get("isbn"),
-                        arxiv_id=r.get("arxiv_id"),
-                        category=r.get("category"),
-                        subcategory=r.get("subcategory"),
-                        publish_date=r.get("publish_date"),
-                        authors=r.get("authors"),
-                        year=r.get("year"),
-                    )
-                    for r in raw
-                ]
+
+                # hybrid_search() already returns List[ChunkResult], so just use as-is.
+                # For raw dict results (non-hybrid), convert to ChunkResult.
+                if _HAS_MINICOIL and "-named" in col and raw and isinstance(raw[0], ChunkResult):
+                    collection_results[col] = raw
+                else:
+                    collection_results[col] = [
+                        ChunkResult(
+                            score=r.get("score", 0),
+                            text=r.get("text", ""),
+                            source_file=r.get("source_file", ""),
+                            title=r.get("title", "") or r.get("book_title", "") or r.get("section_title", ""),
+                            section=r.get("section", "") or r.get("section_title", ""),
+                            doc_type=r.get("doc_type", ""),
+                            book_title=r.get("book_title", ""),
+                            section_title=r.get("section_title", ""),
+                            chapter_index=r.get("chapter_index", 0),
+                            section_index=r.get("section_index", 0),
+                            chunk_index=r.get("chunk_index", 0),
+                            token_count=r.get("token_count", 0),
+                            publisher=r.get("publisher"),
+                            language=r.get("language"),
+                            isbn=r.get("isbn"),
+                            arxiv_id=r.get("arxiv_id"),
+                            category=r.get("category"),
+                            subcategory=r.get("subcategory"),
+                            publish_date=r.get("publish_date"),
+                            authors=r.get("authors"),
+                            year=r.get("year"),
+                        )
+                        for r in raw
+                    ]
             except Exception as e:
                 logger.warning(f"search_collections failed for '{col}': {e}")
 
@@ -299,45 +485,71 @@ class Retriever:
                 query=query, groups=[], total_chunks=0, prompt_context="",
             )
 
-        # Per-collection z-score normalization.
-        # Each collection's scores are normalized independently so that a score of
-        # 0.55 in papers (90K points) is comparable to 0.55 in books (6K points).
+        # For non-hybrid results (original collections), apply z-score normalization.
+        # Hybrid results already have RRF scores that are comparable.
         all_results: List[ChunkResult] = []
-        q_lower = query.lower()
         for col, results in collection_results.items():
-            scores = np.array([r.score for r in results])
-            mean_score = float(np.mean(scores))
-            std_score = float(np.std(scores)) + 1e-8  # avoid div-by-zero for single-result collections
+            if _HAS_MINICOIL and "-named" in col:
+                # Hybrid RRF scores are already normalized — use as-is with metadata boost
+                for r in results:
+                    boost = self._compute_metadata_boost(r, q_lower)
+                    all_results.append(ChunkResult(
+                        score=r.score + boost,
+                        text=r.text,
+                        source_file=r.source_file,
+                        title=r.title,
+                        section=r.section,
+                        doc_type=r.doc_type,
+                        book_title=r.book_title,
+                        section_title=r.section_title,
+                        chapter_index=r.chapter_index,
+                        section_index=r.section_index,
+                        chunk_index=r.chunk_index,
+                        token_count=r.token_count,
+                        publisher=r.publisher,
+                        language=r.language,
+                        isbn=r.isbn,
+                        arxiv_id=r.arxiv_id,
+                        category=r.category,
+                        subcategory=r.subcategory,
+                        publish_date=r.publish_date,
+                        authors=r.authors,
+                        year=r.year,
+                    ))
+            else:
+                # Z-score normalization for original collections
+                scores = np.array([r.score for r in results])
+                mean_score = float(np.mean(scores))
+                std_score = float(np.std(scores)) + 1e-8
 
-            for r in results:
-                z_score = (r.score - mean_score) / std_score
-                # Apply metadata boost for explicit query references
-                boost = self._compute_metadata_boost(r, q_lower)
-                all_results.append(ChunkResult(
-                    score=z_score + boost,
-                    text=r.text,
-                    source_file=r.source_file,
-                    title=r.title,
-                    section=r.section,
-                    doc_type=r.doc_type,
-                    book_title=r.book_title,
-                    section_title=r.section_title,
-                    chapter_index=r.chapter_index,
-                    section_index=r.section_index,
-                    chunk_index=r.chunk_index,
-                    token_count=r.token_count,
-                    publisher=r.publisher,
-                    language=r.language,
-                    isbn=r.isbn,
-                    arxiv_id=r.arxiv_id,
-                    category=r.category,
-                    subcategory=r.subcategory,
-                    publish_date=r.publish_date,
-                    authors=r.authors,
-                    year=r.year,
-                ))
+                for r in results:
+                    z_score = (r.score - mean_score) / std_score
+                    boost = self._compute_metadata_boost(r, q_lower)
+                    all_results.append(ChunkResult(
+                        score=z_score + boost,
+                        text=r.text,
+                        source_file=r.source_file,
+                        title=r.title,
+                        section=r.section,
+                        doc_type=r.doc_type,
+                        book_title=r.book_title,
+                        section_title=r.section_title,
+                        chapter_index=r.chapter_index,
+                        section_index=r.section_index,
+                        chunk_index=r.chunk_index,
+                        token_count=r.token_count,
+                        publisher=r.publisher,
+                        language=r.language,
+                        isbn=r.isbn,
+                        arxiv_id=r.arxiv_id,
+                        category=r.category,
+                        subcategory=r.subcategory,
+                        publish_date=r.publish_date,
+                        authors=r.authors,
+                        year=r.year,
+                    ))
 
-        # Sort globally by normalized+boosted score, then group
+        # Sort globally by normalized/boosted score, then group
         all_results.sort(key=lambda x: x.score, reverse=True)
 
         # Build bibliography from unique sources
@@ -348,9 +560,14 @@ class Retriever:
 
         return EvidenceBundle(
             query=query, groups=groups, total_chunks=len(all_results),
-            prompt_context=prompt_context, collections_queried=target_collections,
+            prompt_context=prompt_context, collections_queried=effective_collections,
             sources=sources,
         )
+
+    @property
+    def _client(self):
+        """Lazy access to the Qdrant client from storage."""
+        return self._storage._client
 
     def _compute_metadata_boost(self, chunk: ChunkResult, q_lower: str) -> float:
         """Boost score if the query explicitly references the chunk's metadata.

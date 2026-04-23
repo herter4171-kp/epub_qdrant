@@ -74,6 +74,7 @@ class LLMClient:
                 stream=True,
                 temperature=0.3,
                 max_tokens=4096,
+                timeout=60,
             )
 
             async for chunk in response:

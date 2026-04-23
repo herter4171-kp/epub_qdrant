@@ -1,0 +1,68 @@
+{
+  "book": "masteringretrieval-augmentedgeneration.epub",
+  "collection": "books-named",
+  "top_k": 5,
+  "num_chunks": 632,
+  "num_queries": 4,
+  "queries": [
+    "How can I effectively combine external knowledge bases with large language models to reduce hallucinations?",
+    "How can I implement a function that automatically creates or loads a separate Chroma vector store for each user to enable personalized retrieval?",
+    "What are the best practices for organizing and maintaining isolated vector databases across different user segments in a RAG system?",
+    "What are the key steps and best practices for implementing retrieval-augmented generation in real-world applications?"
+  ],
+  "sparse_weights_tested": [
+    0.0,
+    0.5,
+    1.0,
+    1.5,
+    2.0
+  ],
+  "best_weight": 0.5,
+  "weight_summary": {
+    "0.0": {
+      "avg_relevance_at_k": 2.1,
+      "per_query": [
+        2.8,
+        1.8,
+        1.6,
+        2.2
+      ]
+    },
+    "0.5": {
+      "avg_relevance_at_k": 2.15,
+      "per_query": [
+        2.8,
+        1.8,
+        1.6,
+        2.4
+      ]
+    },
+    "1.0": {
+      "avg_relevance_at_k": 2.1,
+      "per_query": [
+        3.0,
+        1.8,
+        1.4,
+        2.2
+      ]
+    },
+    "1.5": {
+      "avg_relevance_at_k": 1.95,
+      "per_query": [
+        2.6,
+        1.8,
+        1.4,
+        2.0
+      ]
+    },
+    "2.0": {
+      "avg_relevance_at_k": 1.9,
+      "per_query": [
+        2.6,
+        1.6,
+        1.4,
+        2.0
+      ]
+    }
+  }
+}

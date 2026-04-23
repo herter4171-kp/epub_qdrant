@@ -1,0 +1,1 @@
+"""MiniCOIL sparse embedding client package."""
