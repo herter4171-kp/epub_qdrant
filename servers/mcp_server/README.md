@@ -11,8 +11,7 @@ pip install -e .
 # Configure
 export QDRANT_COLLECTIONS=epub_kb,papers
 export QDRANT_URL=http://localhost:6333
-export OLLAMA_URL=http://localhost:11434
-export EMBEDDING_MODEL=nomic-embed-text
+export EMBEDDING_SERVER_URL=http://localhost:8100
 export LITELLM_API_KEY=your-key
 export LITELLM_API_URL=https://litellm.twr.church/v1
 export LITELLM_MODEL=qwen36
@@ -300,8 +299,7 @@ curl -X POST http://localhost:8090/mcp \
 | `QDRANT_URL` | `http://localhost:6333` | No | Qdrant endpoint |
 | `QDRANT_COLLECTIONS` | — | **Yes** | Comma-separated collection names (e.g., `epub_kb,papers`) |
 | `QDRANT_COLLECTION` | `books` | No | Legacy fallback if `QDRANT_COLLECTIONS` not set |
-| `OLLAMA_URL` | `http://localhost:11434` | No | Ollama embedding endpoint |
-| `EMBEDDING_MODEL` | `nomic-embed-text` | No | Embedding model name |
+| `EMBEDDING_SERVER_URL` | `http://localhost:8100` | No | Unified embedding server URL (dense + sparse) |
 | `LITELLM_API_URL` | `https://litellm.twr.church/v1` | No | LiteLLM ChatCompletion endpoint |
 | `LITELLM_API_KEY` | — | No* | *Required for `query` with `mode="answer"` |
 | `LITELLM_MODEL` | `qwen36` | No | LLM model for answers (via llama.cpp through LiteLLM) |

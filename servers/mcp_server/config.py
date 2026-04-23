@@ -19,8 +19,7 @@ class Settings:
     QDRANT_COLLECTIONS: str = os.getenv("QDRANT_COLLECTIONS", "")
 
     # ── Embedding ───────────────────────────────────────────────────
-    OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+    EMBEDDING_SERVER_URL: str = os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8100")
 
     # ── LiteLLM ─────────────────────────────────────────────────────
     LITELLM_API_URL: str = os.getenv("LITELLM_API_URL", "https://litellm.twr.church/v1")

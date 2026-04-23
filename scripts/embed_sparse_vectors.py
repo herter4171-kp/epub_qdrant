@@ -38,6 +38,7 @@ logger = logging.getLogger("embed_sparse")
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     PointStruct,
+    PointVectors,
     SparseVector,
     VectorParams,
     SparseVectorParams,
@@ -260,7 +261,7 @@ def scroll_and_embed(
                 text = p.payload["text"]
                 sv = embed_document(text)
                 upsert_points.append(
-                    PointStruct(
+                    PointVectors(
                         id=p.id,
                         vector={
                             "sparse": SparseVector(
@@ -268,11 +269,10 @@ def scroll_and_embed(
                                 values=sv["values"],
                             ),
                         },
-                        payload={},  # no payload update — already set in Pass 1
                     )
                 )
 
-            client.upsert(collection_name=dst_collection, points=upsert_points)
+            client.update_vectors(collection_name=dst_collection, points=upsert_points)
             total += len(upsert_points)
             print(f"  [sparse] Upserted {total} points into {dst_collection}...", end="\r")
 

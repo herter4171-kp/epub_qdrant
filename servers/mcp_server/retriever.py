@@ -12,17 +12,9 @@ from typing import Dict, List, Optional
 import numpy as np
 from qdrant_client.models import FieldCondition, MatchValue, SparseVector
 
-from src.embedding import Embedder
+from servers.embedding_server.client import get_dense_vectors, get_sparse_vectors
 from src.storage import Storage
 from servers.mcp_server.config import settings
-
-try:
-    from src.embedding.client import get_sparse_vectors
-    _HAS_MINICOIL = True
-except ImportError:
-    _HAS_MINICOIL = False
-    logger = logging.getLogger(__name__)
-    logger.warning("MiniCOIL client not available — hybrid search disabled.")
 
 logger = logging.getLogger(__name__)
 
@@ -138,13 +130,9 @@ class Retriever:
     def __init__(
         self,
         storage: Optional[Storage] = None,
-        embedder: Optional[Embedder] = None,
         collection: Optional[str] = None,
     ):
         self._storage = storage or Storage()
-        self._embedder = embedder or Embedder(
-            settings.OLLAMA_URL, settings.EMBEDDING_MODEL
-        )
         # Resolve to a single collection name; fall back to default or first configured
         target = collection or settings.DEFAULT_COLLECTION
         if not target:
@@ -156,15 +144,13 @@ class Retriever:
 
     def _embed(self, text: str) -> List[float]:
         """Get dense embedding for a single text string."""
-        return self._embedder.embed_single(text)
+        return get_dense_vectors([text])[0]
 
     def _embed_sparse(self, text: str) -> Dict:
         """Get sparse MiniCOIL embedding for a single text string (query mode).
 
         Returns a dict with 'indices' (List[int]) and 'values' (List[float]) keys.
         """
-        if not _HAS_MINICOIL:
-            raise RuntimeError("MiniCOIL client not available — sparse search disabled.")
         return get_sparse_vectors([text], is_query=True)[0]
 
     def search(
@@ -270,39 +256,6 @@ class Retriever:
         Returns:
             List of ChunkResult sorted by RRF score.
         """
-        if not _HAS_MINICOIL:
-            # Fallback: pure dense search
-            if filter_by:
-                raw = self._storage.search_with_filter(collection, query, top_k=top_k * 2, filter_by=filter_by)
-            else:
-                raw = self._storage.search(collection, query, top_k=top_k * 2)
-            return [
-                ChunkResult(
-                    score=r.get("score", 0),
-                    text=r.get("text", ""),
-                    source_file=r.get("source_file", ""),
-                    title=r.get("title", "") or r.get("book_title", "") or r.get("section_title", ""),
-                    section=r.get("section", "") or r.get("section_title", ""),
-                    doc_type=r.get("doc_type", ""),
-                    book_title=r.get("book_title", ""),
-                    section_title=r.get("section_title", ""),
-                    chapter_index=r.get("chapter_index", 0),
-                    section_index=r.get("section_index", 0),
-                    chunk_index=r.get("chunk_index", 0),
-                    token_count=r.get("token_count", 0),
-                    publisher=r.get("publisher"),
-                    language=r.get("language"),
-                    isbn=r.get("isbn"),
-                    arxiv_id=r.get("arxiv_id"),
-                    category=r.get("category"),
-                    subcategory=r.get("subcategory"),
-                    publish_date=r.get("publish_date"),
-                    authors=r.get("authors"),
-                    year=r.get("year"),
-                )
-                for r in raw
-            ]
-
         # Build Qdrant filter from filter_by dict
         qdrant_filter = None
         if filter_by:
@@ -314,11 +267,10 @@ class Retriever:
             if conditions:
                 qdrant_filter = Filter(must=conditions)
 
-        # Generate dense query vector
-        embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
-        query_dense = embedder.embed_single(query)
+        # Generate dense query vector via unified embedding server
+        query_dense = get_dense_vectors([query])[0]
 
-        # Generate sparse query vector via MiniCOIL
+        # Generate sparse query vector via unified embedding server
         sparse_query = get_sparse_vectors([query], is_query=True)[0]
 
         # Dense search (top k*2 for fusion headroom)
@@ -438,7 +390,7 @@ class Retriever:
 
         for col in effective_collections:
             try:
-                if _HAS_MINICOIL and "-named" in col:
+                if "-named" in col:
                     # Hybrid search with RRF fusion
                     raw = self.hybrid_search(query, col, top_k=top_k * 2, filter_by=filter_by, sparse_weight=sparse_weight)
                 elif filter_by:
@@ -448,7 +400,7 @@ class Retriever:
 
                 # hybrid_search() already returns List[ChunkResult], so just use as-is.
                 # For raw dict results (non-hybrid), convert to ChunkResult.
-                if _HAS_MINICOIL and "-named" in col and raw and isinstance(raw[0], ChunkResult):
+                if "-named" in col and raw and isinstance(raw[0], ChunkResult):
                     collection_results[col] = raw
                 else:
                     collection_results[col] = [
@@ -489,7 +441,7 @@ class Retriever:
         # Hybrid results already have RRF scores that are comparable.
         all_results: List[ChunkResult] = []
         for col, results in collection_results.items():
-            if _HAS_MINICOIL and "-named" in col:
+            if "-named" in col:
                 # Hybrid RRF scores are already normalized — use as-is with metadata boost
                 for r in results:
                     boost = self._compute_metadata_boost(r, q_lower)

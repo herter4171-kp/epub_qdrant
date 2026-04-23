@@ -625,7 +625,7 @@ def main():
     logger.info("  Collections:     %s", ", ".join(settings.collections) or "(none)")
     logger.info("  Default:         %s", settings.DEFAULT_COLLECTION)
     logger.info("  Qdrant URL:      %s", settings.QDRANT_URL)
-    logger.info("  Ollama URL:      %s", settings.OLLAMA_URL)
+    logger.info("  Embedding URL:   %s", settings.EMBEDDING_SERVER_URL)
     logger.info("  LiteLLM URL:     %s", settings.LITELLM_API_URL)
     logger.info("  MCP Port:        %d", settings.MCP_PORT)
 

@@ -49,10 +49,9 @@ src/                         # Core library
     chunker.py               # Header-aware paragraph chunking
     paper_loader.py          # PDF text extraction + paper chunking
     README.md
-  embedding/                 # Dense + sparse vector generation
+  embedding/                 # Embedding infrastructure (see servers/embedding_server/)
     __init__.py
-    dense_embedder.py        # Ollama embedding API calls
-    client.py                # MiniCOIL sparse embedding HTTP client
+    minicoil_server.py       # Legacy MiniCOIL server (superseded by unified embedding server)
     README.md
   storage/                   # Qdrant collection lifecycle
     __init__.py
@@ -66,8 +65,14 @@ src/                         # Core library
     main.py                  # epubq CLI entry point
     README.md
 
-servers/                     # Standalone MCP servers
-  retrieval_mcp/             # Knowledge-base MCP server (Streamable HTTP)
+servers/                     # Standalone servers
+  embedding_server/          # Unified embedding server (dense + sparse on one port)
+    __init__.py
+    server.py                # FastAPI app: /embed_dense, /embed_sparse, /health, /models
+    embedder.py              # DenseEmbedder (embeddinggemma-300m) + SparseEmbedder (MiniCOIL)
+    client.py                # Thin HTTP client: get_dense_vectors(), get_sparse_vectors()
+    README.md
+  mcp_server/                # Knowledge-base MCP server (Streamable HTTP)
     __init__.py
     server.py                # FastAPI server + MCP tool router
     retriever.py             # Retrieval layer: search, group, evidence
@@ -98,7 +103,7 @@ docs/                        # Design docs
 ### Hybrid Search
 
 Each point in `-named` collections stores **two vectors**:
-- **dense** (768-d cosine): semantic similarity via Ollama embedding model
+- **dense** (768-d cosine): semantic similarity via embeddinggemma-300m on the unified embedding server
 - **sparse** (IDF-weighted keyword): MiniCOIL sparse vector from [Qdrant/minicoil-v1](https://huggingface.co/Qdrant/minicoil-v1)
 
 Results are fused at query time using **Reciprocal Rank Fusion (RRF)** for fair cross-collection ranking.
@@ -108,9 +113,9 @@ Results are fused at query time using **Reciprocal Rank Fusion (RRF)** for fair 
 | Collection | Vectors | Purpose |
 |-----------|---------|---------|
 | `books` | dense only | Original baseline (read-only reference) |
-| `books-named` | dense + sparse | Hybrid search target |
+| `books-hybrid` | dense + sparse | Hybrid search target |
 | `papers` | dense only | Original baseline (read-only reference) |
-| `papers-named` | dense + sparse | Hybrid search target |
+| `papers-hybrid` | dense + sparse | Hybrid search target |
 
 ### Architecture
 
@@ -118,16 +123,16 @@ Results are fused at query time using **Reciprocal Rank Fusion (RRF)** for fair 
 Mac (dev)                              GPU Box (192.168.68.75)
 ┌─────────────────────────┐           ┌──────────────────────────┐
 │ epubq ingest/books      │  Qdrant   │ Qdrant                   │
-│ epubq search            │──────────▶│  books-named             │
-│ servers/retrieval_mcp/  │           │  papers-named            │
-│   retriever.py          │  Ollama   │  dense vectors           │
-└─────────────────────────┘──────────▶│  :11434                  │
-               │                      └──────────────────────────┘
-               │ MiniCOIL
-               ▼                      ┌──────────────────────────┐
-         src/embedding/client.py      │ MiniCOIL server          │
-               │                      │   :9000                  │
-               │                      └──────────────────────────┘
+│ epubq search            │──────────▶│  books-hybrid            │
+│ servers/mcp_server/     │           │  papers-hybrid           │
+│   retriever.py          │           └──────────────────────────┘
+└─────────────────────────┘
+               │                      ┌──────────────────────────┐
+               │  HTTP                │ Unified Embedding Server │
+               └─────────────────────▶│   :8100                  │
+      servers/embedding_server/       │  embeddinggemma-300m     │
+             client.py                │  MiniCOIL (sparse)       │
+                                      └──────────────────────────┘
 ```
 
 ## Configuration
@@ -139,8 +144,7 @@ Mac (dev)                              GPU Box (192.168.68.75)
 | `QDRANT_URL` | `http://192.168.68.75:6333` | Qdrant server URL |
 | `QDRANT_COLLECTION` | — | Collection name for EPUBs |
 | `QDRANT_PAPERS_COLLECTION` | `papers` | Collection name for PDF papers |
-| `OLLAMA_URL` | `http://192.168.68.75:11434` | Ollama embedding endpoint |
-| `EMBEDDING_MODEL` | `embeddinggemma:300m` | Embedding model name |
+| `EMBEDDING_SERVER_URL` | `http://192.168.68.75:8100` | Unified embedding server URL (dense + sparse) |
 
 ### Optional env vars
 

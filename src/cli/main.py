@@ -1,4 +1,16 @@
-"""CLI entry point for the EPUB-to-Qdrant ingestion pipeline."""
+"""CLI entry point for the ingestion pipeline.
+
+Commands:
+    create-collection  Create a named-vector collection (dense + sparse)
+    ingest-dense       Pass 1: load files → chunk → embed dense → upsert
+    ingest-sparse      Pass 2: scroll collection → embed sparse → upsert same IDs
+    ingest             Convenience: create + dense + sparse in one shot
+    search             Search a collection
+    list-collections   List all Qdrant collections
+    delete-collection  Delete a collection
+    list-books         List books in a collection
+    health             Check embedding server health
+"""
 
 import logging
 import sys
@@ -8,10 +20,6 @@ from typing import List
 import click
 
 from src.config import settings
-from src.ingestion.epub_parser import parse_epub
-from src.ingestion.chunker import chunk_section
-from src.embedding.dense_embedder import Embedder
-from src.storage import Storage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,143 +27,286 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Collections we refuse to mutate
+PROTECTED = {"books", "books-named", "papers", "papers-named"}
 
-def _find_epubs(directory: str) -> List[Path]:
-    """Find all .epub files in a directory (non-recursive)."""
+INDEX_FIELDS = [
+    "doc_type", "source_file", "book_title", "section_title",
+    "publisher", "language", "isbn",
+    "arxiv_id", "category", "title",
+]
+
+DENSE_BATCH = 128
+SPARSE_BATCH = 32
+SCROLL_BATCH = 256
+MAX_SPARSE_WORDS = 512
+
+
+def _guard(collection: str) -> None:
+    if collection in PROTECTED:
+        click.echo(f"Refusing to touch protected collection '{collection}'.", err=True)
+        sys.exit(1)
+
+
+def _find_files(directory: str) -> List[Path]:
+    """Find all ingestible files (.epub, .pdf) in a directory."""
     dirpath = Path(directory)
-    epubs = sorted(dirpath.glob("*.epub"))
-    if not epubs:
-        logger.warning(f"No .epub files found in {dirpath}")
-    return epubs
+    files = sorted(dirpath.glob("*.epub")) + sorted(dirpath.glob("*.pdf"))
+    return files
 
 
-def _process_book(
-    epub_path: str,
-    embedder: Embedder,
-    storage: Storage,
-    collection: str = None,
-) -> int:
-    """Parse, chunk, embed, and upsert a single EPUB file.
-
-    Returns:
-        Number of chunks upserted.
-    """
-    path = Path(epub_path)
-    logger.info(f"Processing: {path.name}")
-
-    # 1. Parse EPUB
-    book = parse_epub(epub_path)
-    logger.info(
-        f"  Title: {book.title} by {book.creator}"
-    )
-    if book.publisher:
-        logger.info(f"  Publisher: {book.publisher}")
-    if book.publication_date:
-        logger.info(f"  Date: {book.publication_date}")
-    if book.language:
-        logger.info(f"  Language: {book.language}")
-    if book.isbn:
-        logger.info(f"  ISBN: {book.isbn}")
-    logger.info(f"  Sections: {len(book.sections)}")
-
-    # 2. Chunk all sections
-    all_chunks: List = []
-    for section in book.sections:
-        chunks = chunk_section(
-            section,
-            chunk_size=settings.CHUNK_SIZE,
-            chunk_overlap=settings.CHUNK_OVERLAP,
-            book_title=book.title,
-            publisher=book.publisher,
-            language=book.language,
-            isbn=book.isbn,
-        )
-        all_chunks.extend(chunks)
-
-    logger.info(f"  Chunks: {len(all_chunks)}")
-
-    if not all_chunks:
-        logger.warning(f"  No chunks generated for {path.name}")
-        return 0
-
-    # 3. Embed
-    logger.info("  Embedding...")
-    all_chunks = embedder.embed_chunks(all_chunks)
-
-    # 4. Upsert to Qdrant
-    count = storage.upsert_file(epub_path, all_chunks, collection_name=collection)
-    logger.info(f"  Done: {count} chunks stored")
-    return count
-
+# ── CLI group ─────────────────────────────────────────────────────────────────
 
 @click.group()
 def cli():
-    """EPUB-to-Qdrant ingestion pipeline."""
+    """EPUB/PDF → Qdrant ingestion pipeline."""
     pass
 
 
+# ── health ────────────────────────────────────────────────────────────────────
+
 @cli.command()
-@click.argument("directory")
-@click.option("--url", help="Qdrant URL (overrides env)", default=None)
-@click.option("--limit", type=int, help="Limit: only process N files", default=None)
-@click.option("--collection", help="Qdrant collection name (overrides env)", default=None)
-def ingest(directory: str, url: str, limit: int, collection: str) -> None:
-    """Ingest all EPUB files from DIRECTORY into Qdrant."""
-    epubs = _find_epubs(directory)
-    if not epubs:
-        click.echo("No EPUB files found. Nothing to do.")
+def health():
+    """Check embedding server health."""
+    from servers.embedding_server.client import health_check
+    ok = health_check()
+    if ok:
+        click.echo("Embedding server: OK (dense + sparse loaded)")
+    else:
+        click.echo("Embedding server: NOT HEALTHY", err=True)
+        sys.exit(1)
+
+
+# ── create-collection ─────────────────────────────────────────────────────────
+
+@cli.command("create-collection")
+@click.argument("collection")
+def create_collection_cmd(collection: str):
+    """Create a named-vector collection with dense + sparse config."""
+    from qdrant_client.models import Distance, Modifier, VectorParams, SparseVectorParams
+    from src.storage import Storage
+
+    _guard(collection)
+    storage = Storage()
+    existing = storage.list_collections()
+
+    if collection in existing:
+        click.echo(f"Collection '{collection}' already exists.")
         return
 
-    if limit:
-        epubs = epubs[:limit]
-        click.echo(f"Limited to {limit} file(s).")
+    storage.client.create_collection(
+        collection_name=collection,
+        vectors_config={"dense": VectorParams(size=768, distance=Distance.COSINE)},
+        sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.IDF)},
+    )
+    for field in INDEX_FIELDS:
+        try:
+            storage.client.create_payload_index(
+                collection_name=collection, field_name=field, field_schema="keyword",
+            )
+        except Exception:
+            pass
+    click.echo(f"Created collection: {collection}")
 
-    click.echo(f"Found {len(epubs)} EPUB file(s). Starting ingest...")
 
-    embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
+# ── ingest-dense (Pass 1) ────────────────────────────────────────────────────
+
+@cli.command("ingest-dense")
+@click.argument("directory")
+@click.option("--collection", required=True, help="Target collection name")
+@click.option("--limit", type=int, default=None, help="Max files to process")
+def ingest_dense_cmd(directory: str, collection: str, limit: int):
+    """Pass 1: load files, chunk, embed dense vectors, upsert."""
+    from qdrant_client.models import PointStruct
+    from servers.embedding_server.client import get_dense_vectors
+    from src.ingestion.loader import DocumentLoader
+    from src.storage import Storage
+
+    _guard(collection)
     storage = Storage()
 
+    if collection not in storage.list_collections():
+        click.echo(f"Collection '{collection}' does not exist. Run create-collection first.", err=True)
+        sys.exit(1)
+
+    files = _find_files(directory)
+    if not files:
+        click.echo(f"No .epub or .pdf files found in {directory}.")
+        return
+    if limit:
+        files = files[:limit]
+
+    click.echo(f"Pass 1 (dense): {len(files)} file(s) → {collection}")
+
+    try:
+        info = storage.client.get_collection(collection)
+        point_offset = info.points_count or 0
+    except Exception:
+        point_offset = 0
+
     total = 0
-    for i, epub in enumerate(epubs, 1):
-        click.echo(f"\n[{i}/{len(epubs)}] {epub.name}")
-        try:
-            count = _process_book(str(epub), embedder, storage, collection)
-            total += count
-        except Exception as e:
-            logger.error(f"Failed to process {epub.name}: {e}")
+    for i, fpath in enumerate(files, 1):
+        loader = DocumentLoader.for_path(fpath)
+        chunks = loader.load(fpath)
+        if not chunks:
+            click.echo(f"  [{i}/{len(files)}] {fpath.name} — 0 chunks, skipping")
             continue
 
-    click.echo(f"\nIngest complete. Total chunks stored: {total}")
+        texts = [c.text for c in chunks]
+        all_vecs: list = []
+        for b in range(0, len(texts), DENSE_BATCH):
+            all_vecs.extend(get_dense_vectors(texts[b:b + DENSE_BATCH]))
 
+        points = []
+        for idx, (chunk, vec) in enumerate(zip(chunks, all_vecs)):
+            points.append(PointStruct(
+                id=point_offset + total + idx,
+                vector={"dense": vec},
+                payload={"text": chunk.text, **chunk.metadata},
+            ))
+
+        storage.client.upsert(collection_name=collection, points=points)
+        total += len(points)
+        click.echo(f"  [{i}/{len(files)}] {fpath.name} — {len(points)} chunks (total: {total})")
+
+    click.echo(f"Pass 1 done: {total} points with dense vectors in '{collection}'")
+
+
+# ── ingest-sparse (Pass 2) ───────────────────────────────────────────────────
+
+@cli.command("ingest-sparse")
+@click.argument("collection")
+def ingest_sparse_cmd(collection: str):
+    """Pass 2: scroll collection, embed sparse vectors, update same point IDs."""
+    from qdrant_client.models import PointVectors, SparseVector
+    from servers.embedding_server.client import get_sparse_vectors
+    from src.storage import Storage
+
+    _guard(collection)
+    storage = Storage()
+
+    if collection not in storage.list_collections():
+        click.echo(f"Collection '{collection}' does not exist.", err=True)
+        sys.exit(1)
+
+    info = storage.client.get_collection(collection)
+    count = info.points_count or 0
+    click.echo(f"Pass 2 (sparse): scrolling {count} points in '{collection}'")
+
+    offset = None
+    total = 0
+
+    while True:
+        points, next_offset = storage.client.scroll(
+            collection_name=collection,
+            limit=SCROLL_BATCH,
+            offset=offset,
+            with_vectors=False,
+            with_payload=["text"],
+        )
+        if not points:
+            break
+
+        upsert_points = []
+        for p in points:
+            text = (p.payload.get("text") or "").strip()
+            if not text:
+                continue
+
+            # Chunk for sparse
+            words = text.split()
+            windows = [
+                " ".join(words[j:j + MAX_SPARSE_WORDS])
+                for j in range(0, max(len(words), 1), MAX_SPARSE_WORDS)
+            ] if words else []
+
+            all_sparse = []
+            for b in range(0, len(windows), SPARSE_BATCH):
+                all_sparse.extend(get_sparse_vectors(windows[b:b + SPARSE_BATCH], is_query=False))
+
+            # Max-pool aggregation
+            agg: dict = {}
+            for v in all_sparse:
+                for idx, val in zip(v["indices"], v["values"]):
+                    if idx not in agg or val > agg[idx]:
+                        agg[idx] = val
+
+            upsert_points.append(PointVectors(
+                id=p.id,
+                vector={"sparse": SparseVector(indices=list(agg.keys()), values=list(agg.values()))},
+            ))
+
+        if upsert_points:
+            storage.client.update_vectors(collection_name=collection, points=upsert_points)
+            total += len(upsert_points)
+            click.echo(f"  [sparse] {total} / {count}")
+
+        if next_offset is None:
+            break
+        offset = next_offset
+
+    click.echo(f"Pass 2 done: {total} points with sparse vectors in '{collection}'")
+
+
+# ── ingest (convenience: create + dense + sparse) ────────────────────────────
+
+@cli.command()
+@click.argument("directory")
+@click.option("--collection", required=True, help="Target collection name")
+@click.option("--limit", type=int, default=None, help="Max files to process")
+def ingest(directory: str, collection: str, limit: int):
+    """Full ingest: create collection + dense pass + sparse pass."""
+    from click.testing import CliRunner
+    runner = CliRunner()
+
+    # Create
+    result = runner.invoke(cli, ["create-collection", collection])
+    click.echo(result.output, nl=False)
+    if result.exit_code != 0:
+        sys.exit(result.exit_code)
+
+    # Dense
+    args = ["ingest-dense", directory, "--collection", collection]
+    if limit:
+        args += ["--limit", str(limit)]
+    result = runner.invoke(cli, args)
+    click.echo(result.output, nl=False)
+    if result.exit_code != 0:
+        sys.exit(result.exit_code)
+
+    # Sparse
+    result = runner.invoke(cli, ["ingest-sparse", collection])
+    click.echo(result.output, nl=False)
+    if result.exit_code != 0:
+        sys.exit(result.exit_code)
+
+
+# ── search ────────────────────────────────────────────────────────────────────
 
 @cli.command()
 @click.argument("query")
-@click.option("--collection", help="Qdrant collection name (overrides env)", default=None)
-@click.option("--top-k", type=int, default=10, help="Number of results to return")
-def search(query: str, collection: str, top_k: int) -> None:
-    """Search a Qdrant collection for relevant passages."""
+@click.option("--collection", help="Collection name", default=None)
+@click.option("--top-k", type=int, default=10, help="Number of results")
+def search(query: str, collection: str, top_k: int):
+    """Search a collection for relevant passages."""
+    from src.storage import Storage
     name = collection or settings.QDRANT_COLLECTION
     storage = Storage()
     results = storage.search(name, query, top_k=top_k)
 
     if not results:
-        click.echo(f"No results found in collection '{name}'.")
+        click.echo(f"No results in '{name}'.")
         return
 
-    display_name = collection or settings.QDRANT_COLLECTION
-    click.echo(f"\nResults for '{query}' in '{display_name}':\n")
+    click.echo(f"\nResults for '{query}' in '{name}':\n")
     for i, r in enumerate(results, 1):
         click.echo(f"--- {i}. Score: {r['score']:.4f} ---")
-        click.echo(f"  Book: {r['book_title']}")
-        click.echo(f"  Section: {r['section_title']}")
-        click.echo(f"  Chunk: {r['chunk_index']}")
-        if r.get('publisher'):
-            click.echo(f"  Publisher: {r['publisher']}")
-        if r.get('language'):
-            click.echo(f"  Language: {r['language']}")
-        if r.get('isbn'):
-            click.echo(f"  ISBN: {r['isbn']}")
-        # Show first 200 chars of text
+        title = r.get('book_title') or r.get('title') or ''
+        if title:
+            click.echo(f"  Title: {title}")
+        section = r.get('section_title') or ''
+        if section:
+            click.echo(f"  Section: {section}")
         text_preview = r['text'][:200].replace('\n', ' ')
         if len(r['text']) > 200:
             text_preview += "..."
@@ -163,55 +314,55 @@ def search(query: str, collection: str, top_k: int) -> None:
         click.echo()
 
 
-@cli.command(name="list-collections")
-def list_collections_command() -> None:
+# ── list-collections ──────────────────────────────────────────────────────────
+
+@cli.command("list-collections")
+def list_collections_cmd():
     """List all Qdrant collections."""
+    from src.storage import Storage
     storage = Storage()
-    collections = storage.list_collections()
-    if not collections:
-        click.echo("No collections found.")
-        return
-    for c in collections:
+    for c in storage.list_collections():
         click.echo(c)
 
 
-@cli.command()
+# ── delete-collection ─────────────────────────────────────────────────────────
+
+@cli.command("delete-collection")
 @click.argument("collection")
-def delete_collection_command(collection: str) -> None:
+def delete_collection_cmd(collection: str):
     """Delete a Qdrant collection."""
+    _guard(collection)
+    from src.storage import Storage
     storage = Storage()
     storage.delete_collection(collection)
-    click.echo(f"Deleted collection: {collection}")
+    click.echo(f"Deleted: {collection}")
 
 
-@cli.command(name="list-books")
-@click.option("--collection", help="Qdrant collection name (overrides env)", default=None)
-def list_books_command(collection: str) -> None:
-    """List all available books in the knowledge base."""
+# ── list-books ────────────────────────────────────────────────────────────────
+
+@cli.command("list-books")
+@click.option("--collection", default=None)
+def list_books_cmd(collection: str):
+    """List books in a collection."""
+    from src.storage import Storage
     storage = Storage()
     books = storage.list_books(collection_name=collection)
-
     if not books:
-        click.echo("No books found in the knowledge base.")
+        click.echo("No books found.")
         return
 
     name = collection or settings.QDRANT_COLLECTION
-    click.echo(f"\nBooks in collection: {name}")
-    click.echo(f"{'Title':<45} {'Publisher':<12} {'Lang':<5} {'ISBN':<25} {'Chunks':>6}")
-    click.echo("─" * 96)
-
+    click.echo(f"\nBooks in '{name}':")
+    click.echo(f"{'Title':<45} {'Publisher':<12} {'Chunks':>6}")
+    click.echo("─" * 65)
     for b in books:
-        title = (b.get("book_title", "") or b.get("source_file", ""))[:44]
-        title = title.replace('\n', ' ')
-        publisher = (b.get("publisher", "") or "")[:11]
-        language = b.get("language", "") or ""
-        isbn = (b.get("isbn", "") or "")[:24]
+        title = (b.get("book_title") or b.get("source_file", ""))[:44].replace('\n', ' ')
+        publisher = (b.get("publisher") or "")[:11]
         chunks = b.get("chunk_count", 0)
-        click.echo(f"{title:<45} {publisher:<12} {language:<5} {isbn:<25} {chunks:>6}")
-
-    total_chunks = sum(b.get("chunk_count", 0) for b in books)
-    click.echo("─" * 96)
-    click.echo(f"Total: {len(books)} book(s), {total_chunks} chunks")
+        click.echo(f"{title:<45} {publisher:<12} {chunks:>6}")
+    total = sum(b.get("chunk_count", 0) for b in books)
+    click.echo("─" * 65)
+    click.echo(f"Total: {len(books)} book(s), {total} chunks")
 
 
 if __name__ == "__main__":

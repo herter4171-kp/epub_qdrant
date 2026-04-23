@@ -10,88 +10,65 @@ Usage:
 
 import logging
 import os
+import time
 from typing import Dict, List
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
 EMBEDDING_SERVER_URL = os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8100")
 
-# Default timeout in seconds for embedding requests (models can be slow on large batches)
-_TIMEOUT = 300
+# Per-request timeout: (connect, read).  Connect should be fast on LAN;
+# read can be slow when the GPU is saturated.
+_TIMEOUT = (10, 300)
+
+# Retry forever with backoff — the server is alive but busy.
+_RETRY = Retry(
+    total=None,            # no cap on total retries
+    connect=None,          # no cap on connect retries
+    read=None,             # no cap on read retries
+    backoff_factor=2,      # 2s, 4s, 8s, 16s, … between retries
+    backoff_max=60,        # cap backoff at 60s
+    status_forcelist=[502, 503, 504],
+    allowed_methods=["POST", "GET"],
+)
+
+def _session() -> requests.Session:
+    """Build a requests Session with unlimited retries."""
+    s = requests.Session()
+    adapter = HTTPAdapter(max_retries=_RETRY)
+    s.mount("http://", adapter)
+    s.mount("https://", adapter)
+    return s
+
+_sess = _session()
 
 
 def get_dense_vectors(texts: List[str], batch_size: int = 128) -> List[List[float]]:
-    """Embed texts into 768-d dense vectors via the unified embedding server.
-
-    Args:
-        texts: List of strings to embed.
-        batch_size: Sub-batch size for GPU processing on the server side.
-
-    Returns:
-        List of 768-dimensional float vectors, one per input text.
-
-    Raises:
-        requests.ConnectionError: If the embedding server is unreachable.
-        requests.Timeout: If the request exceeds the timeout.
-        requests.HTTPError: If the server returns a non-2xx status.
-    """
+    """Embed texts into 768-d dense vectors via the unified embedding server."""
     url = f"{EMBEDDING_SERVER_URL}/embed_dense"
-    try:
-        resp = requests.post(
-            url,
-            json={"texts": texts, "batch_size": batch_size},
-            timeout=_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp.json()["vectors"]
-    except requests.ConnectionError:
-        raise requests.ConnectionError(
-            f"Cannot connect to embedding server at {EMBEDDING_SERVER_URL}. "
-            "Is the server running?"
-        )
-    except requests.Timeout:
-        raise requests.Timeout(
-            f"Embedding server at {EMBEDDING_SERVER_URL} timed out after {_TIMEOUT}s "
-            f"while embedding {len(texts)} texts."
-        )
+    resp = _sess.post(
+        url,
+        json={"texts": texts, "batch_size": batch_size},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["vectors"]
 
 
 def get_sparse_vectors(texts: List[str], is_query: bool = False) -> List[Dict]:
-    """Embed texts into sparse vectors via the unified embedding server.
-
-    Args:
-        texts: List of strings to embed.
-        is_query: True for query-mode embeddings, False for document-mode.
-
-    Returns:
-        List of dicts with 'indices' (List[int]) and 'values' (List[float]) keys.
-
-    Raises:
-        requests.ConnectionError: If the embedding server is unreachable.
-        requests.Timeout: If the request exceeds the timeout.
-        requests.HTTPError: If the server returns a non-2xx status.
-    """
+    """Embed texts into sparse vectors via the unified embedding server."""
     url = f"{EMBEDDING_SERVER_URL}/embed_sparse"
-    try:
-        resp = requests.post(
-            url,
-            json={"texts": texts, "is_query": is_query},
-            timeout=_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp.json()["vectors"]
-    except requests.ConnectionError:
-        raise requests.ConnectionError(
-            f"Cannot connect to embedding server at {EMBEDDING_SERVER_URL}. "
-            "Is the server running?"
-        )
-    except requests.Timeout:
-        raise requests.Timeout(
-            f"Embedding server at {EMBEDDING_SERVER_URL} timed out after {_TIMEOUT}s "
-            f"while embedding {len(texts)} texts."
-        )
+    resp = _sess.post(
+        url,
+        json={"texts": texts, "is_query": is_query},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["vectors"]
 
 
 def health_check() -> bool:
