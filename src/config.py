@@ -42,8 +42,8 @@ class Settings:
     def has_collections(self) -> bool:
         return len(self.collections) > 0
 
-    OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://192.168.68.75:11434")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "embeddinggemma:300m")
+    # Unified embedding server
+    EMBEDDING_SERVER_URL: str = os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8100")
 
     # Chunking
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))

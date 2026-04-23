@@ -10,8 +10,8 @@
 
 | Method | Collections | Vectors | Fusion |
 |--------|------------|---------|--------|
-| **Dense** | `books`, `papers` | Semantic (embeddinggemma) | z-score normalization + metadata boost |
-| **Hybrid** | `books-named`, `papers-named` | Semantic (dense) + keyword (sparse MiniCOIL) | Reciprocal Rank Fusion (RRF, k=60) |
+| **Dense** | `books`, `papers` | Semantic (embeddinggemma-300m via unified embedding server) | z-score normalization + metadata boost |
+| **Hybrid** | `books-named`, `papers-named` | Semantic (dense) + keyword (sparse MiniCOIL via unified embedding server) | Reciprocal Rank Fusion (RRF, k=60) |
 
 ### 1.2 Why Stratify by Query Type?
 
@@ -208,4 +208,4 @@ Create `scripts/evaluate_hybrid_vs_dense.py` — a focused evaluation that:
 - **Single LLM instance** — one `LLMClient` reused across all judge calls
 - **No concurrent retriever calls** — each query runs one at a time
 - **No re-embedding** — uses existing `-named` collections on Qdrant
-- **MiniCOIL server already running** on GPU box (192.168.68.75:9000)
+- **Unified embedding server** running on GPU box (EMBEDDING_SERVER_URL) serves both dense and sparse embeddings

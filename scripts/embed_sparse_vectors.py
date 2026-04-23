@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Phase 2: Scroll existing Qdrant collections, compute MiniCOIL sparse vectors,
-upsert into new named-vector collections (books-named, papers-named).
+"""Two-pass hybrid migration: scroll original Qdrant collections, embed dense
+and sparse vectors via the unified embedding server, and upsert into new
+-hybrid collections (books-hybrid, papers-hybrid).
+
+Pass 1 (dense): scroll original collection → embed text via /embed_dense →
+    upsert into -hybrid collection with dense named vector + original payload.
+Pass 2 (sparse): scroll the -hybrid collection itself → embed text via
+    /embed_sparse (with 512-word chunking + max-aggregation) → upsert same
+    point IDs with sparse named vector (Qdrant merges automatically).
+
+Both passes are idempotent — they check point counts before running.
 
 Run from Mac:
     python3 scripts/embed_sparse_vectors.py
 
 Connects to:
-    Qdrant on GPU box: 192.168.68.75:6333
-    MiniCOIL server:    192.168.68.75:9000
-
-Long documents are chunked into MAX_WORDS_PER_CHUNK word windows and their
-sparse vectors are aggregated by taking the max value per token index across
-all chunks. This preserves full document coverage without blowing up the
-ONNX attention matrix.
+    Qdrant on GPU box:       192.168.68.75:6333
+    Embedding server:        EMBEDDING_SERVER_URL (default http://localhost:8100)
 """
 
 import logging
@@ -20,14 +24,10 @@ import sys
 from pathlib import Path
 from typing import List, Dict
 
-# Ensure the project root and MCP server paths are on sys.path
+# Ensure the project root is on sys.path
 _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
-
-_mcp_server_dir = _project_root / "servers" / "retrieval_mcp"
-if str(_mcp_server_dir) not in sys.path:
-    sys.path.insert(0, str(_mcp_server_dir))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,7 +45,7 @@ from qdrant_client.models import (
     Modifier,
 )
 
-from src.embedding.client import get_sparse_vectors
+from servers.embedding_server.client import get_dense_vectors, get_sparse_vectors, health_check
 
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -54,12 +54,12 @@ QDRANT_HOST = "192.168.68.75"
 QDRANT_PORT = 6333
 
 BATCH_SIZE = 128          # Points fetched per Qdrant scroll
-MINICOIL_BATCH = 32       # Chunks sent per MiniCOIL request — fixed size, no OOM
+MINICOIL_BATCH = 32       # Chunks sent per sparse embedding request
 MAX_WORDS_PER_CHUNK = 512 # Words per chunk — caps attention matrix size
 
 COLLECTION_MAP = {
-    "books": "books-named",
-    "papers": "papers-named",
+    "books": "books-hybrid",
+    "papers": "papers-hybrid",
 }
 
 
@@ -112,7 +112,7 @@ def embed_document(text: str) -> Dict:
 # ── Collection management ─────────────────────────────────────────────────────
 
 def create_target_collections(client: QdrantClient) -> None:
-    """Create books-named and papers-named with named vector configs."""
+    """Create books-hybrid and papers-hybrid with named vector configs."""
     existing = [c.name for c in client.get_collections().collections]
 
     for src, dst in COLLECTION_MAP.items():
@@ -147,33 +147,93 @@ def create_target_collections(client: QdrantClient) -> None:
                 logger.warning(f"Failed to index field '{field}' in '{dst}': {e}")
 
 
-# ── Scroll + embed + upsert ───────────────────────────────────────────────────
+# ── Two-pass scroll + embed + upsert ─────────────────────────────────────────
 
 def scroll_and_embed(
     client: QdrantClient,
     src_collection: str,
     dst_collection: str,
 ) -> int:
-    """Scroll src_collection, embed via MiniCOIL, upsert into dst_collection.
+    """Two-pass migration: dense first, then sparse into the same -hybrid collection.
 
-    Idempotent: skips if dst already has the same point count as src.
-    Long documents are chunked and their sparse vectors aggregated.
+    Pass 1 (dense): scroll the ORIGINAL collection (read-only), extract text,
+        embed via get_dense_vectors, upsert into -hybrid with dense vector + payload.
+    Pass 2 (sparse): scroll the -hybrid collection we just populated, extract text,
+        embed via embed_document (chunked sparse), upsert same point IDs with
+        sparse vector only (Qdrant merges automatically).
+
+    Both passes are idempotent — skip if target point count already matches source.
     """
     src_info = client.get_collection(src_collection)
     dst_info = client.get_collection(dst_collection)
     src_count = src_info.points_count if hasattr(src_info, "points_count") else 0
     dst_count = dst_info.points_count if hasattr(dst_info, "points_count") else 0
 
+    # ── Pass 1: Dense ────────────────────────────────────────────────────
     if src_count > 0 and dst_count == src_count:
         logger.info(
-            f"Skipping {src_collection} → {dst_collection}: "
-            f"already fully embedded ({dst_count}/{src_count} points)"
+            f"Pass 1 (dense) skipped for {src_collection} → {dst_collection}: "
+            f"already fully populated ({dst_count}/{src_count} points)"
         )
-        return dst_count
+    else:
+        logger.info(
+            f"\nPass 1 (dense): {src_collection} → {dst_collection} "
+            f"({src_count} source, {dst_count} already in target)"
+        )
+
+        offset = None
+        total = 0
+        skipped = 0
+
+        while True:
+            points, next_offset = client.scroll(
+                collection_name=src_collection,
+                limit=BATCH_SIZE,
+                offset=offset,
+                with_vectors=False,
+                with_payload=True,
+            )
+            if not points:
+                break
+
+            valid = [p for p in points if p.payload.get("text", "").strip()]
+            skipped += len(points) - len(valid)
+
+            if valid:
+                texts = [p.payload["text"] for p in valid]
+                dense_vecs = get_dense_vectors(texts)
+
+                upsert_points = []
+                for p, dvec in zip(valid, dense_vecs):
+                    upsert_points.append(
+                        PointStruct(
+                            id=p.id,
+                            vector={"dense": dvec},
+                            payload=p.payload,
+                        )
+                    )
+
+                client.upsert(collection_name=dst_collection, points=upsert_points)
+                total += len(upsert_points)
+                print(f"  [dense] Upserted {total} points into {dst_collection}...", end="\r")
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        logger.info(
+            f"\n  Pass 1 done: {total} points with dense vectors in {dst_collection} "
+            f"({skipped} skipped for empty text)"
+        )
+
+    # ── Pass 2: Sparse ───────────────────────────────────────────────────
+    # Refresh counts after Pass 1
+    dst_info = client.get_collection(dst_collection)
+    dst_count = dst_info.points_count if hasattr(dst_info, "points_count") else 0
 
     logger.info(
-        f"\nProcessing {src_collection} → {dst_collection} "
-        f"({src_count} source, {dst_count} already in target)"
+        f"\nPass 2 (sparse): scrolling {dst_collection} "
+        f"({dst_count} points to embed sparse)"
     )
 
     offset = None
@@ -182,10 +242,10 @@ def scroll_and_embed(
 
     while True:
         points, next_offset = client.scroll(
-            collection_name=src_collection,
+            collection_name=dst_collection,
             limit=BATCH_SIZE,
             offset=offset,
-            with_vectors=True,
+            with_vectors=False,
             with_payload=True,
         )
         if not points:
@@ -203,39 +263,38 @@ def scroll_and_embed(
                     PointStruct(
                         id=p.id,
                         vector={
-                            "dense": p.vector,  # raw list[float] from unnamed collection
                             "sparse": SparseVector(
                                 indices=sv["indices"],
                                 values=sv["values"],
                             ),
                         },
-                        payload=p.payload,
+                        payload={},  # no payload update — already set in Pass 1
                     )
                 )
 
             client.upsert(collection_name=dst_collection, points=upsert_points)
             total += len(upsert_points)
-            print(f"  Upserted {total} points into {dst_collection}...", end="\r")
+            print(f"  [sparse] Upserted {total} points into {dst_collection}...", end="\r")
 
         if next_offset is None:
             break
         offset = next_offset
 
     logger.info(
-        f"\n  Done: {total} points migrated to {dst_collection} "
+        f"\n  Pass 2 done: {total} points with sparse vectors in {dst_collection} "
         f"({skipped} skipped for empty text)"
     )
-    return total
+
+    return dst_count
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    from src.embedding.client import health_check
     if not health_check():
-        logger.error("MiniCOIL server is not reachable. Aborting.")
+        logger.error("Embedding server is not reachable. Aborting.")
         sys.exit(1)
-    logger.info("MiniCOIL server health check passed.")
+    logger.info("Embedding server health check passed.")
 
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
     logger.info(f"Connected to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}")
@@ -253,7 +312,7 @@ def main():
         count = scroll_and_embed(client, src, dst)
         grand_total += count
 
-    logger.info(f"\nPhase 2 complete. Total points embedded: {grand_total}")
+    logger.info(f"\nTwo-pass hybrid migration complete. Total points: {grand_total}")
 
 
 if __name__ == "__main__":

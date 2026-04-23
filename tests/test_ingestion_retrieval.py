@@ -41,6 +41,10 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# Load .env before importing modules that read env vars at import time
+from dotenv import load_dotenv
+load_dotenv(_PROJECT_ROOT / ".env")
+
 _TEST_BOOKS = _PROJECT_ROOT / "test_books"
 _DOWNLOADS = _PROJECT_ROOT / "downloads"
 
@@ -50,8 +54,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 QDRANT_HOST = os.getenv("QDRANT_HOST", "192.168.68.75")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_URL = f"http://{QDRANT_HOST}:{QDRANT_PORT}"
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.68.75:11434")
-MINICOIL_URL = "http://192.168.68.75:9000"
 MCP_HOST = os.getenv("MCP_HOST", "localhost")
 MCP_PORT = int(os.getenv("MCP_PORT", "8090"))
 MCP_URL = f"http://{MCP_HOST}:{MCP_PORT}/mcp"
@@ -69,6 +71,7 @@ SPARSE_WEIGHT_DEFAULT = 0.25
 from src.ingestion.epub_parser import parse_epub
 from src.ingestion.chunker import chunk_section
 from src.ingestion.paper_loader import chunk_paper
+from servers.embedding_server.client import get_dense_vectors, get_sparse_vectors, health_check
 
 
 # ===================================================================
@@ -93,24 +96,20 @@ def _first_paper() -> tuple:
     return None, None
 
 
-def _check_minicoil_health() -> bool:
+def _check_embedding_server_health() -> bool:
     try:
-        r = requests.get(f"{MINICOIL_URL}/health", timeout=10)
-        r.raise_for_status()
-        return r.json().get("ready") is True
+        return health_check()
     except Exception as e:
-        logger.warning(f"MiniCOIL health check failed: {e}")
+        logger.warning(f"Embedding server health check failed: {e}")
         return False
 
 
-def _check_ollama_health() -> bool:
-    try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
-        r.raise_for_status()
-        return True
-    except Exception as e:
-        logger.warning(f"Ollama health check failed: {e}")
-        return False
+def _dense_embed(texts: List[str]) -> List[List[float]]:
+    return get_dense_vectors(texts)
+
+
+def _sparse_embed(texts: List[str], is_query: bool = False) -> List[Dict]:
+    return get_sparse_vectors(texts, is_query=is_query)
 
 
 def _delete_collection(client: QdrantClient, name: str) -> None:
@@ -135,17 +134,11 @@ def _create_named_coll(client: QdrantClient, name: str) -> None:
 
 
 def _dense_embed(texts: List[str]) -> List[List[float]]:
-    r = requests.post(f"{OLLAMA_URL}/api/embed",
-                      json={"model": "embeddinggemma:300m", "input": texts}, timeout=120)
-    r.raise_for_status()
-    return r.json()["embeddings"]
+    return get_dense_vectors(texts)
 
 
 def _sparse_embed(texts: List[str], is_query: bool = False) -> List[Dict]:
-    r = requests.post(f"{MINICOIL_URL}/embed",
-                      json={"texts": texts, "is_query": is_query}, timeout=300)
-    r.raise_for_status()
-    return r.json()["vectors"]
+    return get_sparse_vectors(texts, is_query=is_query)
 
 
 def _mcp_query(mcp_url: str, name: str, args: dict, timeout: int = 60) -> dict:
@@ -216,7 +209,7 @@ class TestBookIngestion(unittest.TestCase):
             self.assertEqual(len(v), DENSE_SIZE)
 
     def test_04_sparse_embeds(self):
-        self.assertTrue(_check_minicoil_health(), "MiniCOIL must be reachable")
+        self.assertTrue(_check_embedding_server_health(), "Embedding server must be reachable")
         texts = [c.text for c in self.chunks[:10]]
         vecs = _sparse_embed(texts, is_query=False)
         self.assertEqual(len(vecs), len(texts))
@@ -307,7 +300,7 @@ class TestPaperIngestion(unittest.TestCase):
         self.assertEqual(len(vecs), len(texts))
 
     def test_04_sparse(self):
-        self.assertTrue(_check_minicoil_health(), "MiniCOIL must be reachable")
+        self.assertTrue(_check_embedding_server_health(), "Embedding server must be reachable")
         texts = [c.text for c in self.chunks[:10]]
         vecs = _sparse_embed(texts, is_query=False)
         self.assertEqual(len(vecs), len(texts))
@@ -357,46 +350,36 @@ class TestCurlRetrieval(unittest.TestCase):
         return _dense_embed([q])[0]
 
     def test_01_books_vector(self):
-        from src.embedding.dense_embedder import Embedder
-        e = Embedder(OLLAMA_URL, "embeddinggemma:300m")
-        v = e.embed_single("agentic AI enterprise")
+        v = _dense_embed(["agentic AI enterprise"])[0]
         res = self.client.query_points(COLL_BOOKS, query=v, using="dense", limit=5)
         self.assertGreater(len(res.points), 0)
         self.assertIn("book_title", res.points[0].payload)
 
     def test_02_papers_vector(self):
-        from src.embedding.dense_embedder import Embedder
-        e = Embedder(OLLAMA_URL, "embeddinggemma:300m")
-        v = e.embed_single("ALFWorld embodied agents")
+        v = _dense_embed(["ALFWorld embodied agents"])[0]
         res = self.client.query_points(COLL_PAPERS, query=v, using="dense", limit=5)
         self.assertGreater(len(res.points), 0)
         self.assertIn("arxiv_id", res.points[0].payload)
 
     def test_03_books_hybrid(self):
-        self.assertTrue(_check_minicoil_health())
-        from src.embedding.dense_embedder import Embedder
-        e = Embedder(OLLAMA_URL, "embeddinggemma:300m")
-        d = e.embed_single("agentic AI")
+        self.assertTrue(_check_embedding_server_health())
+        d = _dense_embed(["agentic AI"])[0]
         s = _sparse_embed(["agentic AI"], is_query=True)[0]
         dr = self.client.query_points(COLL_BOOKS, query=d, using="dense", limit=5)
         sr = self.client.query_points(COLL_BOOKS, query=SparseVector(indices=s["indices"], values=s["values"]), using="sparse", limit=5)
         self.assertGreater(len(dr.points) + len(sr.points), 0)
 
     def test_04_papers_hybrid(self):
-        self.assertTrue(_check_minicoil_health())
-        from src.embedding.dense_embedder import Embedder
-        e = Embedder(OLLAMA_URL, "embeddinggemma:300m")
-        d = e.embed_single("ALFWorld")
+        self.assertTrue(_check_embedding_server_health())
+        d = _dense_embed(["ALFWorld"])[0]
         s = _sparse_embed(["ALFWorld"], is_query=True)[0]
         dr = self.client.query_points(COLL_PAPERS, query=d, using="dense", limit=5)
         sr = self.client.query_points(COLL_PAPERS, query=SparseVector(indices=s["indices"], values=s["values"]), using="sparse", limit=5)
         self.assertGreater(len(dr.points) + len(sr.points), 0)
 
     def test_05_rrf_fusion(self):
-        self.assertTrue(_check_minicoil_health())
-        from src.embedding.dense_embedder import Embedder
-        e = Embedder(OLLAMA_URL, "embeddinggemma:300m")
-        d = e.embed_single("agentic")
+        self.assertTrue(_check_embedding_server_health())
+        d = _dense_embed(["agentic"])[0]
         s = _sparse_embed(["agentic"], is_query=True)[0]
         dh = self.client.query_points(COLL_BOOKS, query=d, using="dense", limit=10)
         sh = self.client.query_points(COLL_BOOKS, query=SparseVector(indices=s["indices"], values=s["values"]), using="sparse", limit=10)
@@ -423,7 +406,9 @@ class TestMCPRetrieval(unittest.TestCase):
 
     def test_01_health(self):
         try:
-            r = requests.get(f"{self.mcp_url}/health", timeout=5)
+            # Health endpoint is at /health, not /mcp/health
+            base_url = self.mcp_url.rsplit("/mcp", 1)[0]
+            r = requests.get(f"{base_url}/health", timeout=5)
             self.assertEqual(r.status_code, 200)
         except requests.ConnectionError:
             self.skipTest(f"MCP server not reachable at {self.mcp_url}")

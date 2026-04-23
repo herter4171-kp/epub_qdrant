@@ -32,14 +32,9 @@ _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Add the MCP server directory so mcp_server package resolves
-_mcp_server_dir = _project_root / "mcp_servers" / "retrieval"
-if str(_mcp_server_dir) not in sys.path:
-    sys.path.insert(0, str(_mcp_server_dir))
-
-from mcp_server.retriever import Retriever, ChunkResult
-from mcp_server.config import settings
-from mcp_server.llm_client import LLMClient
+from servers.mcp_server.retriever import Retriever, ChunkResult
+from servers.mcp_server.config import settings
+from servers.mcp_server.llm_client import LLMClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("evaluate")

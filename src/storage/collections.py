@@ -17,7 +17,7 @@ from qdrant_client.models import (
 )
 
 from src.config import settings
-from src.embedding.dense_embedder import Embedder
+from servers.embedding_server.client import get_dense_vectors
 from src.ingestion.chunker import Chunk
 from src.storage.config import settings as storage_settings
 
@@ -187,8 +187,7 @@ class Storage:
 
         Handles both unnamed-vector collections and named-vector collections.
         """
-        embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
-        query_vector = embedder.embed_single(query_text)
+        query_vector = get_dense_vectors([query_text])[0]
 
         vector_name = self._get_vector_name(collection_name)
         kwargs: dict = {
@@ -234,8 +233,7 @@ class Storage:
                            top_k: int = 10,
                            filter_by: Optional[Dict[str, str]] = None) -> List[dict]:
         """Search a collection with optional metadata pre-filtering."""
-        embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
-        query_vector = embedder.embed_single(query_text)
+        query_vector = get_dense_vectors([query_text])[0]
 
         query_filter = None
         if filter_by:

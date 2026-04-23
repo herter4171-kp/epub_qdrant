@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[project]
+name = "embedding-server"
+version = "0.1.0"
+description = "Unified dense + sparse embedding server (Snowflake Arctic Embed M v2.0 + MiniCOIL)"
+requires-python = ">=3.11"
+dependencies = [
+    "sentence-transformers>=3.0.0",
+    "fastembed-gpu>=0.4.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "xformers>=0.0.31",
+]
+
+# NOTE: torch, xformers, and torchvision MUST be installed from the PyTorch
+# cu128 index to get CUDA 12.8 builds. Do NOT install from PyPI (defaults to
+# CUDA 13.x). Run this BEFORE pip install -e .:
+#
+#   pip install torch==2.7.1 torchvision==0.22.1 xformers==0.0.31 \
+#       --index-url https://download.pytorch.org/whl/cu128
+#
+# torch is intentionally omitted from [project.dependencies] to prevent pip
+# from pulling the wrong CUDA variant from PyPI.
+
+[project.scripts]
+embedding-server = "servers.embedding_server.server:main"

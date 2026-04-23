@@ -1,42 +1,38 @@
 # src/embedding — Embedding Infrastructure
 
-All embedding logic for dense (semantic) and sparse (keyword) vectors.
+Embedding logic has been consolidated into the **unified embedding server** at `servers/embedding_server/`.
 
-## Components
+## Current Architecture
 
-| File | Purpose |
-|------|---------|
-| `dense_embedder.py` | Dense embedding via Ollama API (placeholder for sentence_transformers migration) |
-| `minicoil_server.py` | MiniCOIL sparse embedding HTTP server — runs on GPU box, served via `uvicorn` |
-| `client.py` | HTTP client for calling MiniCOIL server to get sparse vectors |
+All dense and sparse embedding is handled by a single FastAPI server running on the GPU box:
 
-## MiniCOIL Server (GPU Box)
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Embedding Server | `servers/embedding_server/server.py` | FastAPI app: `/embed_dense`, `/embed_sparse`, `/health`, `/models` |
+| Embedding Client | `servers/embedding_server/client.py` | Thin HTTP client: `get_dense_vectors()`, `get_sparse_vectors()`, `health_check()` |
+| Dense Model | embeddinggemma-300m (GPU) | 768-d dense vectors |
+| Sparse Model | Qdrant/minicoil-v1 via fastembed-gpu | `{indices, values}` sparse vectors |
 
-The MiniCOIL server is NOT an MCP server — it's an embedding service that runs on the GPU machine.
+The client reads `EMBEDDING_SERVER_URL` from the environment (default `http://localhost:8100`).
 
-### Launch on remote GPU box (192.168.68.75):
+## Legacy Files
 
-```bash
-pip install fastembed-gpu fastapi uvicorn
-uvicorn src.embedding.minicoil_server:app --host 0.0.0.0 --port 9000
-```
-
-The model (`Qdrant/minicoil-v1`, ~15MB) downloads automatically on first startup.
-
-### Health check:
-```bash
-curl http://192.168.68.75:9000/health
-# → {"status":"ok","ready":true}
-```
+| File | Status |
+|------|--------|
+| `minicoil_server.py` | Superseded by the unified embedding server's `/embed_sparse` endpoint |
 
 ## Usage
 
 ```python
 # Dense embedding
-from src.embedding.dense_embedder import Embedder
-embedder = Embedder(ollama_url, model_name)
-vec = embedder.embed_single("hello world")
+from servers.embedding_server.client import get_dense_vectors
+vecs = get_dense_vectors(["hello world"])  # List[List[float]], 768-d
 
-# Sparse embedding (via HTTP to GPU box)
-from src.embedding.client import get_sparse_vectors
-sparse = get_sparse_vectors(["hello world"], is_query=False)
+# Sparse embedding
+from servers.embedding_server.client import get_sparse_vectors
+sparse = get_sparse_vectors(["hello world"], is_query=False)  # List[Dict]
+
+# Health check
+from servers.embedding_server.client import health_check
+ok = health_check()  # True if both models loaded
+```

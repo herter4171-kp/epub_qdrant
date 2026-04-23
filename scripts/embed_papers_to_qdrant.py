@@ -2,7 +2,7 @@
 """Embed PDF papers from ./downloads into a Qdrant collection called 'papers'.
 
 Scans ./downloads/ for .pdf files, reads matching .json metadata,
-extracts text via pypdf, chunks, embeds via Ollama, and upserts
+extracts text via pypdf, chunks, embeds via the unified embedding server, and upserts
 into a new Qdrant collection named by QDRANT_PAPERS_COLLECTION (default: 'papers').
 
 Limits processing to the first PDF in alphanumeric order by default.
@@ -28,7 +28,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.config import settings
-from src.embedding.dense_embedder import Embedder
+from servers.embedding_server.client import get_dense_vectors
 from src.ingestion.paper_loader import chunk_paper
 from src.storage import Storage
 
@@ -140,7 +140,6 @@ def embed_papers(limit_to_first: bool = True, skip_existing: bool = True) -> int
         logger.info(f"Found {len(pdf_files)} PDFs in downloads/")
 
     # Setup components
-    embedder = Embedder(settings.OLLAMA_URL, settings.EMBEDDING_MODEL)
     storage = Storage()
 
     total_chunks = 0
@@ -213,7 +212,7 @@ def embed_papers(limit_to_first: bool = True, skip_existing: bool = True) -> int
         # 4. Embed
         logger.info("  Embedding...")
         texts = [c.text for c in chunks]
-        vectors = embedder.embed_batch(texts)
+        vectors = get_dense_vectors(texts)
 
         for chunk, vec in zip(chunks, vectors):
             if vec:
