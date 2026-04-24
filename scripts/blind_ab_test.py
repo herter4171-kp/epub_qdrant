@@ -283,13 +283,19 @@ def intersect_books(dense_books, hybrid_books):
     return [dense_by_sf[sf] for sf in sorted(common)]
 
 
-def pick_passage(collection, source_file):
-    """Pick random passage from a specific book via MCP. Returns chunk dict or None."""
+def pick_passage(collection, source_file, seed=None):
+    """Pick random passage from a specific book via MCP. Returns chunk dict or None.
+
+    When seed is provided, passes it to MCP for deterministic chunk selection.
+    """
     try:
-        result = mcp_call("pick_random_chunk", {
+        call_args = {
             "collection": collection,
             "source_file": source_file,
-        })
+        }
+        if seed is not None:
+            call_args["seed"] = seed
+        result = mcp_call("pick_random_chunk", call_args)
         if "error" in result:
             print(f"  pick_passage error: {result['error']}", file=sys.stderr)
             return None
@@ -959,7 +965,10 @@ def main(argv=None):
         for pos in range(args.positions):
             try:
                 # 1. Pick random passage (book-scoped)
-                chunk = pick_passage(collection, sf)
+                book_seed = None
+                if args.seed is not None:
+                    book_seed = hash((args.seed, sf, pos)) & 0xFFFFFFFF
+                chunk = pick_passage(collection, sf, seed=book_seed)
                 if not chunk:
                     continue
 

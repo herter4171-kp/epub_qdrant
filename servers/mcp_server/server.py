@@ -6,6 +6,7 @@ Supports multi-collection search across all configured Qdrant collections.
 import asyncio
 import json
 import logging
+import random
 import sys
 import pickle
 import multiprocessing
@@ -195,6 +196,10 @@ TOOLS = [
                 "source_file": {
                     "type": "string",
                     "description": "Filter seed chunk to this source_file (book-scoped sampling).",
+                },
+                "seed": {
+                    "type": "integer",
+                    "description": "Random seed for deterministic chunk selection. When provided with source_file, uses scroll + seeded random instead of Qdrant Sample.RANDOM.",
                 },
             },
             "required": [],
@@ -439,6 +444,7 @@ def _handle_pick_random_chunk(args: dict) -> dict:
     min_tokens = args.get("min_tokens", 200)
     min_total_tokens = args.get("min_total_tokens", MIN_TOTAL_TOKENS)
     source_file = args.get("source_file")
+    seed_arg = args.get("seed")
 
     client = get_retriever()._client
 
@@ -479,19 +485,48 @@ def _handle_pick_random_chunk(args: dict) -> dict:
     except Exception:
         pass
 
-    # Pick random seed chunk.
-    results = client.query_points(
-        collection_name=collection,
-        query=models.SampleQuery(sample=models.Sample.RANDOM),
-        limit=1,
-        with_payload=True,
-        query_filter=models.Filter(must=conditions),
-    )
+    # Pick seed chunk — deterministic when seed provided, random otherwise.
+    if seed_arg is not None:
+        # Scroll all qualifying chunks, sort by ID, pick with seeded random.
+        all_points = []
+        offset = None
+        while True:
+            scroll_kwargs = {
+                "collection_name": collection,
+                "scroll_filter": models.Filter(must=conditions),
+                "limit": 1000,
+                "with_payload": True,
+            }
+            if offset is not None:
+                scroll_kwargs["offset"] = offset
+            batch, next_offset = client.scroll(**scroll_kwargs)
+            all_points.extend(batch)
+            if next_offset is None or not batch:
+                break
+            offset = next_offset
 
-    if not results.points:
+        if not all_points:
+            return {"error": "No substantive chunks found in collection", "collection": collection}
+
+        # Sort by point ID for determinism across runs.
+        all_points.sort(key=lambda p: str(p.id))
+        rng = random.Random(seed_arg)
+        chosen = rng.choice(all_points)
+        results_points = [chosen]
+    else:
+        results = client.query_points(
+            collection_name=collection,
+            query=models.SampleQuery(sample=models.Sample.RANDOM),
+            limit=1,
+            with_payload=True,
+            query_filter=models.Filter(must=conditions),
+        )
+        results_points = results.points
+
+    if not results_points:
         return {"error": "No substantive chunks found in collection", "collection": collection}
 
-    seed = results.points[0]
+    seed = results_points[0]
     seed_payload = seed.payload or {}
     seed_file = seed_payload.get("source_file", "")
     seed_idx = seed_payload.get("chunk_index", 0)
