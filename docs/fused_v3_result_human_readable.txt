@@ -1,0 +1,259 @@
+Found 20 books.
+
+────────────────────────────────────────────────────────────
+Book: Agentic AI in Enterprise (agenticaiinenterprise.epub)
+
+  Agentic AI in Enterprise
+  ## 1.2.2 Enterprise Applications: Agentic AI in Action
+
+Agentic AI is reshaping the way enterprises operate, enabling systems that not only respond to tasks but take initiative, adapt to dynamic condi
+  Query: What security protocols and data contract standards should we implement to safely expose high-throughput APIs to external AI agents while maintaining data consistency with our legacy systems?  [operational]
+  Fused answer: **Security Protocols**
+- **Authentication & Identity Management:** Use scoped, rotated, and session-bound AI credentials. Implement real-time kill switches and automated controls to halt agent actions
+  Judge: score=3 — The answer faithfully synthesizes security protocols, data contract standards, and consistency strategies directly from the provided source and retrieved passages, with all claims properly grounded.
+
+────────────────────────────────────────────────────────────
+Book: The Agentic AI Revolution (agenticairevolution.epub)
+
+  The Agentic AI Revolution
+  ## 3.2 What Makes Something Agentic?
+
+A calendar alert blinks “Customer-Credit Risk Spike see triage.” Will opens the dashboard, expecting the usual red-flag list, but nothing appears.“System glitch?”
+  Query: Which metrics and governance controls should we establish during the scaling phase to prevent bot sprawl, track ROI, and determine which agent pilots to retire?  [operational]
+  Fused answer: **Metrics for ROI Tracking**
+- Time saved
+- CSAT
+- Error rate
+*(Used to build the ROI story and measure performance against north-star business goals like revenue lift or cost-out)*
+
+**Governance Cont
+  Judge: score=3 — The answer accurately synthesizes metrics and governance controls directly from the source and retrieved passages, with every claim explicitly supported by the provided text.
+
+────────────────────────────────────────────────────────────
+Book: Agentic Hyper-Personalized Dimensions (agentichyper-personalizeddimensions.epub)
+
+  Agentic Hyper-Personalized Dimensions
+  ## Meet Gemma via Python3!
+
+If you are Python-enabled, look at the example book Git repository under chapter 00: At this point, a quick ps command will show if Ollama is still running: If you see it r
+  Query: We need to deploy the Ollama LLM backend as a persistent background service on our Linux infrastructure; what systemd command should we execute to start it, and which port will it listen on for API requests?  [operational]
+  Fused answer: Execute `systemctl start ollama`. Ollama listens for API requests on port `11434` (specifically at `http://127.0.0.1:11434`).
+  Judge: score=3 — The answer correctly identifies the systemd command and the API port, both of which are explicitly stated in the provided source and retrieved passages.
+
+────────────────────────────────────────────────────────────
+Book: AI Identities (aiidentities.epub)
+
+  AI Identities
+  ## Common Identity Risks
+
+Common identity risks include:Orphaned Identities: Accounts with no clear owner or use caseOver-privileged Access: Accounts with more power than neededMisclassification: Trea
+  Query: Which governance practices and lifecycle stages should we enforce to maintain continuous ownership and prevent privilege creep for AI agents operating across fragmented cloud and on-prem systems?  [operational]
+  Fused answer: **Lifecycle Stages & Framework**
+- Enforce the five-stage lifecycle model: **Provision, Delegate, Observe, Reevaluate, Expire**.
+- Align governance with the **RAISE framework** pillars: Assign, Secure
+  Judge: score=3 — Every claim in the answer is directly supported by the provided source and retrieved passages, accurately synthesizing the lifecycle stages, ownership practices, and operational strategies without introducing external information.
+
+────────────────────────────────────────────────────────────
+Book: Architecting Enterprise AI Applications (architectingenterpriseaiapplications.epub)
+
+  Architecting Enterprise AI Applications
+  ## Automated Testing Pipelines for Enterprise AI
+
+Automated testing pipelines are excellent in managing the complexities of AI model development. These pipelines have a series of automated processes t
+  Query: How should we architect our AI model's objective function to prevent it from over-optimizing for narrow financial metrics at the expense of broader organizational goals?  [operational]
+  Fused answer: The provided passages do not contain specific technical mechanisms for architecting AI model objective functions (e.g., multi-objective loss formulations, reward shaping, or constraint optimization la
+  Judge: score=3 — The answer faithfully synthesizes the retrieved passages, correctly acknowledging the lack of direct technical objective function details while accurately extracting and applying the high-level strategic and operational guidance provided in the text.
+
+────────────────────────────────────────────────────────────
+Book: Building Applications with Large Language Models (buildingapplicationswithlargelanguagemodels.epub)
+
+  Building Applications with Large Language Models
+  ## Zero-Shot Prompting
+
+Everyone has seen the astonishing power of LLMs, where you tell them to do a task in plain words and they do so – that’s zero-shot prompting in action. This technique doesn’t r
+  Query: When building a text preprocessing pipeline for large-scale NLP tasks, should I use lemmatization or stemming if computational efficiency is a higher priority than linguistic precision?  [conceptual]
+  Fused answer: Based on the provided passages, you should use **stemming**. The passages describe stemming as a rule-engine process that strips predetermined prefixes and suffixes to extract a word's base form. In c
+  Judge: score=3 — The answer is fully supported by the source and retrieved passages, correctly recommending stemming for computational efficiency and accurately describing the technical differences between stemming and lemmatization.
+
+────────────────────────────────────────────────────────────
+Book: Building Generative AI Agents (buildinggenerativeaiagents.epub)
+
+  Building Generative AI Agents
+  ## GPTs
+
+A GPT is a customization of ChatGPT. It involves combining instructions, files, and APIs.Think of GPTs like the iOS App Store or Google Play. You can find them at the following URL:https://ch
+  Query: What technical components are required to configure a custom GPT that can process proprietary documents and trigger external services?  [operational]
+  Fused answer: To configure a custom GPT for processing proprietary documents and triggering external services, the following technical components are required:
+
+**1. Proprietary Document Processing**
+- **RAG Pipeli
+  Judge: score=2 — The answer correctly identifies core components like instructions, files, APIs, function calling, and the GPT Builder, but introduces unsupported claims by listing RAG pipelines, token counting utilities, and document prioritization as required components, which are not stated as such in the provided text.
+
+────────────────────────────────────────────────────────────
+Book: Data Science Solutions on Azure (datasciencesolutionsonazure.epub)
+
+  Data Science Solutions on Azure
+  ## Hands-On Exercise 9-3: Publishing the Model
+
+1.As shown in Figure 9-15, click on “Performance”, then click “Publish”, and give the model a name. Select the Azure Custom Vision instance that was cre
+  Query: What is the correct HTTP method and payload structure for calling a published Azure Custom Vision endpoint to analyze an image provided via URL?  [operational]
+  Fused answer: The provided passages do not contain the specific HTTP method or payload structure required to call a published Azure Custom Vision endpoint for analyzing an image via URL. Passage [1] only notes that
+  Judge: score=3 — The answer correctly identifies that the provided text lacks the specific HTTP method and payload details, accurately reflecting the source passage which only references a figure containing that information.
+
+────────────────────────────────────────────────────────────
+Book: Enterprise Guide for Implementing Generative AI and Agentic AI (enterpriseguideforimplementinggenerativeaiandagenticai.epub)
+
+  Enterprise Guide for Implementing Generative AI and Agentic AI
+  ## References
+
+1.TIGERScore: Towards Building Explainable Metric for All Text Generation Tasks (Dongfu Jiang et al.), https://arxiv.org/pdf/2310.00752 2.Learning Personalized Alignment in Evaluating O
+  Query: What privacy controls and data governance options are available to prevent user conversation data from being used in subsequent model training cycles?  [operational]
+  Fused answer: - **Data Anonymization & PII Scrubbing:** Remove or mask personal identifiers from datasets before indexing. Use prompt inspection tools to scrub or tokenize sensitive information before it reaches th
+  Judge: score=1 — The answer contradicts the source passage by claiming that opt-out toggles or training-data exclusion pipelines are not described, despite the source explicitly stating that OpenAI introduced a privacy option allowing users to choose which conversations are used for subsequent model training.
+
+────────────────────────────────────────────────────────────
+Book: Generative AI-Driven Application Development with Java (generativeai-drivenapplicationdevelopmentwithjava.epub)
+
+  Generative AI-Driven Application Development with Java
+  ## Using Tools in Quarkus
+
+That earlier example is fairly basic. In a production scenario, you’ll want to enrich the LLM’s capabilities with external tools and document stores. The @RegisterAiService 
+  Query: When integrating LangChain4j with Quarkus, how do I expose specific CDI bean methods as callable tools for an LLM, and what annotation do I use to restrict the model to only a curated set of those tools?  [operational]
+  Fused answer: To expose a specific CDI bean method as a callable tool, annotate the method with `@Tool`. To restrict the LLM to only a curated set of those tools, apply the `@RegisterAiService` annotation to your A
+  Judge: score=3 — The answer accurately reflects the source passage's instructions on using the @Tool annotation to expose methods and the @RegisterAiService annotation to restrict the model to specific tools.
+
+────────────────────────────────────────────────────────────
+Book: Generative AI Apps with LangChain and Python (generativeaiappswithlangchainandpython.epub)
+
+  Generative AI Apps with LangChain and Python
+  ## Looking Ahead
+
+In the next chapter, you will learn about the challenges when calling the LLM API directly and how LangChain addresses those challenges to enhance your generative AI development expe
+  Query: What are the practical differences between LCEL chains and legacy chains in LangChain, and what criteria should guide the choice between them for a production application?  [conceptual]
+  Fused answer: Based on the provided passages, the practical differences and selection criteria are:
+
+**Practical Differences:**
+- **Implementation & Syntax:** Legacy chains use the older `Chains` class (e.g., `LLMC
+  Judge: score=3 — The answer accurately reflects the distinctions and selection criteria for LCEL and legacy chains as detailed in the retrieved passages, with no unsupported or contradictory claims.
+
+────────────────────────────────────────────────────────────
+Book: Large Language Models Projects (largelanguagemodelsprojects.epub)
+
+  Large Language Models Projects
+  ## Key Takeaways and More to Learn
+
+Being honest, the little exercise of creating a SQL generator from queries expressed in natural language has been quite a success. It still has a long way to go to 
+  Query: What prompt engineering technique can I use to keep an LLM focused on generating SQL and prevent it from responding to off-topic or malicious user inputs?  [operational]
+  Fused answer: Based on the provided passages, you can use the following prompt engineering techniques to maintain focus and prevent off-topic or malicious inputs:
+
+- **Strategic System Statements/Role Anchoring:** 
+  Judge: score=3 — The answer accurately synthesizes the techniques described in the source and retrieved passages, including strategic system statements, context-specific guidance, and explicit refusal instructions, without introducing unsupported claims.
+
+────────────────────────────────────────────────────────────
+Book: Mastering LangChain (masteringlangchain.epub)
+
+  Mastering LangChain
+  ## Types of Chains
+
+Simple Chain: Basic Sequential ProcessingSimple chain allows for straightforward, sequential processing of inputs. Each step in the chain takes the output from the previous step as
+  Query: How do I build a LangChain pipeline that dynamically routes incoming user queries to specialized processing chains using semantic similarity instead of hardcoding predefined categories?  [operational]
+  Fused answer: The provided passages do not contain information on implementing routing based on semantic similarity. They only describe LLM-driven routing using LangChain’s `MultiPromptChain` and `LLMRouterChain`.
+
+  Judge: score=3 — The answer accurately reflects the retrieved passages, correctly noting the absence of semantic similarity routing details and faithfully summarizing the LLM-driven routing methods that are actually present in the provided text.
+
+────────────────────────────────────────────────────────────
+Book: Mastering Retrieval-Augmented Generation (masteringretrieval-augmentedgeneration.epub)
+
+  Mastering Retrieval-Augmented Generation
+  ## LangChain Agents: Executors, Tools, and Custom Implementations
+
+LangChain Agents provide a comprehensive foundation for building individual autonomous agents with sophisticated reasoning capabiliti
+  Query: How should I structure the core reasoning loop in a LangChain AgentExecutor to ensure reliable tool routing and fallback handling during autonomous agent execution?  [operational]
+  Fused answer: Based on the provided passages, structure the `AgentExecutor` reasoning loop and routing logic as follows:
+
+**Core Loop Runtime**
+- `AgentExecutor` operates as a synchronous runtime loop: repeatedly c
+  Judge: score=2 — The answer is mostly grounded in the retrieved passages but includes unsupported claims, such as describing the loop as synchronous and suggesting fallback triggers be encoded in the prompt, which contradicts the source stating the executor handles parsing fallbacks.
+
+────────────────────────────────────────────────────────────
+Book: Mastering Spring AI (masteringspringai.epub)
+
+  Mastering Spring AI
+  ## 2.2.1 Let’s Code
+
+Let’s create a simple example implementation demonstrating how Spring Data can be used in a Generative AI application. In this scenario, imagine we’re building a system that gener
+  Query: What steps and tools should I use to implement prompt governance and evaluation for a production Spring AI application?  [operational]
+  Fused answer: **Core Framework & Interfaces**
+- Use Spring AI’s `Evaluator` abstraction located in `org.springframework.ai.evaluation`.
+- Implement the functional interface `Evaluator`, which defines a single metho
+  Judge: score=3 — The answer faithfully synthesizes the provided text, accurately capturing the Evaluator interface details, the recommendation to treat evaluation as a standalone stage, the use of lightweight models to reduce latency/cost, and the broader governance requirements like GDPR and ethical guidelines without introducing unsupported claims.
+
+────────────────────────────────────────────────────────────
+Book: The Practical Guide to Large Language Models (practicalguidetolargelanguagemodels.epub)
+
+  The Practical Guide to Large Language Models
+  ## Question Answering
+
+Why should we consider other models when we already have highly intelligent text generation models? Why do we need anything else if we already have an assistant that, in theory,
+  Query: When designing a document retrieval system, what are the practical tradeoffs between using a dedicated question-answering model for context extraction versus routing queries to a general-purpose text generation LLM?  [conceptual]
+  Fused answer: The provided passages do not explicitly compare a dedicated question-answering model for context extraction against routing to a general-purpose LLM. Instead, they outline the practical tradeoffs betw
+  Judge: score=3 — The answer faithfully synthesizes the tradeoffs outlined in the retrieved passages regarding latency, grounding, routing overhead, and system prioritization, accurately reflecting the provided material's focus on RAG and context-extraction pipelines.
+
+────────────────────────────────────────────────────────────
+Book: Scaling Enterprise Solutions with Large Language Models (scalingenterprisesolutionswithlargelanguagemodels.epub)
+
+  Scaling Enterprise Solutions with Large Language Models
+  ## Deep Learning
+
+Deep learning started with scientists trying to figure out how the human brain works. The started in the 1800s, when Joseph von Gerlach first proposed that the nervous system works a
+  Query: How should I configure MLFlow’s LLM-as-a-judge evaluation for faithfulness and relevance, and when is it necessary to provide custom examples versus letting MLFlow handle the scoring automatically?  [operational]
+  Fused answer: MLFlow provides built-in LLM-as-a-judge evaluation for faithfulness and relevance using predefined strategies that automatically monitor specific output fields and apply scoring logic without requirin
+  Judge: score=3 — The answer faithfully synthesizes information from the source and retrieved passages, accurately describing MLFlow's configuration, automatic vs. custom evaluation criteria, and specific code/metric examples without adding unsupported claims.
+
+────────────────────────────────────────────────────────────
+Book: Transforming Conversational AI (transformingconversationalai.epub)
+
+  Transforming Conversational AI
+  ## Leading a Conversational AI Project
+
+Although large language models will change the nature of conversation design, the role of the conversation designer in leading a Conversational AI project remai
+  Query: What evaluation frameworks and metrics should we prioritize to reliably assess the safety, accuracy, and overall quality of an LLM-powered conversational system before production deployment?  [operational]
+  Fused answer: **Evaluation Frameworks & Pipelines**
+- **RAGAS:** Automated assessment framework designed for scalable quality assurance. Evaluates thousands of query–response pairs automatically, enables reliable c
+  Judge: score=3 — The answer accurately synthesizes the evaluation frameworks, metrics, and methodologies presented in the source and retrieved passages without introducing unsupported claims or contradictions.
+
+────────────────────────────────────────────────────────────
+Book: Transforming Financial Services with Generative AI (transformingfinancialserviceswithgenerativeai.epub)
+
+  Transforming Financial Services with Generative AI
+  ## 5. Risk and Compliance Management with GenAI
+
+Srinath Godavarthi1   and Ravi Nagvekar2(1)Aldie, VA, USA(2)Metuchen, NJ, USA In Chapter 4, we explored the key concepts for building GenAI application
+  Query: What are the key operational phases and governance controls that a financial institution should implement when transitioning from traditional MLOps to a dedicated LLMOps framework for GenAI applications?  [operational]
+  Fused answer: **Operational Phases**
+- **PoC to Production Transition:** Execute a structured migration from proof-of-concept to production-ready GenAI systems, leveraging integrated MLOps and LLMOps frameworks for
+  Judge: score=3 — Every claim in the answer is directly supported by the retrieved passages, accurately summarizing the operational phases and governance controls without introducing external information.
+
+────────────────────────────────────────────────────────────
+Book: Understanding Large Language Models (understandinglargelanguagemodels.epub)
+
+  Understanding Large Language Models
+  ## Corpus and Vocabulary
+
+In NLP, a corpus refers to a large collection of text documents or utterances that are used as a dataset for language analysis and model training. A corpus serves as the prim
+  Query: Which corpus format should we use to collect training data for a multilingual machine translation system that requires sentence-level alignment?  [operational]
+  Fused answer: Based on the provided passages, you should use a **parallel corpus**. Passage [1] explicitly states that for machine translation datasets, a parallel corpus contains training data structured as aligne
+  Judge: score=3 — The answer correctly identifies "parallel corpus" and accurately reflects the definition and application for machine translation with sentence-level alignment as stated in the source and retrieved passages.
+
+Results written to results/fused_v3.json
+
+======================================================================
+                        score=1   score=2   score=3     avg  samples
+  ────────────────────────────────────────────────────────────
+  Trivia                      0         0         0    0.00        0
+  Conceptual                  0         0         3    3.00        3
+  Operational                 1         2        14    2.76       17
+  ────────────────────────────────────────────────────────────
+  Total                       1         2        17    2.80       20
+======================================================================
+python3 scripts/blind_ab_test.py books-semantic --seed 69 --output   1.25s user 0.29s system 0% cpu 17:16.79 total
