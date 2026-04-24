@@ -30,7 +30,7 @@ class ChunkConfig:
     """Configuration for the semantic chunking pipeline."""
 
     chunk_size: int = 500
-    overlap_ratio: float = 0.2
+    overlap_ratio: float = 0.0
     similarity_percentile: float = 95.0
     min_distance_floor: float = 0.1
     min_sentences_for_semantic: int = 10

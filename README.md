@@ -173,3 +173,7 @@ Mac (dev)                              GPU Box (192.168.68.75)
 # Run LLM-as-judge pairwise evaluation
 python3 scripts/evaluate.py baseline
 python3 scripts/evaluate.py phase_2_hybrid
+```
+
+## "Artwork"
+![alt text](assets/images/textbook.png)

@@ -18,6 +18,9 @@ from servers.mcp_server.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Default sparse weight for RRF fusion (tuned via sweep_sparse_weight.py)
+DEFAULT_SPARSE_WEIGHT = 1.2
+
 # Common section-title variants that should be normalized or signal fallback.
 # Maps lowercase canonical names → a normalized form; None means "skip, use semantic".
 _NORMALIZED_TITLES: Dict[str, Optional[str]] = {
@@ -153,6 +156,19 @@ class Retriever:
         """
         return get_sparse_vectors([text], is_query=True)[0]
 
+    def _has_sparse_vectors(self, collection: str) -> bool:
+        """Check if a collection has sparse vector config (named 'sparse')."""
+        if not hasattr(self, "_sparse_cache"):
+            self._sparse_cache: Dict[str, bool] = {}
+        if collection not in self._sparse_cache:
+            try:
+                info = self._client.get_collection(collection)
+                sparse_cfg = info.config.params.sparse_vectors
+                self._sparse_cache[collection] = bool(sparse_cfg)
+            except Exception:
+                self._sparse_cache[collection] = False
+        return self._sparse_cache[collection]
+
     def search(
         self,
         query: str,
@@ -160,6 +176,7 @@ class Retriever:
         group_by: Optional[str] = None,
         collection: Optional[str] = None,
         filter_by: Optional[Dict[str, str]] = None,
+        sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
     ) -> EvidenceBundle:
         """Search and group results within a single collection.
 
@@ -177,7 +194,19 @@ class Retriever:
         group_by = group_by or self._group_by
         col = collection or self._collection
 
-        # 1. Retrieve top-k chunks from Qdrant
+        # Use hybrid search if collection has sparse vectors
+        if self._has_sparse_vectors(col):
+            raw_hybrid = self.hybrid_search(query, col, top_k=top_k, filter_by=filter_by, sparse_weight=sparse_weight)
+            # hybrid_search returns List[ChunkResult] — wrap in EvidenceBundle
+            sources = self._build_bibliography(raw_hybrid)
+            groups = self._group_results(raw_hybrid, group_by)
+            prompt_context = self._build_prompt_context(groups, sources)
+            return EvidenceBundle(
+                query=query, groups=groups, total_chunks=len(raw_hybrid),
+                prompt_context=prompt_context, sources=sources,
+            )
+
+        # 1. Retrieve top-k chunks from Qdrant (dense-only path)
         if filter_by:
             raw_results = self._storage.search_with_filter(col, query, top_k=top_k, filter_by=filter_by)
         else:
@@ -238,7 +267,7 @@ class Retriever:
         collection: str,
         top_k: int = 20,
         filter_by: Optional[Dict[str, str]] = None,
-        sparse_weight: float = 0.25,
+        sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
     ) -> List[ChunkResult]:
         """Search with dense + sparse vectors, fuse via Reciprocal Rank Fusion.
 
@@ -250,7 +279,7 @@ class Retriever:
             collection: Collection name (should be a -named collection).
             top_k: Number of results to return after RRF fusion.
             filter_by: Optional metadata pre-filter.
-            sparse_weight: Multiplier for sparse vector in RRF fusion (default 0.25).
+            sparse_weight: Multiplier for sparse vector in RRF fusion (defaults to DEFAULT_SPARSE_WEIGHT).
                 Set to 0 for dense-only, increase to give sparse more weight.
 
         Returns:
@@ -350,7 +379,7 @@ class Retriever:
         group_by: Optional[str] = None,
         collections: Optional[List[str]] = None,
         filter_by: Optional[Dict[str, str]] = None,
-        sparse_weight: float = 0.25,
+        sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
     ) -> EvidenceBundle:
         """Search across ALL configured collections with hybrid (dense+sparse) search.
 
@@ -367,7 +396,7 @@ class Retriever:
             group_by: Override default grouping.
             collections: Override which collections to search. Defaults to configured list.
             filter_by: Optional metadata key->value pre-filter.
-            sparse_weight: Multiplier for sparse vector in RRF fusion (default 0.25).
+            sparse_weight: Multiplier for sparse vector in RRF fusion (defaults to DEFAULT_SPARSE_WEIGHT).
 
         Returns:
             EvidenceBundle with cross-collection grouped results.
@@ -390,7 +419,8 @@ class Retriever:
 
         for col in effective_collections:
             try:
-                if "-named" in col:
+                has_sparse = self._has_sparse_vectors(col)
+                if has_sparse:
                     # Hybrid search with RRF fusion
                     raw = self.hybrid_search(query, col, top_k=top_k * 2, filter_by=filter_by, sparse_weight=sparse_weight)
                 elif filter_by:
@@ -400,7 +430,7 @@ class Retriever:
 
                 # hybrid_search() already returns List[ChunkResult], so just use as-is.
                 # For raw dict results (non-hybrid), convert to ChunkResult.
-                if "-named" in col and raw and isinstance(raw[0], ChunkResult):
+                if has_sparse and raw and isinstance(raw[0], ChunkResult):
                     collection_results[col] = raw
                 else:
                     collection_results[col] = [
@@ -441,7 +471,7 @@ class Retriever:
         # Hybrid results already have RRF scores that are comparable.
         all_results: List[ChunkResult] = []
         for col, results in collection_results.items():
-            if "-named" in col:
+            if self._has_sparse_vectors(col):
                 # Hybrid RRF scores are already normalized — use as-is with metadata boost
                 for r in results:
                     boost = self._compute_metadata_boost(r, q_lower)

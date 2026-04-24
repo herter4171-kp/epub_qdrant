@@ -1,0 +1,161 @@
+{
+  "version": "1.0",
+  "model": "openai/qwen36",
+  "evaluated_at": "2026-04-24T00:25:15.738022+00:00",
+  "baseline_method": "baseline",
+  "num_queries": 7,
+  "per_query_scores": {
+    "Help me design a planning module for an LLM agent that can break a long task into executable subtasks without overplanning.": {
+      "baseline": {
+        "top5_avg_score": 1.8155,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3594,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B includes an additional highly relevant document (B4) that specifically discusses decomposing the planning process into sequential sub-components, directly addressing the query's focus on task breakdown and planning module design. While both sets share the top result, B offers more targeted and informative content for the specific use case."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B includes an additional highly relevant document (B4) that specifically discusses decomposing the planning process into sequential sub-components, directly addressing the query's focus on task breakdown and planning module design. While both sets share the top result, B offers more targeted and informative content for the specific use case."
+      }
+    },
+    "What is a good memory design for an agent that needs short-term working memory and long-term user memory?": {
+      "baseline": {
+        "top5_avg_score": 1.9107,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3913,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the specific memory design requested, with B4 and B5 explicitly discussing the implementation and functional distinction between short-term working/context memory and long-term user memory. It also offers better source diversity across arxiv categories compared to Set A's heavy reliance on a single publisher."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the specific memory design requested, with B4 and B5 explicitly discussing the implementation and functional distinction between short-term working/context memory and long-term user memory. It also offers better source diversity across arxiv categories compared to Set A's heavy reliance on a single publisher."
+      }
+    },
+    "I want an agent that can notice its own mistakes and retry with a different strategy. What self-correction loop should I use?": {
+      "baseline": {
+        "top5_avg_score": 2.1364,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.5737,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A prioritizes the most directly relevant sources, ranking self-improvement, iterative self-refinement, and reflection-revision cycles at the top. These directly address the query's focus on self-correction loops. Set B replaces the highly relevant self-improvement source with lower-relevance results focused on training data bottlenecks and expert models, making it less practical for the user's goal."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Result Set A prioritizes the most directly relevant sources, ranking self-improvement, iterative self-refinement, and reflection-revision cycles at the top. These directly address the query's focus on self-correction loops. Set B replaces the highly relevant self-improvement source with lower-relevance results focused on training data bottlenecks and expert models, making it less practical for the user's goal."
+      }
+    },
+    "What are the main failure modes of web agents in realistic browsing tasks, and how should I evaluate them?": {
+      "baseline": {
+        "top5_avg_score": 1.9967,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4694,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the query by providing snippets on web agent errors/limitations, evaluation methodologies, and realistic browsing environments. Result Set A contains mostly generic book titles and less specific snippets that do not adequately cover failure modes or evaluation strategies."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the query by providing snippets on web agent errors/limitations, evaluation methodologies, and realistic browsing environments. Result Set A contains mostly generic book titles and less specific snippets that do not adequately cover failure modes or evaluation strategies."
+      }
+    },
+    "How do deep research agents verify intermediate conclusions instead of just producing polished nonsense?": {
+      "baseline": {
+        "top5_avg_score": 1.9024,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.2509,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B replaces generic book titles with arxiv papers focusing on iterative workflows and agent agency, which are more technically relevant to the query's focus on verification mechanisms. Both sets share three identical results, but B's additional papers provide better alignment with the specific technical nature of the question."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B replaces generic book titles with arxiv papers focusing on iterative workflows and agent agency, which are more technically relevant to the query's focus on verification mechanisms. Both sets share three identical results, but B's additional papers provide better alignment with the specific technical nature of the question."
+      }
+    },
+    "I want to experiment with multi-agent problem solving where agents debate, specialize, and then converge. What patterns are worth trying first?": {
+      "baseline": {
+        "top5_avg_score": 1.8711,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4048,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses all key query elements: debate (B1/B2), specialization via problem decomposition (B3), and convergence/consensus mechanisms. It also offers better source diversity with multiple technical arXiv papers on agent frameworks, whereas Set A relies on generic book titles and only covers debate/collaboration without addressing specialization or convergence patterns."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses all key query elements: debate (B1/B2), specialization via problem decomposition (B3), and convergence/consensus mechanisms. It also offers better source diversity with multiple technical arXiv papers on agent frameworks, whereas Set A relies on generic book titles and only covers debate/collaboration without addressing specialization or convergence patterns."
+      }
+    },
+    "How does agent tuning look like in practice for a smaller open model that needs to behave more like a reliable operator?": {
+      "baseline": {
+        "top5_avg_score": 2.0056,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.436,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the query by including content on edge-scale/smaller models and practical tuning practices (B5), as well as open-source post-training and production measurement (B4). Result Set A focuses heavily on large foundation models like GPT-4.1 and o3, making it less relevant to the specific use case of smaller open models."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the query by including content on edge-scale/smaller models and practical tuning practices (B5), as well as open-source post-training and production measurement (B4). Result Set A focuses heavily on large foundation models like GPT-4.1 and o3, making it less relevant to the specific use case of smaller open models."
+      }
+    }
+  },
+  "aggregate": {
+    "semantic": {
+      "wins_against_baseline": 6,
+      "losses_against_baseline": 1,
+      "ties": 0,
+      "win_rate": 0.8571,
+      "total_comparisons": 7,
+      "avg_score_improvement": -0.5361,
+      "avg_cross_collection_improvement": -0.3333,
+      "elapsed_seconds": 76.3
+    }
+  }
+}

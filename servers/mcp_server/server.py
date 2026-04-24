@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from src.storage import Storage
 from servers.mcp_server.config import settings
-from servers.mcp_server.retriever import Retriever
+from servers.mcp_server.retriever import Retriever, DEFAULT_SPARSE_WEIGHT
 from servers.mcp_server.llm_client import LLMClient
 
 logging.basicConfig(
@@ -107,8 +107,8 @@ TOOLS = [
                 },
                 "sparse_weight": {
                     "type": "number",
-                    "description": "Multiplier for sparse vector in hybrid RRF fusion (default 0.25, set 0 for dense-only).",
-                    "default": 0.25,
+                    "description": f"Multiplier for sparse vector in hybrid RRF fusion (default {DEFAULT_SPARSE_WEIGHT}, set 0 for dense-only).",
+                    "default": DEFAULT_SPARSE_WEIGHT,
                 },
             },
             "required": ["query"],
@@ -177,7 +177,7 @@ def _parse_filter(filter_str: Optional[str]) -> Optional[Dict[str, str]]:
 def _run_search(query: str, top_k: int, group_by: str,
                 collection: Optional[str], collections_str: Optional[str],
                 filter_by: Optional[Dict[str, str]], retriever: Retriever,
-                sparse_weight: float = 0.25):
+                sparse_weight: float = DEFAULT_SPARSE_WEIGHT):
     """Run the shared search logic and return an EvidenceBundle."""
     if collections_str:
         col_list = [c.strip() for c in collections_str.split(",") if c.strip()]
@@ -189,6 +189,7 @@ def _run_search(query: str, top_k: int, group_by: str,
         return retriever.search(
             query=query, top_k=top_k, group_by=group_by,
             collection=collection, filter_by=filter_by,
+            sparse_weight=sparse_weight,
         )
     else:
         if settings.has_collections and len(settings.collections) > 1:
@@ -263,7 +264,7 @@ def _handle_query(args: dict) -> dict:
     collection = args.get("collection")
     collections_str = args.get("collections")
     filter_by = _parse_filter(args.get("filter_by"))
-    sparse_weight = args.get("sparse_weight", 0.25)
+    sparse_weight = args.get("sparse_weight", DEFAULT_SPARSE_WEIGHT)
 
     retriever = get_retriever()
     bundle = _run_search(query, top_k, group_by, collection, collections_str, filter_by, retriever, sparse_weight)
@@ -478,7 +479,7 @@ def _run_async_handler(worker_args: dict) -> dict:
         collection = args.get("collection")
         collections_str = args.get("collections")
         filter_by = _parse_filter(args.get("filter_by"))
-        sparse_weight = args.get("sparse_weight", 0.25)
+        sparse_weight = args.get("sparse_weight", DEFAULT_SPARSE_WEIGHT)
 
         retriever = get_retriever()
         bundle = _run_search(query, top_k, group_by, collection, collections_str, filter_by, retriever, sparse_weight)

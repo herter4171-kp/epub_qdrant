@@ -51,7 +51,7 @@ class Settings:
 
     # Semantic chunking
     TOKENIZER_JSON: str = os.getenv("TOKENIZER_JSON", "")
-    CHUNK_OVERLAP_RATIO: float = float(os.getenv("CHUNK_OVERLAP_RATIO", "0.2"))
+    CHUNK_OVERLAP_RATIO: float = float(os.getenv("CHUNK_OVERLAP_RATIO", "0.0"))
     SIMILARITY_PERCENTILE: float = float(os.getenv("SIMILARITY_PERCENTILE", "95.0"))
     MIN_DISTANCE_FLOOR: float = float(os.getenv("MIN_DISTANCE_FLOOR", "0.1"))
     MIN_SENTENCES_FOR_SEMANTIC: int = int(os.getenv("MIN_SENTENCES_FOR_SEMANTIC", "10"))

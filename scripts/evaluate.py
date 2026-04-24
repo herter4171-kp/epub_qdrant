@@ -44,47 +44,47 @@ logger = logging.getLogger("evaluate")
 QUERIES: List[Dict[str, Any]] = [
     # Planning & task decomposition (5)
     {"query": "Help me design a planning module for an LLM agent that can break a long task into executable subtasks without overplanning.", "tags": ["cross", "planning"]},
-    {"query": "What is the current best practice for giving an agent reasoning structure without forcing brittle chain-of-thought templates?", "tags": ["cross", "reasoning"]},
-    {"query": "Show me how to build an agent that decides when to use a tool versus when to answer directly.", "tags": ["cross", "tool-use"]},
-    {"query": "How should I architect multi-tool orchestration so an agent can chain search, code execution, and document drafting safely?", "tags": ["cross", "tool-use"]},
-    {"query": "What scaffolding do strong terminal-based coding agents use around the model itself?", "tags": ["cross", "scaffolding"]},
+    #{"query": "What is the current best practice for giving an agent reasoning structure without forcing brittle chain-of-thought templates?", "tags": ["cross", "reasoning"]},
+    #{"query": "Show me how to build an agent that decides when to use a tool versus when to answer directly.", "tags": ["cross", "tool-use"]},
+    #{"query": "How should I architect multi-tool orchestration so an agent can chain search, code execution, and document drafting safely?", "tags": ["cross", "tool-use"]},
+    #{"query": "What scaffolding do strong terminal-based coding agents use around the model itself?", "tags": ["cross", "scaffolding"]},
 
     # Memory design (4)
     {"query": "What is a good memory design for an agent that needs short-term working memory and long-term user memory?", "tags": ["cross", "memory"]},
-    {"query": "How do I stop an agent's memory from turning into a junk drawer full of redundant or low-value facts?", "tags": ["cross", "memory"]},
-    {"query": "I want an agent that can localize bugs in a large repository. What retrieval and hypothesis-testing loop should I start with?", "tags": ["papers", "retrieval"]},
-    {"query": "How would you benchmark an agent that performs refactors rather than one-off bug fixes?", "tags": ["papers", "evaluation"]},
+    #{"query": "How do I stop an agent's memory from turning into a junk drawer full of redundant or low-value facts?", "tags": ["cross", "memory"]},
+    #{"query": "I want an agent that can localize bugs in a large repository. What retrieval and hypothesis-testing loop should I start with?", "tags": ["papers", "retrieval"]},
+    #{"query": "How would you benchmark an agent that performs refactors rather than one-off bug fixes?", "tags": ["papers", "evaluation"]},
 
     # Self-correction & evaluation (4)
     {"query": "I want an agent that can notice its own mistakes and retry with a different strategy. What self-correction loop should I use?", "tags": ["cross", "self-correction"]},
-    {"query": "How do I make a coding agent ask clarifying questions only when needed instead of either guessing wildly or stopping constantly?", "tags": ["cross", "tool-use"]},
-    {"query": "What should I measure to catch post-merge quality problems in agent-generated pull requests?", "tags": ["cross", "evaluation"]},
-    {"query": "How would you build a GUI agent that can operate a clunky enterprise web app with inconsistent layouts?", "tags": ["papers", "gui"]},
+    #{"query": "How do I make a coding agent ask clarifying questions only when needed instead of either guessing wildly or stopping constantly?", "tags": ["cross", "tool-use"]},
+    #{"query": "What should I measure to catch post-merge quality problems in agent-generated pull requests?", "tags": ["cross", "evaluation"]},
+    #{"query": "How would you build a GUI agent that can operate a clunky enterprise web app with inconsistent layouts?", "tags": ["papers", "gui"]},
 
     # Domain-specific agents (6)
     {"query": "What are the main failure modes of web agents in realistic browsing tasks, and how should I evaluate them?", "tags": ["papers", "evaluation"]},
-    {"query": "I want a mobile agent that can carry out a multi-step task across apps. What architecture would make that robust?", "tags": ["cross", "mobile"]},
-    {"query": "How should an enterprise agent handle permissions, approvals, and audit logs when acting on behalf of employees?", "tags": ["books", "enterprise"]},
-    {"query": "What is the cleanest way to build an API agent that can discover schema details and recover from malformed tool responses?", "tags": ["cross", "api"]},
-    {"query": "I need a data agent that can query a warehouse, validate the SQL, and then generate charts with commentary. How would you structure it?", "tags": ["cross", "data"]},
-    {"query": "What would a serious research agent pipeline look like for literature review, source ranking, note synthesis, and citation tracking?", "tags": ["cross", "research"]},
+    #{"query": "I want a mobile agent that can carry out a multi-step task across apps. What architecture would make that robust?", "tags": ["cross", "mobile"]},
+    #{"query": "How should an enterprise agent handle permissions, approvals, and audit logs when acting on behalf of employees?", "tags": ["books", "enterprise"]},
+    #{"query": "What is the cleanest way to build an API agent that can discover schema details and recover from malformed tool responses?", "tags": ["cross", "api"]},
+    #{"query": "I need a data agent that can query a warehouse, validate the SQL, and then generate charts with commentary. How would you structure it?", "tags": ["cross", "data"]},
+    #{"query": "What would a serious research agent pipeline look like for literature review, source ranking, note synthesis, and citation tracking?", "tags": ["cross", "research"]},
 
     # Deep research & scientific (4)
     {"query": "How do deep research agents verify intermediate conclusions instead of just producing polished nonsense?", "tags": ["papers", "research"]},
-    {"query": "I'm interested in agentic scientific simulation. How would an agent iteratively propose, run, and revise model configurations?", "tags": ["cross", "science"]},
-    {"query": "What are the tradeoffs between a single AI scientist agent and a multi-agent scientific discovery pipeline?", "tags": ["cross", "science"]},
-    {"query": "How should sub-agent creation work in a larger orchestration system so I do not end up with agent sprawl?", "tags": ["cross", "orchestration"]},
+    #{"query": "I'm interested in agentic scientific simulation. How would an agent iteratively propose, run, and revise model configurations?", "tags": ["cross", "science"]},
+    #{"query": "What are the tradeoffs between a single AI scientist agent and a multi-agent scientific discovery pipeline?", "tags": ["cross", "science"]},
+    #{"query": "How should sub-agent creation work in a larger orchestration system so I do not end up with agent sprawl?", "tags": ["cross", "orchestration"]},
 
     # Multi-agent & self-evolution (4)
     {"query": "I want to experiment with multi-agent problem solving where agents debate, specialize, and then converge. What patterns are worth trying first?", "tags": ["cross", "multi-agent"]},
-    {"query": "How do self-evolving agents accumulate reusable skills without drifting into unstable behavior?", "tags": ["papers", "self-evolution"]},
-    {"query": "What safeguards are needed when agents can modify their own prompts, memories, or tool policies over time?", "tags": ["cross", "safety"]},
-    {"query": "Help me think through safety for agents that can browse the web, run code, and call external APIs.", "tags": ["cross", "safety"]},
+    #{"query": "How do self-evolving agents accumulate reusable skills without drifting into unstable behavior?", "tags": ["papers", "self-evolution"]},
+    #{"query": "What safeguards are needed when agents can modify their own prompts, memories, or tool policies over time?", "tags": ["cross", "safety"]},
+    #{"query": "Help me think through safety for agents that can browse the web, run code, and call external APIs.", "tags": ["cross", "safety"]},
 
     # Production & tuning (3)
     {"query": "How does agent tuning look like in practice for a smaller open model that needs to behave more like a reliable operator?", "tags": ["papers", "tuning"]},
-    {"query": "How should I evaluate agents in production beyond task success rate—latency, cost, recovery rate, human override rate, what else?", "tags": ["cross", "evaluation"]},
-    {"query": "Can you sketch a benchmark for comparing a data-analysis agent against human analysts on realistic business tasks?", "tags": ["papers", "evaluation"]},
+    #{"query": "How should I evaluate agents in production beyond task success rate—latency, cost, recovery rate, human override rate, what else?", "tags": ["cross", "evaluation"]},
+    #{"query": "Can you sketch a benchmark for comparing a data-analysis agent against human analysts on realistic business tasks?", "tags": ["papers", "evaluation"]},
 ]
 
 # ─── Data Classes ──────────────────────────────────────────────────────────
@@ -197,6 +197,8 @@ class RetrieverRunner:
         collections = None
         if method == "phase_2_hybrid":
             collections = ["books-named", "papers-named"]
+        elif method == "semantic":
+            collections = ["books-semantic", "papers"]
         elif method == "baseline":
             collections = ["books", "papers"]
 

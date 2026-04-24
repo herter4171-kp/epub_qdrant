@@ -50,9 +50,9 @@ QUERIES = [
     "What should I measure to catch post-merge quality problems in agent-generated pull requests?",
 ]
 
-SPARSE_WEIGHTS = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+SPARSE_WEIGHTS = [0.4, 0.8, 1.2, 1.6]
 K_RRF = 60
-HYBRID_COLLECTIONS = ["books-named", "papers-named"]
+HYBRID_COLLECTIONS = ["books-semantic"]
 
 
 # ── Data structures ───────────────────────────────────────────────────────────
@@ -268,12 +268,33 @@ async def run_sweep(top_k: int = 5, output_path: Optional[str] = None) -> None:
             avg_rel = compute_avg_relevance_at_k(qdata, w, top_k)
             weight_results[w].append(avg_rel)
 
-    # Step 4: print summary table
-    print(f"\n{'Weight':>8}  {'Avg Relevance@' + str(top_k):>18}  {'vs weight=1.0':>14}")
-    print("-" * 46)
+    # Step 4: save results FIRST (before table printing can crash)
+    if output_path:
+        out = {
+            "top_k": top_k,
+            "queries": QUERIES,
+            "collections": HYBRID_COLLECTIONS,
+            "sparse_weights_tested": SPARSE_WEIGHTS,
+            "weight_summary": {
+                str(w): {
+                    "avg_relevance_at_k": round(sum(weight_results[w]) / len(weight_results[w]), 4),
+                    "per_query": [round(v, 4) for v in weight_results[w]],
+                }
+                for w in SPARSE_WEIGHTS
+            },
+        }
+        with open(output_path, "w") as f:
+            json.dump(out, f, indent=2)
+        logger.info(f"Results saved to {output_path}")
 
-    baseline_avg = sum(weight_results[1.0]) / len(weight_results[1.0])
+    # Step 5: print summary table
+    # Use middle weight as baseline reference
+    baseline_weight = SPARSE_WEIGHTS[len(SPARSE_WEIGHTS) // 2]
+    baseline_avg = sum(weight_results[baseline_weight]) / len(weight_results[baseline_weight])
     best_weight = max(SPARSE_WEIGHTS, key=lambda w: sum(weight_results[w]))
+
+    print(f"\n{'Weight':>8}  {'Avg Relevance@' + str(top_k):>18}  {'vs w=' + str(baseline_weight):>14}")
+    print("-" * 46)
 
     for w in SPARSE_WEIGHTS:
         avg = sum(weight_results[w]) / len(weight_results[w])
@@ -291,24 +312,11 @@ async def run_sweep(top_k: int = 5, output_path: Optional[str] = None) -> None:
         avg = compute_avg_relevance_at_k(qdata, best_weight, top_k)
         print(f"  {qdata.query[:65]:<65}  {avg:.3f}")
 
-    # Save results
+    # Update saved results with best_weight
     if output_path:
-        out = {
-            "top_k": top_k,
-            "queries": QUERIES,
-            "sparse_weights_tested": SPARSE_WEIGHTS,
-            "best_weight": best_weight,
-            "weight_summary": {
-                str(w): {
-                    "avg_relevance_at_k": round(sum(weight_results[w]) / len(weight_results[w]), 4),
-                    "per_query": [round(v, 4) for v in weight_results[w]],
-                }
-                for w in SPARSE_WEIGHTS
-            },
-        }
+        out["best_weight"] = best_weight
         with open(output_path, "w") as f:
             json.dump(out, f, indent=2)
-        logger.info(f"Results written to {output_path}")
 
 
 if __name__ == "__main__":

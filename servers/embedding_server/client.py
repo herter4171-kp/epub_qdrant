@@ -11,11 +11,18 @@ Usage:
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Dict, List
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+# Ensure .env is loaded before reading env vars
+from dotenv import load_dotenv
+_env_path = Path(__file__).parent.parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
 
 logger = logging.getLogger(__name__)
 

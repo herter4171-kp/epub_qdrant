@@ -1,0 +1,62 @@
+{
+  "top_k": 5,
+  "queries": [
+    "I want to experiment with multi-agent problem solving where agents debate, specialize, and then converge. What patterns are worth trying first?",
+    "What scaffolding do strong terminal-based coding agents use around the model itself?",
+    "What are the main failure modes of web agents in realistic browsing tasks, and how should I evaluate them?",
+    "How would you build a GUI agent that can operate a clunky enterprise web app with inconsistent layouts?",
+    "What should I measure to catch post-merge quality problems in agent-generated pull requests?"
+  ],
+  "collections": [
+    "books-semantic"
+  ],
+  "sparse_weights_tested": [
+    0.4,
+    0.8,
+    1.2,
+    1.6
+  ],
+  "weight_summary": {
+    "0.4": {
+      "avg_relevance_at_k": 1.32,
+      "per_query": [
+        1.8,
+        1.2,
+        1.6,
+        1.0,
+        1.0
+      ]
+    },
+    "0.8": {
+      "avg_relevance_at_k": 1.32,
+      "per_query": [
+        1.8,
+        1.2,
+        1.6,
+        1.0,
+        1.0
+      ]
+    },
+    "1.2": {
+      "avg_relevance_at_k": 1.4,
+      "per_query": [
+        1.6,
+        1.8,
+        1.4,
+        1.0,
+        1.2
+      ]
+    },
+    "1.6": {
+      "avg_relevance_at_k": 1.4,
+      "per_query": [
+        1.6,
+        1.8,
+        1.4,
+        1.0,
+        1.2
+      ]
+    }
+  },
+  "best_weight": 1.2
+}
