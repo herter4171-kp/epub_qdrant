@@ -176,4 +176,8 @@ python3 scripts/evaluate.py phase_2_hybrid
 ```
 
 ## "Artwork"
+### Unorigianal First Edition
 ![alt text](assets/images/textbook.png)
+
+## The Knuckle-Dragging Anthology
+![alt text](assets/images/bowiedown.png)
