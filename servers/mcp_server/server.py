@@ -187,8 +187,26 @@ TOOLS = [
                     "description": "Minimum total tokens for the expanded passage (default 4000).",
                     "default": 4000,
                 },
+                "source_file": {
+                    "type": "string",
+                    "description": "Filter seed chunk to this source_file (book-scoped sampling).",
+                },
             },
             "required": [],
+        },
+    },
+    {
+        "name": "list_books",
+        "description": "List unique books in a collection with metadata.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "collection": {
+                    "type": "string",
+                    "description": "Collection to list books from.",
+                }
+            },
+            "required": ["collection"],
         },
     },
 ]
@@ -410,6 +428,7 @@ def _handle_pick_random_chunk(args: dict) -> dict:
     collection = args.get("collection") or settings.DEFAULT_COLLECTION
     min_tokens = args.get("min_tokens", 200)
     min_total_tokens = args.get("min_total_tokens", MIN_TOTAL_TOKENS)
+    source_file = args.get("source_file")
 
     client = get_retriever()._client
 
@@ -420,6 +439,13 @@ def _handle_pick_random_chunk(args: dict) -> dict:
             range=models.Range(gte=min_tokens),
         ),
     ]
+    if source_file:
+        conditions.append(
+            models.FieldCondition(
+                key="source_file",
+                match=models.MatchValue(value=source_file),
+            )
+        )
     try:
         probe = client.scroll(
             collection_name=collection, limit=1, with_payload=True,
@@ -548,11 +574,20 @@ def _handle_pick_random_chunk(args: dict) -> dict:
     }
 
 
+def _handle_list_books(args: dict) -> dict:
+    """Handle the list_books tool call."""
+    collection = args.get("collection") or settings.DEFAULT_COLLECTION
+    storage = get_storage()
+    books = storage.list_books(collection_name=collection)
+    return {"books": books}
+
+
 HANDLERS = {
     "query": _handle_query,
     "get_context": _handle_get_context,
     "list_collections": _handle_list_collections,
     "pick_random_chunk": _handle_pick_random_chunk,
+    "list_books": _handle_list_books,
 }
 
 
@@ -843,4 +878,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()M
+    main()

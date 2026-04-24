@@ -331,4 +331,7 @@ class Storage:
                 break
             offset = next_offset
 
-        return list(books_map.values())
+        return [
+            {**entry, "source_file": sf}
+            for sf, entry in books_map.items()
+        ]
