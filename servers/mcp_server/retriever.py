@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Default sparse weight for RRF fusion (tuned via sweep_sparse_weight.py)
 DEFAULT_SPARSE_WEIGHT = 1.2
+DEFAULT_DENSE_WEIGHT = 1.0
 
 # Common section-title variants that should be normalized or signal fallback.
 # Maps lowercase canonical names → a normalized form; None means "skip, use semantic".
@@ -97,6 +98,7 @@ class ChunkResult:
     authors: Optional[list] = None
     year: Optional[int] = None
     vector: Optional[List[float]] = None
+    point_id: Optional[str] = None
 
 
 @dataclass
@@ -177,6 +179,7 @@ class Retriever:
         collection: Optional[str] = None,
         filter_by: Optional[Dict[str, str]] = None,
         sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
+        dense_weight: float = DEFAULT_DENSE_WEIGHT,
     ) -> EvidenceBundle:
         """Search and group results within a single collection.
 
@@ -196,7 +199,7 @@ class Retriever:
 
         # Use hybrid search if collection has sparse vectors
         if self._has_sparse_vectors(col):
-            raw_hybrid = self.hybrid_search(query, col, top_k=top_k, filter_by=filter_by, sparse_weight=sparse_weight)
+            raw_hybrid = self.hybrid_search(query, col, top_k=top_k, filter_by=filter_by, sparse_weight=sparse_weight, dense_weight=dense_weight)
             # hybrid_search returns List[ChunkResult] — wrap in EvidenceBundle
             sources = self._build_bibliography(raw_hybrid)
             groups = self._group_results(raw_hybrid, group_by)
@@ -268,6 +271,7 @@ class Retriever:
         top_k: int = 20,
         filter_by: Optional[Dict[str, str]] = None,
         sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
+        dense_weight: float = DEFAULT_DENSE_WEIGHT,
     ) -> List[ChunkResult]:
         """Search with dense + sparse vectors, fuse via Reciprocal Rank Fusion.
 
@@ -281,6 +285,8 @@ class Retriever:
             filter_by: Optional metadata pre-filter.
             sparse_weight: Multiplier for sparse vector in RRF fusion (defaults to DEFAULT_SPARSE_WEIGHT).
                 Set to 0 for dense-only, increase to give sparse more weight.
+            dense_weight: Multiplier for dense vector in RRF fusion (defaults to DEFAULT_DENSE_WEIGHT).
+                Set to 0 for sparse-only.
 
         Returns:
             List of ChunkResult sorted by RRF score.
@@ -330,7 +336,7 @@ class Retriever:
         k_rrf = 60
 
         for rank, hit in enumerate(dense_hits.points):
-            rrf_scores[hit.id] += 1.0 / (k_rrf + rank + 1)
+            rrf_scores[hit.id] += dense_weight * (1.0 / (k_rrf + rank + 1))
         for rank, hit in enumerate(sparse_hits.points):
             rrf_scores[hit.id] += sparse_weight * (1.0 / (k_rrf + rank + 1))
 
@@ -344,10 +350,10 @@ class Retriever:
         sorted_ids = sorted(rrf_scores.keys(), key=lambda x: -rrf_scores[x])[:top_k]
 
         results = []
-        for point_id in sorted_ids:
-            point = id_to_point[point_id]
+        for pid in sorted_ids:
+            point = id_to_point[pid]
             results.append(ChunkResult(
-                score=rrf_scores[point_id],
+                score=rrf_scores[pid],
                 text=point.payload.get("text", ""),
                 source_file=point.payload.get("source_file", ""),
                 title=point.payload.get("title", "") or point.payload.get("book_title", "") or point.payload.get("section_title", ""),
@@ -368,6 +374,7 @@ class Retriever:
                 publish_date=point.payload.get("publish_date"),
                 authors=point.payload.get("authors"),
                 year=point.payload.get("year"),
+                point_id=str(point.id),
             ))
 
         return results
@@ -380,6 +387,7 @@ class Retriever:
         collections: Optional[List[str]] = None,
         filter_by: Optional[Dict[str, str]] = None,
         sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
+        dense_weight: float = DEFAULT_DENSE_WEIGHT,
     ) -> EvidenceBundle:
         """Search across ALL configured collections with hybrid (dense+sparse) search.
 
@@ -422,7 +430,7 @@ class Retriever:
                 has_sparse = self._has_sparse_vectors(col)
                 if has_sparse:
                     # Hybrid search with RRF fusion
-                    raw = self.hybrid_search(query, col, top_k=top_k * 2, filter_by=filter_by, sparse_weight=sparse_weight)
+                    raw = self.hybrid_search(query, col, top_k=top_k * 2, filter_by=filter_by, sparse_weight=sparse_weight, dense_weight=dense_weight)
                 elif filter_by:
                     raw = self._storage.search_with_filter(col, query, top_k=top_k, filter_by=filter_by)
                 else:

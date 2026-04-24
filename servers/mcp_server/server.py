@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from src.storage import Storage
 from servers.mcp_server.config import settings
-from servers.mcp_server.retriever import Retriever, DEFAULT_SPARSE_WEIGHT
+from servers.mcp_server.retriever import Retriever, DEFAULT_SPARSE_WEIGHT, DEFAULT_DENSE_WEIGHT
 from servers.mcp_server.llm_client import LLMClient
 
 logging.basicConfig(
@@ -109,6 +109,11 @@ TOOLS = [
                     "type": "number",
                     "description": f"Multiplier for sparse vector in hybrid RRF fusion (default {DEFAULT_SPARSE_WEIGHT}, set 0 for dense-only).",
                     "default": DEFAULT_SPARSE_WEIGHT,
+                },
+                "dense_weight": {
+                    "type": "number",
+                    "description": f"Multiplier for dense vector in hybrid RRF fusion (default {DEFAULT_DENSE_WEIGHT}, set 0 for sparse-only).",
+                    "default": DEFAULT_DENSE_WEIGHT,
                 },
             },
             "required": ["query"],
@@ -227,25 +232,28 @@ def _parse_filter(filter_str: Optional[str]) -> Optional[Dict[str, str]]:
 def _run_search(query: str, top_k: int, group_by: str,
                 collection: Optional[str], collections_str: Optional[str],
                 filter_by: Optional[Dict[str, str]], retriever: Retriever,
-                sparse_weight: float = DEFAULT_SPARSE_WEIGHT):
+                sparse_weight: float = DEFAULT_SPARSE_WEIGHT,
+                dense_weight: float = DEFAULT_DENSE_WEIGHT):
     """Run the shared search logic and return an EvidenceBundle."""
     if collections_str:
         col_list = [c.strip() for c in collections_str.split(",") if c.strip()]
         return retriever.search_collections(
             query=query, top_k=top_k, group_by=group_by,
             collections=col_list, filter_by=filter_by, sparse_weight=sparse_weight,
+            dense_weight=dense_weight,
         )
     elif collection:
         return retriever.search(
             query=query, top_k=top_k, group_by=group_by,
             collection=collection, filter_by=filter_by,
-            sparse_weight=sparse_weight,
+            sparse_weight=sparse_weight, dense_weight=dense_weight,
         )
     else:
         if settings.has_collections and len(settings.collections) > 1:
             return retriever.search_collections(
                 query=query, top_k=top_k, group_by=group_by,
                 filter_by=filter_by, sparse_weight=sparse_weight,
+                dense_weight=dense_weight,
             )
         else:
             return retriever.search(
@@ -282,6 +290,7 @@ def _build_groups_output(bundle) -> list:
                     "section_title": r.section_title,
                     "authors": r.authors if hasattr(r, "authors") else None,
                     "year": r.year if hasattr(r, "year") else None,
+                    "point_id": str(r.point_id) if r.point_id else None,
                 }
                 for r in g.results
             ],
@@ -315,9 +324,10 @@ def _handle_query(args: dict) -> dict:
     collections_str = args.get("collections")
     filter_by = _parse_filter(args.get("filter_by"))
     sparse_weight = args.get("sparse_weight", DEFAULT_SPARSE_WEIGHT)
+    dense_weight = args.get("dense_weight", DEFAULT_DENSE_WEIGHT)
 
     retriever = get_retriever()
-    bundle = _run_search(query, top_k, group_by, collection, collections_str, filter_by, retriever, sparse_weight)
+    bundle = _run_search(query, top_k, group_by, collection, collections_str, filter_by, retriever, sparse_weight, dense_weight)
 
     if mode == "answer":
         return _handle_query_answer(query, bundle)
@@ -701,9 +711,10 @@ def _run_async_handler(worker_args: dict) -> dict:
         collections_str = args.get("collections")
         filter_by = _parse_filter(args.get("filter_by"))
         sparse_weight = args.get("sparse_weight", DEFAULT_SPARSE_WEIGHT)
+        dense_weight = args.get("dense_weight", DEFAULT_DENSE_WEIGHT)
 
         retriever = get_retriever()
-        bundle = _run_search(query, top_k, group_by, collection, collections_str, filter_by, retriever, sparse_weight)
+        bundle = _run_search(query, top_k, group_by, collection, collections_str, filter_by, retriever, sparse_weight, dense_weight)
 
         if mode == "answer":
             return asyncio.run(_handle_query_answer(query, bundle))

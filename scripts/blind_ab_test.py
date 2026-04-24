@@ -27,10 +27,10 @@ from servers.mcp_server.config import settings
 
 # ─── Constants ───────────────────────────────────────────────────────
 
-SCRIPT_VERSION = "1.0.0"
+SCRIPT_VERSION = "3.0.0"
 MCP_URL = f"http://localhost:{settings.MCP_PORT}/mcp"
 LITELLM_URL = settings.LITELLM_API_URL
-LITELLM_KEY = settings.LITELLM_API_KEY
+LITELLM_KEY = settings.LITELLM_API_KEY or os.environ.get("LITELLM_API_KEY", "")
 
 # Per-role model/temperature
 QUERY_MODEL = settings.LITELLM_MODEL
@@ -44,6 +44,10 @@ SOURCE_EXCERPT_LEN = 500
 ANSWER_EXCERPT_LEN = 200
 MCP_TIMEOUT = 120
 LLM_TIMEOUT = 120
+
+# v3 CLI defaults
+DEFAULT_DENSE_K = 5
+DEFAULT_SPARSE_K = 5
 
 
 # ─── ANSI Color Helpers ──────────────────────────────────────────────
@@ -131,31 +135,88 @@ def llm_call(system, user, model=None, temperature=None):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Blind A/B test: dense-only vs hybrid retrieval."
+        description="Fused retrieval with LLM-based reranking (v3.0.0)."
     )
-    parser.add_argument("dense_collection", help="Qdrant collection for dense-only retrieval")
-    parser.add_argument("hybrid_collection", help="Qdrant collection for hybrid retrieval")
+    parser.add_argument("collection", help="Qdrant hybrid collection (has both dense + sparse vectors)")
     parser.add_argument(
-        "--positions", type=int, default=1, help="Random samples per book (default: 1)"
+        "--dense-k", type=int, default=DEFAULT_DENSE_K,
+        help=f"Top-k for dense signal retrieval (default: {DEFAULT_DENSE_K})"
     )
     parser.add_argument(
-        "--output",
-        default="results/blind_ab_test.json",
-        help="Output JSON path (default: results/blind_ab_test.json)",
+        "--sparse-k", type=int, default=DEFAULT_SPARSE_K,
+        help=f"Top-k for sparse signal retrieval (default: {DEFAULT_SPARSE_K})"
+    )
+    parser.add_argument(
+        "--positions", type=int, default=1,
+        help="Random samples per book (default: 1)"
+    )
+    parser.add_argument(
+        "--output", default="results/blind_ab_test.json",
+        help="Output JSON path (default: results/blind_ab_test.json)"
     )
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument(
-        "--top-k", type=int, default=None, help="Top-k for retrieval (default: MCP default)"
-    )
     return parser.parse_args(argv)
 
 
-# ─── System Prompts (verbatim from requirements) ────────────────────
+# ─── Query Type Bucketing ────────────────────────────────────────────
+
+QUERY_TYPE_BUCKETS = {
+    "numeric_fact_lookup": "trivia",
+    "named_entity_lookup": "trivia",
+    "conceptual_explanation": "conceptual",
+    "comparison_tradeoff": "conceptual",
+    "paper_or_method_discovery": "conceptual",
+    "implementation_guidance": "operational",
+    "architecture_design": "operational",
+    "failure_mode_debugging": "operational",
+    "evaluation_method": "operational",
+    "security_or_governance": "operational",
+    "operational_monitoring": "operational",
+}
+
+
+# ─── System Prompts ─────────────────────────────────────────────────
 
 QUERY_SYSTEM_PROMPT = (
-    "You are given a passage from a technical document. Write one specific "
-    "retrieval question that this passage answers. Output only the question, "
-    "nothing else."
+    "You are generating realistic retrieval queries for a working professional "
+    "using a private knowledge base about AI, machine learning, LLMs, RAG, and "
+    "agentic AI.\n\n"
+    "Given a source passage, write one natural question that an engineer, "
+    "researcher, architect, security lead, product owner, or technical "
+    "decision-maker might actually ask because they need to make a design, "
+    "implementation, evaluation, purchasing, security, research, or operational "
+    "decision.\n\n"
+    "Do not write quiz questions.\n"
+    "Do not say \"according to the passage.\"\n"
+    "Do not mention \"the passage\", \"the text\", \"the excerpt\", or \"the source.\"\n"
+    "Do not ask arbitrary trivia questions.\n"
+    "Do not ask for a percentage, list, definition, named component, or fact "
+    "unless that fact would matter for a real work task.\n\n"
+    "Prefer questions about how to build, choose, debug, evaluate, compare, "
+    "secure, deploy, monitor, govern, or operationalize something.\n\n"
+    "The question must be answerable from the source passage, but it should "
+    "sound like it came from someone trying to do real work.\n\n"
+    "Return JSON only in this format:\n"
+    "{\n"
+    '  "query": "one realistic work question",\n'
+    '  "query_type": "one of the allowed query types",\n'
+    '  "why_this_is_realistic": "one short sentence explaining the work context"\n'
+    "}\n\n"
+    "Allowed query types:\n"
+    "- conceptual_explanation\n"
+    "- implementation_guidance\n"
+    "- architecture_design\n"
+    "- comparison_tradeoff\n"
+    "- failure_mode_debugging\n"
+    "- evaluation_method\n"
+    "- security_or_governance\n"
+    "- operational_monitoring\n"
+    "- named_entity_lookup\n"
+    "- numeric_fact_lookup\n"
+    "- paper_or_method_discovery\n\n"
+    "Use named_entity_lookup or numeric_fact_lookup only when the name, exact "
+    "value, API, model, framework, benchmark, or statistic would realistically "
+    "matter to a worker's decision."
 )
 
 ANSWER_SYSTEM_PROMPT = (
@@ -200,34 +261,17 @@ EMPTY_RETRIEVAL_MSG = (
 # ─── Core Functions ──────────────────────────────────────────────────
 
 
-def discover_books(dense, hybrid):
-    """Discover books common to both collections. Returns list of book dicts."""
-    # Verify collections exist
+def discover_books(collection):
+    """Discover books in a single collection. Returns list of book dicts."""
     collections_resp = mcp_call("list_collections", {})
     collections_list = collections_resp.get("collections", [])
     existing = {c["name"] if isinstance(c, dict) else c for c in collections_list}
-    for coll in (dense, hybrid):
-        if coll not in existing:
-            print(f"ERROR: Collection '{coll}' not found. Available: {existing}", file=sys.stderr)
-            sys.exit(1)
+    if collection not in existing:
+        print(f"ERROR: Collection '{collection}' not found. Available: {existing}", file=sys.stderr)
+        sys.exit(1)
 
-    # Get books per collection
-    dense_books = mcp_call("list_books", {"collection": dense}).get("books", [])
-    hybrid_books = mcp_call("list_books", {"collection": hybrid}).get("books", [])
-
-    dense_by_sf = {b["source_file"]: b for b in dense_books}
-    hybrid_by_sf = {b["source_file"]: b for b in hybrid_books}
-
-    # Intersect by source_file
-    common_sfs = set(dense_by_sf.keys()) & set(hybrid_by_sf.keys())
-
-    # Warn about skipped books
-    for sf in set(dense_by_sf.keys()) - common_sfs:
-        print(f"  WARN: '{sf}' in dense only, skipping", file=sys.stderr)
-    for sf in set(hybrid_by_sf.keys()) - common_sfs:
-        print(f"  WARN: '{sf}' in hybrid only, skipping", file=sys.stderr)
-
-    return [dense_by_sf[sf] for sf in sorted(common_sfs)]
+    books = mcp_call("list_books", {"collection": collection}).get("books", [])
+    return books
 
 
 def intersect_books(dense_books, hybrid_books):
@@ -256,23 +300,51 @@ def pick_passage(collection, source_file):
 
 
 def generate_query(passage_text):
-    """Generate retrieval query from passage. Returns (query, raw) or (None, None)."""
+    """Generate retrieval query from passage. Returns dict with query, query_type, etc."""
     try:
-        raw = llm_call(QUERY_SYSTEM_PROMPT, passage_text,
+        user_msg = f"SOURCE PASSAGE:\n{passage_text}\n\nGenerate one realistic work query from this passage.\n\nReturn JSON only."
+        raw = llm_call(QUERY_SYSTEM_PROMPT, user_msg,
                        model=QUERY_MODEL, temperature=QUERY_TEMPERATURE)
-        query = raw.strip().strip('"')
-        return query, raw
+        # Try JSON parse
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+        try:
+            parsed = json.loads(text)
+            query = parsed.get("query", "").strip()
+            query_type = parsed.get("query_type", "unknown")
+            why = parsed.get("why_this_is_realistic", "")
+        except (json.JSONDecodeError, TypeError):
+            # Fallback: first non-empty line as query
+            query = text.split("\n")[0].strip().strip('"')
+            query_type = "unknown"
+            why = "query_generation_parse_error"
+        if not query:
+            return None
+        bucket = QUERY_TYPE_BUCKETS.get(query_type, "operational")
+        return {
+            "query": query,
+            "query_type": query_type,
+            "query_bucket": bucket,
+            "why_this_is_realistic": why,
+            "query_generation_raw": raw,
+        }
     except Exception as e:
         print(f"  generate_query exception: {e}", file=sys.stderr)
-        return None, None
+        return None
 
 
-def retrieve(collection, query, sparse_weight=None, top_k=None):
+def retrieve(collection, query, sparse_weight=None, dense_weight=None, top_k=None):
     """Query MCP in search mode. Returns result dict or None."""
     try:
         call_args = {"mode": "search", "collection": collection, "query": query}
         if sparse_weight is not None:
             call_args["sparse_weight"] = sparse_weight
+        if dense_weight is not None:
+            call_args["dense_weight"] = dense_weight
         if top_k is not None:
             call_args["top_k"] = top_k
         return mcp_call("query", call_args)
@@ -298,6 +370,332 @@ def _has_chunks(results):
         if group.get("chunks"):
             return True
     return False
+
+
+# ─── v3 Pure Functions ───────────────────────────────────────────────
+
+
+def _flatten_with_rank(results):
+    """Flatten MCP grouped results into ranked chunk list.
+
+    Sorts by score descending, assigns 1-based ranks, excludes empty-text chunks.
+    Deduplicates by point_id (keeps highest score).
+    """
+    chunks = []
+    for group in results.get("groups", []):
+        for chunk in group.get("chunks", []):
+            if chunk.get("text") and chunk.get("point_id"):
+                chunks.append(dict(chunk))  # shallow copy to avoid mutating input
+    chunks.sort(key=lambda c: c.get("score", 0), reverse=True)
+    # Deduplicate by point_id — first occurrence wins (highest score)
+    seen = set()
+    deduped = []
+    for c in chunks:
+        pid = c["point_id"]
+        if pid not in seen:
+            seen.add(pid)
+            deduped.append(c)
+    for i, c in enumerate(deduped):
+        c["rank"] = i + 1
+    return deduped
+
+
+def dedup_and_normalize(dense_results, sparse_results):
+    """Merge dense and sparse results into deduplicated, normalized candidate set.
+
+    1. Flatten chunks from both result sets
+    2. Set-union by point_id — duplicates marked as "both" signal
+    3. Min-max normalize scores within each signal to [0,1]
+    4. Return unified candidate list with signal labels and normalized scores
+    """
+    dense_chunks = _flatten_with_rank(dense_results)
+    sparse_chunks = _flatten_with_rank(sparse_results)
+
+    # Min-max normalize scores within each signal
+    dense_scores = [c["score"] for c in dense_chunks]
+    sparse_scores = [c["score"] for c in sparse_chunks]
+    d_min, d_max = (min(dense_scores), max(dense_scores)) if dense_scores else (0, 0)
+    s_min, s_max = (min(sparse_scores), max(sparse_scores)) if sparse_scores else (0, 0)
+
+    def norm(val, lo, hi):
+        if hi == lo:
+            return 1.0
+        return (val - lo) / (hi - lo)
+
+    # Build candidate map by point_id (set-union)
+    candidates = {}
+
+    for c in dense_chunks:
+        pid = c.get("point_id")
+        if not pid:
+            continue
+        candidates[pid] = {
+            "point_id": pid,
+            "text": c["text"],
+            "source_file": c.get("source_file", ""),
+            "title": c.get("title", ""),
+            "section_title": c.get("section_title", ""),
+            "chunk_index": c.get("chunk_index"),
+            "signal": "dense",
+            "dense_score": c["score"],
+            "sparse_score": None,
+            "dense_rank": c["rank"],
+            "sparse_rank": None,
+            "dense_score_norm": norm(c["score"], d_min, d_max),
+            "sparse_score_norm": None,
+        }
+
+    for c in sparse_chunks:
+        pid = c.get("point_id")
+        if not pid:
+            continue
+        if pid in candidates:
+            candidates[pid]["signal"] = "both"
+            candidates[pid]["sparse_score"] = c["score"]
+            candidates[pid]["sparse_rank"] = c["rank"]
+            candidates[pid]["sparse_score_norm"] = norm(c["score"], s_min, s_max)
+        else:
+            candidates[pid] = {
+                "point_id": pid,
+                "text": c["text"],
+                "source_file": c.get("source_file", ""),
+                "title": c.get("title", ""),
+                "section_title": c.get("section_title", ""),
+                "chunk_index": c.get("chunk_index"),
+                "signal": "sparse",
+                "dense_score": None,
+                "sparse_score": c["score"],
+                "dense_rank": None,
+                "sparse_rank": c["rank"],
+                "dense_score_norm": None,
+                "sparse_score_norm": norm(c["score"], s_min, s_max),
+            }
+
+    return list(candidates.values())
+
+
+def _u_shape_order(passages):
+    """Reorder passages in U-shape: top half first, bottom half reversed.
+
+    Mitigates lost-in-the-middle by placing most relevant passages at beginning
+    and end of context where LLM attention is strongest.
+
+    Input:  [1, 2, 3, 4, 5, 6, 7, 8]  (ranked by relevance)
+    Output: [1, 2, 3, 4, 8, 7, 6, 5]  (U-shape)
+    """
+    n = len(passages)
+    if n <= 2:
+        return passages
+    mid = (n + 1) // 2  # ceil(n/2)
+    return passages[:mid] + passages[mid:][::-1]
+
+
+def _strip_markdown_fences(text):
+    """Strip markdown code fences from LLM response."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    return text
+
+
+def _parse_reranker_response(raw, n):
+    """Parse reranker JSON response. Returns list of valid indices.
+
+    Graceful degradation: if parsing fails or indices are invalid,
+    returns range(n) (original order).
+    """
+    text = _strip_markdown_fences(raw)
+
+    try:
+        parsed = json.loads(text)
+        indices = parsed.get("ranked_indices", [])
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return list(range(n))
+
+    # Validate: keep only ints in [0, n), deduplicate
+    seen = set()
+    deduped = []
+    for i in indices:
+        if isinstance(i, int) and 0 <= i < n and i not in seen:
+            deduped.append(i)
+            seen.add(i)
+
+    # Append missing indices at end
+    for i in range(n):
+        if i not in seen:
+            deduped.append(i)
+
+    return deduped
+
+
+def _parse_judge_response_v3(raw):
+    """Parse judge JSON. Returns {score, reason, judge_raw}.
+
+    Graceful degradation: score=2, reason="judge_error" on parse failure.
+    """
+    text = _strip_markdown_fences(raw)
+
+    try:
+        parsed = json.loads(text)
+        score = parsed.get("score", 2)
+        if score not in (1, 2, 3):
+            score = 2
+        return {
+            "score": score,
+            "reason": parsed.get("reason", ""),
+            "judge_raw": raw,
+        }
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return {"score": 2, "reason": "judge_error", "judge_raw": raw}
+
+
+# ─── v3 LLM-Calling Functions ───────────────────────────────────────
+
+RERANKER_MODEL = settings.LITELLM_MODEL
+RERANKER_TEMPERATURE = 0.0
+
+RERANKER_SYSTEM_PROMPT = (
+    "You are a relevance reranker for a technical knowledge base. You will receive\n"
+    "a query and a set of candidate passages, each labeled with how it was found\n"
+    "(semantic search, keyword search, or both).\n\n"
+    "Your task is to reorder the passages by relevance to the query based on their\n"
+    "content. Read each passage carefully and reason about which ones best answer\n"
+    "the query. Consider:\n"
+    "- Passages found by BOTH signals are likely highly relevant\n"
+    "- For factual/entity queries, keyword-matched passages may be more precise\n"
+    "- For conceptual queries, semantic-matched passages may capture better context\n"
+    "- Judge relevance by passage content, not by position in this list\n\n"
+    'Return a JSON array of passage indices in relevance order, most relevant first:\n'
+    '{"ranked_indices": [3, 1, 5, 2, 4, ...]}'
+)
+
+SIGNAL_LABELS = {
+    "dense": "semantic",
+    "sparse": "keyword",
+    "both": "both (semantic + keyword)",
+}
+
+ANSWER_SYSTEM_PROMPT_V3 = (
+    "You are a precise technical research assistant. You are given a question\n"
+    "and a set of retrieved passages from a knowledge base of AI and machine\n"
+    "learning literature.\n\n"
+    "Answer the question by synthesizing from the passages. Be specific — name\n"
+    "mechanisms, frameworks, and tradeoffs that appear in the passages rather\n"
+    "than speaking in generalities. If the passages do not contain enough\n"
+    "information to answer the question, say so explicitly rather than filling\n"
+    "gaps with your own knowledge. Do not pad your answer with caveats,\n"
+    "introductions, or summaries. Write for an engineer who wants the answer,\n"
+    "not an explanation of how you found it."
+)
+
+JUDGE_SYSTEM_PROMPT_V3 = (
+    "You are an impartial evaluator of retrieval quality. You will be given a\n"
+    "source passage, a question generated from that passage, the retrieved passages\n"
+    "used to answer it, and an answer.\n\n"
+    "Your job is to score the answer for faithfulness to the source passage and\n"
+    "the retrieved material on a scale of 1-3:\n\n"
+    "1 = Unfaithful: introduces facts not in the source or retrieved passages,\n"
+    "    or contradicts them\n"
+    "2 = Partially faithful: mostly grounded but includes at least one unsupported claim\n"
+    "3 = Faithful: every claim is supported by the source passage or retrieved passages\n\n"
+    "Respond with JSON only:\n"
+    '{"score": 1|2|3, "reason": "one sentence"}'
+)
+
+
+def rerank(query, candidates):
+    """LLM-based listwise reranking of unified candidate set.
+
+    Returns (reordered_candidates, raw_llm_response).
+    """
+    if not candidates:
+        return [], ""
+
+    passage_lines = []
+    for i, c in enumerate(candidates):
+        label = SIGNAL_LABELS.get(c["signal"], c["signal"])
+        passage_lines.append(
+            f"[{i}] Signal: {label}\n"
+            f"    {c['text'][:500]}"
+        )
+
+    user_msg = (
+        f"QUERY: {query}\n\n"
+        f"CANDIDATE PASSAGES:\n\n"
+        + "\n\n".join(passage_lines)
+        + "\n\nReturn the passage indices in relevance order as JSON."
+    )
+
+    try:
+        raw = llm_call(RERANKER_SYSTEM_PROMPT, user_msg,
+                       model=RERANKER_MODEL, temperature=RERANKER_TEMPERATURE)
+        ranked_indices = _parse_reranker_response(raw, len(candidates))
+        reranked = [candidates[i] for i in ranked_indices]
+        return reranked, raw
+    except Exception as e:
+        print(f"  rerank exception: {e}", file=sys.stderr)
+        return candidates, str(e)
+
+
+def generate_fused_answer(query, reranked_passages):
+    """Generate answer from reranked passages. Returns answer string or None."""
+    if not reranked_passages:
+        user_msg = f"Question: {query}\n\n{EMPTY_RETRIEVAL_MSG}"
+    else:
+        ordered = _u_shape_order(reranked_passages)
+        passage_lines = []
+        for i, c in enumerate(ordered):
+            source = c.get("title") or c.get("source_file", "unknown")
+            passage_lines.append(f"[{i + 1}] {source}: {c['text']}")
+        passages_block = "\n\n".join(passage_lines)
+        user_msg = (
+            f"QUESTION:\n{query}\n\n"
+            f"RETRIEVED PASSAGES:\n{passages_block}\n\n"
+            "Answer the question using these passages."
+        )
+
+    try:
+        return llm_call(ANSWER_SYSTEM_PROMPT_V3, user_msg,
+                        model=ANSWER_MODEL, temperature=ANSWER_TEMPERATURE)
+    except Exception as e:
+        print(f"  generate_fused_answer exception: {e}", file=sys.stderr)
+        return None
+
+
+def judge_faithfulness(source_passage, query, retrieved_passages, answer):
+    """Score answer faithfulness on 1-3 scale.
+
+    Returns {score, reason, judge_raw}.
+    """
+    passages_text = "\n\n---\n\n".join(
+        c.get("text", "") for c in retrieved_passages
+    ) if retrieved_passages else "(no passages retrieved)"
+
+    user_msg = (
+        f"Source passage:\n{source_passage}\n\n"
+        f"Question:\n{query}\n\n"
+        f"Retrieved passages:\n{passages_text}\n\n"
+        f"Answer:\n{answer}"
+    )
+
+    try:
+        raw = llm_call(JUDGE_SYSTEM_PROMPT_V3, user_msg,
+                       model=JUDGE_MODEL, temperature=JUDGE_TEMPERATURE)
+        return _parse_judge_response_v3(raw)
+    except Exception as e:
+        print(f"  judge_faithfulness exception: {e}", file=sys.stderr)
+        return {"score": 2, "reason": "judge_error", "judge_raw": str(e)}
+
+
+# ─── v2 Functions (kept for backward compat until Phase 5) ──────────
+
+
+def discover_books_v2(dense, hybrid):
+    """v2: Discover books common to both collections."""
+    pass  # kept for reference only
 
 
 def generate_answer(query, retrieved_results):
@@ -348,7 +746,30 @@ def parse_judge_response(raw):
 
 
 def judge(source_passage, query, results_a, results_b, answer_a, answer_b):
-    """Judge two answers for faithfulness. Returns dict with winner, reason, judge_raw."""
+    """Judge two answers for faithfulness. Returns dict with winner, reason, judge_raw.
+
+    Applies verbosity normalization: both answers are truncated to
+    min(len(a), len(b)) * 1.2 characters before judging, so the judge
+    cannot reward length differences.
+    """
+    # Verbosity bias mitigation: truncate both answers to min length * 1.2
+    # so the judge cannot reward length differences.
+    #
+    # Basis:
+    #   - Commey, "When 'Better' Prompts Hurt", Texas A&M University
+    #     (arXiv:2601.22025) — documents 10-20% verbosity bias magnitude
+    #     and recommends truncating to shorter answer + 20%.
+    #   - Shi et al., "Deep Research: A Systematic Survey", Shandong University
+    #     (arXiv:2512.02038) — confirms LLM judges "prefer longer responses,
+    #     be affected by answer ordering, reward particular writing styles."
+    #   - Anwar et al., "Foundational Challenges in Assuring Alignment and
+    #     Safety of Large Language Models", University of Cambridge
+    #     (arXiv:2404.09932) — documents "preference for verbose and longer
+    #     answers" as a systematic cognitive bias in LLM-based evaluation.
+    max_chars = int(min(len(answer_a), len(answer_b)) * 1.2)
+    answer_a_trimmed = answer_a[:max_chars]
+    answer_b_trimmed = answer_b[:max_chars]
+
     passages_a = "\n\n".join(_extract_passages(results_a)) if results_a else "(no passages)"
     passages_b = "\n\n".join(_extract_passages(results_b)) if results_b else "(no passages)"
 
@@ -357,8 +778,8 @@ def judge(source_passage, query, results_a, results_b, answer_a, answer_b):
         f"Question:\n{query}\n\n"
         f"Retrieved passages for A:\n{passages_a}\n\n"
         f"Retrieved passages for B:\n{passages_b}\n\n"
-        f"Answer A:\n{answer_a}\n\n"
-        f"Answer B:\n{answer_b}"
+        f"Answer A:\n{answer_a_trimmed}\n\n"
+        f"Answer B:\n{answer_b_trimmed}"
     )
 
     try:
@@ -422,53 +843,85 @@ def map_verdict(winner_ab, a_src, b_src):
 
 
 def print_sample(sample):
-    """Colorized per-sample terminal output."""
-    winner = sample.get("winner", "tie")
-    print(f"\n  {bold(sample.get('book_title', '?'))}")
-    print(f"  {dim(sample['source_passage_excerpt'][:200])}")
-    print(f"  Query: {sample['query']}")
-    print(f"  Dense answer:  {dim(sample['dense_answer'][:ANSWER_EXCERPT_LEN])}")
-    print(f"  Hybrid answer: {dim(sample['hybrid_answer'][:ANSWER_EXCERPT_LEN])}")
+    """Colorized per-sample terminal output for v3."""
+    score = sample.get("judge_score", 0)
+    score_color = green if score == 3 else (yellow if score == 2 else red)
 
-    if winner == "dense":
-        label = f"{green('DENSE wins')} — {sample.get('reason', '')}"
-    elif winner == "hybrid":
-        label = f"{green('HYBRID wins')} — {sample.get('reason', '')}"
-    else:
-        label = f"{yellow('TIE')} — {sample.get('reason', '')}"
-    print(f"  Verdict: {label}")
-
-    if sample.get("zero_chunk_retrieval"):
-        print(f"  {yellow('(zero-chunk retrieval)')}")
+    print(f"\n  {bold(sample.get('book', '?'))}")
+    print(f"  {dim(sample.get('source_passage_excerpt', '')[:200])}")
+    print(f"  Query: {sample['query']}  [{sample.get('query_bucket', '?')}]")
+    print(f"  Fused answer: {dim(str(sample.get('fused_answer', ''))[:ANSWER_EXCERPT_LEN])}")
+    print(f"  Judge: {score_color(f'score={score}')} — {sample.get('judge_reason', '')}")
 
 
 def compute_aggregates(samples):
-    """Compute hit counts/rates from samples list."""
+    """Compute score-based aggregates for v3 fused retrieval."""
     total = len(samples)
+    scores = [s["judge_score"] for s in samples]
+    avg_score = sum(scores) / total if total else 0.0
+
     dense_hits = sum(1 for s in samples if s.get("dense_source_hit_rank") is not None)
-    hybrid_hits = sum(1 for s in samples if s.get("hybrid_source_hit_rank") is not None)
+    sparse_hits = sum(1 for s in samples if s.get("sparse_source_hit_rank") is not None)
+
+    dedup_sizes = [s.get("dedup_set_size", 0) for s in samples]
+    both_counts = [s.get("both_signal_count", 0) for s in samples]
+
+    bucket_summary = {}
+    for bucket_name in ("trivia", "conceptual", "operational"):
+        bucket_samples = [s for s in samples if s.get("query_bucket") == bucket_name]
+        bucket_scores = [s["judge_score"] for s in bucket_samples]
+        bucket_summary[bucket_name] = {
+            "avg_score": sum(bucket_scores) / len(bucket_scores) if bucket_scores else 0.0,
+            "samples": len(bucket_samples),
+            "score_distribution": {
+                1: sum(1 for sc in bucket_scores if sc == 1),
+                2: sum(1 for sc in bucket_scores if sc == 2),
+                3: sum(1 for sc in bucket_scores if sc == 3),
+            },
+        }
+
     return {
+        "avg_judge_score": round(avg_score, 2),
         "dense_hit_count": dense_hits,
-        "hybrid_hit_count": hybrid_hits,
-        "dense_hit_rate": dense_hits / total if total else 0.0,
-        "hybrid_hit_rate": hybrid_hits / total if total else 0.0,
+        "sparse_hit_count": sparse_hits,
+        "dense_hit_rate": round(dense_hits / total, 3) if total else 0.0,
+        "sparse_hit_rate": round(sparse_hits / total, 3) if total else 0.0,
+        "avg_dedup_set_size": round(sum(dedup_sizes) / total, 1) if total else 0.0,
+        "avg_both_signal_count": round(sum(both_counts) / total, 1) if total else 0.0,
+        "bucket_summary": bucket_summary,
     }
 
 
 def print_summary(metadata):
-    """Print final summary line."""
-    print(f"\n{'=' * 60}")
-    print(f"  Total: {metadata['total_samples']}  "
-          f"Dense: {green(metadata['dense_wins'])}  "
-          f"Hybrid: {green(metadata['hybrid_wins'])}  "
-          f"Ties: {yellow(metadata['ties'])}")
-    print(f"  Dense hit rate: {metadata['dense_hit_rate']:.1%}  "
-          f"Hybrid hit rate: {metadata['hybrid_hit_rate']:.1%}")
-    if metadata.get("judge_error_count"):
-        print(f"  Judge errors: {red(metadata['judge_error_count'])}")
-    if metadata.get("zero_chunk_count"):
-        print(f"  Zero-chunk samples: {yellow(metadata['zero_chunk_count'])}")
-    print(f"{'=' * 60}")
+    """Print v3 score distribution table."""
+    bucket_summary = metadata.get("bucket_summary", {})
+
+    print(f"\n{'=' * 70}")
+    print(f"  {'':20s} {'score=1':>8s}  {'score=2':>8s}  {'score=3':>8s}  {'avg':>6s}  {'samples':>7s}")
+    print(f"  {'─' * 60}")
+    for bucket_name in ("trivia", "conceptual", "operational"):
+        b = bucket_summary.get(bucket_name, {})
+        dist = b.get("score_distribution", {})
+        s1, s2, s3 = dist.get(1, 0), dist.get(2, 0), dist.get(3, 0)
+        avg = b.get("avg_score", 0.0)
+        n = b.get("samples", 0)
+        label = bucket_name.capitalize()
+        print(f"  {label:20s} {red(s1):>17s}  {yellow(s2):>17s}  {green(s3):>17s}  {avg:>6.2f}  {n:>7d}")
+    print(f"  {'─' * 60}")
+
+    # Total row
+    all_scores = []
+    total_dist = {1: 0, 2: 0, 3: 0}
+    total_n = 0
+    for b in bucket_summary.values():
+        dist = b.get("score_distribution", {})
+        for k in (1, 2, 3):
+            total_dist[k] += dist.get(k, 0)
+        total_n += b.get("samples", 0)
+    avg_total = metadata.get("avg_judge_score", 0.0)
+    print(f"  {'Total':20s} {red(total_dist[1]):>17s}  {yellow(total_dist[2]):>17s}  "
+          f"{green(total_dist[3]):>17s}  {avg_total:>6.2f}  {total_n:>7d}")
+    print(f"{'=' * 70}")
 
 
 
@@ -477,30 +930,27 @@ def print_summary(metadata):
 
 def main(argv=None):
     args = parse_args(argv)
+    collection = args.collection
+    dense_k = args.dense_k
+    sparse_k = args.sparse_k
+
     print(f"blind_ab_test v{SCRIPT_VERSION}")
-    print(f"Dense: {args.dense_collection}  Hybrid: {args.hybrid_collection}")
-    print(f"Positions/book: {args.positions}  Seed: {args.seed}  Top-k: {args.top_k}")
+    print(f"Collection: {collection}  Dense-k: {dense_k}  Sparse-k: {sparse_k}")
+    print(f"Positions/book: {args.positions}  Seed: {args.seed}")
 
     if args.seed is not None:
         random.seed(args.seed)
 
-    top_k = args.top_k
-
-    # Discover common books
-    common_books = discover_books(args.dense_collection, args.hybrid_collection)
-    if not common_books:
-        print("ERROR: No common books between collections.", file=sys.stderr)
+    # Discover books
+    books = discover_books(collection)
+    if not books:
+        print("ERROR: No books in collection.", file=sys.stderr)
         sys.exit(1)
-    print(f"\nFound {len(common_books)} common books.")
+    print(f"\nFound {len(books)} books.")
 
     samples = []
-    dense_wins = 0
-    hybrid_wins = 0
-    ties = 0
-    judge_error_count = 0
-    zero_chunk_count = 0
 
-    for book in common_books:
+    for book in books:
         sf = book["source_file"]
         title = book.get("book_title", sf)
         print(f"\n{'─' * 60}")
@@ -509,76 +959,55 @@ def main(argv=None):
         for pos in range(args.positions):
             try:
                 # 1. Pick random passage (book-scoped)
-                chunk = pick_passage(args.dense_collection, sf)
+                chunk = pick_passage(collection, sf)
                 if not chunk:
                     continue
 
                 # 2. Generate query
-                query, query_raw = generate_query(chunk["text"])
-                if not query:
+                query_result = generate_query(chunk["text"])
+                if not query_result:
                     continue
+                query = query_result["query"]
+                query_type = query_result["query_type"]
+                query_bucket = query_result["query_bucket"]
 
-                # 3. Dense retrieval (sparse_weight=0)
-                dense_results = retrieve(args.dense_collection, query,
-                                         sparse_weight=0, top_k=top_k)
+                # 3. Dense signal retrieval (sparse_weight=0, dense_weight=1)
+                dense_results = retrieve(collection, query,
+                                         sparse_weight=0, dense_weight=1,
+                                         top_k=dense_k)
                 if dense_results is None:
                     continue
 
-                # 4. Hybrid retrieval (default sparse_weight)
-                hybrid_results = retrieve(args.hybrid_collection, query,
-                                          sparse_weight=None, top_k=top_k)
-                if hybrid_results is None:
+                # 4. Sparse signal retrieval (sparse_weight=1, dense_weight=0)
+                sparse_results = retrieve(collection, query,
+                                          sparse_weight=1, dense_weight=0,
+                                          top_k=sparse_k)
+                if sparse_results is None:
                     continue
 
-                # 5–7. Generate answers
-                dense_answer, dense_zero = generate_answer(query, dense_results)
-                if dense_answer is None:
+                # 5. Dedup and normalize
+                candidates = dedup_and_normalize(dense_results, sparse_results)
+                dedup_set_size = len(candidates)
+                both_signal_count = sum(1 for c in candidates if c["signal"] == "both")
+
+                # 6. Rerank
+                reranked, reranker_raw = rerank(query, candidates)
+
+                # 7. Generate fused answer
+                fused_answer = generate_fused_answer(query, reranked)
+                if fused_answer is None:
                     continue
-                hybrid_answer, hybrid_zero = generate_answer(query, hybrid_results)
-                if hybrid_answer is None:
-                    continue
 
-                zero_chunk = dense_zero or hybrid_zero
-                if zero_chunk:
-                    zero_chunk_count += 1
+                # 8. Judge faithfulness
+                verdict = judge_faithfulness(chunk["text"], query, reranked, fused_answer)
 
-                # 8. Random A/B assignment
-                if random.random() < 0.5:
-                    a_src, b_src = "dense", "hybrid"
-                else:
-                    a_src, b_src = "hybrid", "dense"
-
-                answer_a = dense_answer if a_src == "dense" else hybrid_answer
-                answer_b = dense_answer if b_src == "dense" else hybrid_answer
-                results_a = dense_results if a_src == "dense" else hybrid_results
-                results_b = dense_results if b_src == "dense" else hybrid_results
-
-                # 9–10. Judge
-                verdict = judge(chunk["text"], query,
-                                results_a, results_b, answer_a, answer_b)
-
-                if verdict["reason"] == "judge_error":
-                    judge_error_count += 1
-
-                # 11. Map A/B → dense/hybrid/tie
-                winner = map_verdict(verdict["winner"], a_src, b_src)
-
-                # Track wins
-                if winner == "dense":
-                    dense_wins += 1
-                elif winner == "hybrid":
-                    hybrid_wins += 1
-                else:
-                    ties += 1
-
-                # Hit rank
+                # 9. Hit rank for both signals
                 dense_hit = compute_hit_rank(chunk, dense_results)
-                hybrid_hit = compute_hit_rank(chunk, hybrid_results)
+                sparse_hit = compute_hit_rank(chunk, sparse_results)
 
-                # Build sample dict
+                # 10. Build v3 sample dict
                 sample = {
-                    "book_source_file": sf,
-                    "book_title": title,
+                    "book": title,
                     "position_index": pos,
                     "source_chunk_id": chunk.get("point_id"),
                     "source_metadata": {
@@ -591,32 +1020,32 @@ def main(argv=None):
                     "source_passage": chunk.get("text", ""),
                     "source_passage_excerpt": chunk.get("text", "")[:SOURCE_EXCERPT_LEN],
                     "query": query,
-                    "query_generation_raw": query_raw,
+                    "query_type": query_type,
+                    "query_bucket": query_bucket,
+                    "why_this_is_realistic": query_result["why_this_is_realistic"],
+                    "query_generation_raw": query_result["query_generation_raw"],
                     "dense_raw_results": dense_results,
-                    "hybrid_raw_results": hybrid_results,
+                    "sparse_raw_results": sparse_results,
                     "dense_retrieved_passages": _extract_passages(dense_results),
-                    "hybrid_retrieved_passages": _extract_passages(hybrid_results),
-                    "dense_answer": dense_answer,
-                    "hybrid_answer": hybrid_answer,
-                    "answer_a_source": a_src,
-                    "answer_b_source": b_src,
-                    "answer_a": answer_a,
-                    "answer_b": answer_b,
-                    "judge_winner": verdict["winner"],
-                    "winner": winner,
-                    "reason": verdict["reason"],
+                    "sparse_retrieved_passages": _extract_passages(sparse_results),
+                    "dedup_set_size": dedup_set_size,
+                    "both_signal_count": both_signal_count,
+                    "reranked_passages": reranked,
+                    "reranker_raw": reranker_raw,
+                    "fused_answer": fused_answer,
+                    "judge_score": verdict["score"],
+                    "judge_reason": verdict["reason"],
                     "judge_raw": verdict["judge_raw"],
                     "dense_source_hit_rank": dense_hit["rank"],
                     "dense_source_hit_method": dense_hit["match_method"],
-                    "hybrid_source_hit_rank": hybrid_hit["rank"],
-                    "hybrid_source_hit_method": hybrid_hit["match_method"],
-                    "zero_chunk_retrieval": zero_chunk,
+                    "sparse_source_hit_rank": sparse_hit["rank"],
+                    "sparse_source_hit_method": sparse_hit["match_method"],
                 }
 
-                # 12. Print
+                # 11. Print
                 print_sample(sample)
 
-                # 13. Append
+                # 12. Append
                 samples.append(sample)
 
             except Exception as e:
@@ -627,26 +1056,27 @@ def main(argv=None):
     agg = compute_aggregates(samples)
 
     metadata = {
-        "dense_collection": args.dense_collection,
-        "hybrid_collection": args.hybrid_collection,
+        "version": "3.0.0",
+        "collection": collection,
+        "dense_k": dense_k,
+        "sparse_k": sparse_k,
         "positions_per_book": args.positions,
         "total_samples": len(samples),
-        "dense_wins": dense_wins,
-        "hybrid_wins": hybrid_wins,
-        "ties": ties,
-        "judge_error_count": judge_error_count,
+        "avg_judge_score": agg["avg_judge_score"],
+        "bucket_summary": agg["bucket_summary"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "seed": args.seed,
         "answer_model": ANSWER_MODEL,
         "judge_model": JUDGE_MODEL,
         "query_model": QUERY_MODEL,
+        "reranker_model": RERANKER_MODEL,
         "mcp_url": MCP_URL,
-        "top_k": top_k,
         "dense_hit_count": agg["dense_hit_count"],
-        "hybrid_hit_count": agg["hybrid_hit_count"],
+        "sparse_hit_count": agg["sparse_hit_count"],
         "dense_hit_rate": agg["dense_hit_rate"],
-        "hybrid_hit_rate": agg["hybrid_hit_rate"],
-        "zero_chunk_count": zero_chunk_count,
+        "sparse_hit_rate": agg["sparse_hit_rate"],
+        "avg_dedup_set_size": agg["avg_dedup_set_size"],
+        "avg_both_signal_count": agg["avg_both_signal_count"],
         "script_version": SCRIPT_VERSION,
     }
 

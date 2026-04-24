@@ -68,95 +68,100 @@ class TestProperty2ABDeterminism:
 hit_rank_st = st.one_of(st.none(), st.integers(min_value=1, max_value=100))
 
 sample_st = st.fixed_dictionaries({
+    "judge_score": st.sampled_from([1, 2, 3]),
+    "query_bucket": st.sampled_from(["trivia", "conceptual", "operational"]),
     "dense_source_hit_rank": hit_rank_st,
-    "hybrid_source_hit_rank": hit_rank_st,
+    "sparse_source_hit_rank": hit_rank_st,
+    "dedup_set_size": st.integers(min_value=1, max_value=20),
+    "both_signal_count": st.integers(min_value=0, max_value=10),
 })
 
 
 class TestProperty6HitAggregation:
-    """Feature: retrieval-blind-test, Property 6: Hit metric aggregation."""
+    """Feature: fused-retrieval-reranking, Property 6: Hit metric aggregation (v3)."""
 
     @given(samples=st.lists(sample_st, min_size=1, max_size=50))
     @settings(max_examples=200)
     def test_hit_counts_correct(self, samples):
         agg = compute_aggregates(samples)
         expected_dense = sum(1 for s in samples if s["dense_source_hit_rank"] is not None)
-        expected_hybrid = sum(1 for s in samples if s["hybrid_source_hit_rank"] is not None)
+        expected_sparse = sum(1 for s in samples if s["sparse_source_hit_rank"] is not None)
         assert agg["dense_hit_count"] == expected_dense
-        assert agg["hybrid_hit_count"] == expected_hybrid
+        assert agg["sparse_hit_count"] == expected_sparse
 
     @given(samples=st.lists(sample_st, min_size=1, max_size=50))
     @settings(max_examples=200)
     def test_hit_rates_correct(self, samples):
         agg = compute_aggregates(samples)
         total = len(samples)
-        expected_dense_rate = sum(
+        expected_dense_rate = round(sum(
             1 for s in samples if s["dense_source_hit_rank"] is not None
-        ) / total
-        expected_hybrid_rate = sum(
-            1 for s in samples if s["hybrid_source_hit_rank"] is not None
-        ) / total
+        ) / total, 3)
+        expected_sparse_rate = round(sum(
+            1 for s in samples if s["sparse_source_hit_rank"] is not None
+        ) / total, 3)
         assert abs(agg["dense_hit_rate"] - expected_dense_rate) < 1e-9
-        assert abs(agg["hybrid_hit_rate"] - expected_hybrid_rate) < 1e-9
+        assert abs(agg["sparse_hit_rate"] - expected_sparse_rate) < 1e-9
 
     def test_empty_samples_zero_rates(self):
         agg = compute_aggregates([])
         assert agg["dense_hit_count"] == 0
-        assert agg["hybrid_hit_count"] == 0
+        assert agg["sparse_hit_count"] == 0
         assert agg["dense_hit_rate"] == 0.0
-        assert agg["hybrid_hit_rate"] == 0.0
+        assert agg["sparse_hit_rate"] == 0.0
 
 
 # ─── Property 7: Output JSON schema completeness ────────────────────
 # Validates: Requirements 10.2, 10.3
 
 REQUIRED_METADATA_FIELDS = {
-    "dense_collection", "hybrid_collection", "positions_per_book",
-    "total_samples", "dense_wins", "hybrid_wins", "ties",
-    "judge_error_count", "timestamp", "seed", "answer_model",
-    "judge_model", "query_model", "mcp_url", "top_k",
-    "dense_hit_count", "hybrid_hit_count", "dense_hit_rate",
-    "hybrid_hit_rate", "zero_chunk_count", "script_version",
+    "version", "collection", "dense_k", "sparse_k",
+    "positions_per_book", "total_samples", "avg_judge_score",
+    "bucket_summary", "timestamp", "seed", "answer_model",
+    "judge_model", "query_model", "reranker_model", "mcp_url",
+    "dense_hit_count", "sparse_hit_count", "dense_hit_rate",
+    "sparse_hit_rate", "avg_dedup_set_size", "avg_both_signal_count",
+    "script_version",
 }
 
 REQUIRED_SAMPLE_FIELDS = {
-    "book_source_file", "book_title", "position_index",
+    "book", "position_index",
     "source_chunk_id", "source_metadata", "source_passage",
     "source_passage_excerpt", "query", "query_generation_raw",
-    "dense_raw_results", "hybrid_raw_results",
-    "dense_retrieved_passages", "hybrid_retrieved_passages",
-    "dense_answer", "hybrid_answer",
-    "answer_a_source", "answer_b_source", "answer_a", "answer_b",
-    "judge_winner", "winner", "reason", "judge_raw",
+    "dense_raw_results", "sparse_raw_results",
+    "dense_retrieved_passages", "sparse_retrieved_passages",
+    "dedup_set_size", "both_signal_count",
+    "reranked_passages", "reranker_raw",
+    "fused_answer", "judge_score", "judge_reason", "judge_raw",
     "dense_source_hit_rank", "dense_source_hit_method",
-    "hybrid_source_hit_rank", "hybrid_source_hit_method",
-    "zero_chunk_retrieval",
+    "sparse_source_hit_rank", "sparse_source_hit_method",
 }
 
 
 def _make_metadata(**overrides):
     base = {
-        "dense_collection": "dense-coll",
-        "hybrid_collection": "hybrid-coll",
+        "version": "3.0.0",
+        "collection": "books-semantic",
+        "dense_k": 5,
+        "sparse_k": 5,
         "positions_per_book": 1,
         "total_samples": 1,
-        "dense_wins": 0,
-        "hybrid_wins": 1,
-        "ties": 0,
-        "judge_error_count": 0,
+        "avg_judge_score": 2.5,
+        "bucket_summary": {},
         "timestamp": "2025-01-01T00:00:00Z",
         "seed": 42,
         "answer_model": "test-model",
         "judge_model": "test-model",
         "query_model": "test-model",
+        "reranker_model": "test-model",
         "mcp_url": "http://localhost:8090/mcp",
-        "top_k": 15,
-        "dense_hit_count": 0,
-        "hybrid_hit_count": 1,
-        "dense_hit_rate": 0.0,
-        "hybrid_hit_rate": 1.0,
-        "zero_chunk_count": 0,
-        "script_version": "1.0.0",
+        "dense_hit_count": 1,
+        "sparse_hit_count": 0,
+        "dense_hit_rate": 1.0,
+        "sparse_hit_rate": 0.0,
+        "avg_dedup_set_size": 7.0,
+        "avg_both_signal_count": 2.0,
+        "script_version": "3.0.0",
     }
     base.update(overrides)
     return base
@@ -164,8 +169,7 @@ def _make_metadata(**overrides):
 
 def _make_sample(**overrides):
     base = {
-        "book_source_file": "test.epub",
-        "book_title": "Test Book",
+        "book": "Test Book",
         "position_index": 0,
         "source_chunk_id": "abc-123",
         "source_metadata": {},
@@ -174,24 +178,21 @@ def _make_sample(**overrides):
         "query": "what?",
         "query_generation_raw": "what?",
         "dense_raw_results": {},
-        "hybrid_raw_results": {},
+        "sparse_raw_results": {},
         "dense_retrieved_passages": [],
-        "hybrid_retrieved_passages": [],
-        "dense_answer": "answer",
-        "hybrid_answer": "answer",
-        "answer_a_source": "dense",
-        "answer_b_source": "hybrid",
-        "answer_a": "answer",
-        "answer_b": "answer",
-        "judge_winner": "A",
-        "winner": "dense",
-        "reason": "better",
+        "sparse_retrieved_passages": [],
+        "dedup_set_size": 7,
+        "both_signal_count": 2,
+        "reranked_passages": [],
+        "reranker_raw": "{}",
+        "fused_answer": "answer",
+        "judge_score": 3,
+        "judge_reason": "faithful",
         "judge_raw": "{}",
         "dense_source_hit_rank": 1,
         "dense_source_hit_method": "chunk_index",
-        "hybrid_source_hit_rank": None,
-        "hybrid_source_hit_method": "none",
-        "zero_chunk_retrieval": False,
+        "sparse_source_hit_rank": None,
+        "sparse_source_hit_method": "none",
     }
     base.update(overrides)
     return base
