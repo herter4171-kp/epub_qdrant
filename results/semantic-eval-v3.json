@@ -1,0 +1,621 @@
+{
+  "version": "1.0",
+  "model": "openai/qwen36",
+  "evaluated_at": "2026-04-24T00:34:39.247964+00:00",
+  "baseline_method": "baseline",
+  "num_queries": 30,
+  "per_query_scores": {
+    "Help me design a planning module for an LLM agent that can break a long task into executable subtasks without overplanning.": {
+      "baseline": {
+        "top5_avg_score": 1.8155,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3594,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B includes B4, which explicitly discusses decomposing the planning process into sequential subcomponents and transforming tasks into implementation-level abstractions, directly addressing the query's focus on task breakdown and planning module design. Set A's remaining results are more generic or tangential (e.g., execution errors, general introductions)."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B includes B4, which explicitly discusses decomposing the planning process into sequential subcomponents and transforming tasks into implementation-level abstractions, directly addressing the query's focus on task breakdown and planning module design. Set A's remaining results are more generic or tangential (e.g., execution errors, general introductions)."
+      }
+    },
+    "What is the current best practice for giving an agent reasoning structure without forcing brittle chain-of-thought templates?": {
+      "baseline": {
+        "top5_avg_score": 1.9897,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3332,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Set B is more relevant because it prioritizes sources directly addressing agent reasoning mechanisms, internal states, and the gap between current research and capability requirements. This aligns more closely with the query's focus on reasoning structure and avoiding rigid templates, whereas Set A includes less relevant results focused on RAG implementation frameworks and system components like memory and toolchains."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Set B is more relevant because it prioritizes sources directly addressing agent reasoning mechanisms, internal states, and the gap between current research and capability requirements. This aligns more closely with the query's focus on reasoning structure and avoiding rigid templates, whereas Set A includes less relevant results focused on RAG implementation frameworks and system components like memory and toolchains."
+      }
+    },
+    "Show me how to build an agent that decides when to use a tool versus when to answer directly.": {
+      "baseline": {
+        "top5_avg_score": 1.9118,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.356,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B provides more specific technical details on tool selection mechanisms, constraints for invoking tools, and building custom agents that analyze prompts to choose appropriate tools. This directly addresses the query's focus on the decision-making process for tool usage versus direct answers, whereas Set A leans more toward general use cases and high-level overviews."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B provides more specific technical details on tool selection mechanisms, constraints for invoking tools, and building custom agents that analyze prompts to choose appropriate tools. This directly addresses the query's focus on the decision-making process for tool usage versus direct answers, whereas Set A leans more toward general use cases and high-level overviews."
+      }
+    },
+    "How should I architect multi-tool orchestration so an agent can chain search, code execution, and document drafting safely?": {
+      "baseline": {
+        "top5_avg_score": 2.0464,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4942,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B provides more directly relevant architectural patterns for tool chaining, including escalation pipelines, orchestration flows (serial, parallel, nested, retry), and explicit focus on the robustness and end-to-end executability of multi-tool chains. While Set A covers safety and governance, Set B better addresses the practical architecture and safe chaining mechanisms requested in the query."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B provides more directly relevant architectural patterns for tool chaining, including escalation pipelines, orchestration flows (serial, parallel, nested, retry), and explicit focus on the robustness and end-to-end executability of multi-tool chains. While Set A covers safety and governance, Set B better addresses the practical architecture and safe chaining mechanisms requested in the query."
+      }
+    },
+    "What scaffolding do strong terminal-based coding agents use around the model itself?": {
+      "baseline": {
+        "top5_avg_score": 1.9101,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3981,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A is more relevant as it directly addresses the architectural scaffolding around coding agents, highlighting components like system prompts, tool/function lists, planning, iterative refinement, and oversight architectures. Result Set B shares the top results but includes lower-ranked snippets focused on benchmark evaluations and general agent capabilities, which are less aligned with the query's focus on model scaffolding."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Result Set A is more relevant as it directly addresses the architectural scaffolding around coding agents, highlighting components like system prompts, tool/function lists, planning, iterative refinement, and oversight architectures. Result Set B shares the top results but includes lower-ranked snippets focused on benchmark evaluations and general agent capabilities, which are less aligned with the query's focus on model scaffolding."
+      }
+    },
+    "What is a good memory design for an agent that needs short-term working memory and long-term user memory?": {
+      "baseline": {
+        "top5_avg_score": 1.9107,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3913,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the query with multiple sources that explicitly discuss the architectural design of short-term and long-term memory for agents, detailing how they are implemented and their distinct functions (e.g., retaining conversational context vs. accumulating enduring user data). Result Set A lacks specific design guidance for this dual-memory structure, focusing instead on abstract priorities, biological analogies, and general system integration."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the query with multiple sources that explicitly discuss the architectural design of short-term and long-term memory for agents, detailing how they are implemented and their distinct functions (e.g., retaining conversational context vs. accumulating enduring user data). Result Set A lacks specific design guidance for this dual-memory structure, focusing instead on abstract priorities, biological analogies, and general system integration."
+      }
+    },
+    "How do I stop an agent's memory from turning into a junk drawer full of redundant or low-value facts?": {
+      "baseline": {
+        "top5_avg_score": 2.087,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4843,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the query by highlighting active memory management techniques like updating units, summarizing detailed events into high-level conclusions, and reflecting to abstract information. These mechanisms specifically prevent redundancy and low-value accumulation, whereas Set A focuses more on storage tiers, consistency, and taxonomy without offering actionable pruning strategies."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the query by highlighting active memory management techniques like updating units, summarizing detailed events into high-level conclusions, and reflecting to abstract information. These mechanisms specifically prevent redundancy and low-value accumulation, whereas Set A focuses more on storage tiers, consistency, and taxonomy without offering actionable pruning strategies."
+      }
+    },
+    "I want an agent that can localize bugs in a large repository. What retrieval and hypothesis-testing loop should I start with?": {
+      "baseline": {
+        "top5_avg_score": 2.0791,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4051,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B is more relevant as it focuses exclusively on academic papers detailing LLM-based pipelines and procedural approaches for fault localization, directly addressing the technical query about agent loops. Result Set A includes generic enterprise books that dilute relevance and lack specific technical guidance on retrieval and hypothesis-testing loops."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B is more relevant as it focuses exclusively on academic papers detailing LLM-based pipelines and procedural approaches for fault localization, directly addressing the technical query about agent loops. Result Set A includes generic enterprise books that dilute relevance and lack specific technical guidance on retrieval and hypothesis-testing loops."
+      }
+    },
+    "How would you benchmark an agent that performs refactors rather than one-off bug fixes?": {
+      "baseline": {
+        "top5_avg_score": 2.1052,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4209,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses benchmark construction for coding agents, explicitly contrasts refactoring/feature work with bug fixes, and provides concrete details on synthetic benchmark tasks. Set A prioritizes general enterprise AI books that are less focused on the specific benchmarking methodology requested."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses benchmark construction for coding agents, explicitly contrasts refactoring/feature work with bug fixes, and provides concrete details on synthetic benchmark tasks. Set A prioritizes general enterprise AI books that are less focused on the specific benchmarking methodology requested."
+      }
+    },
+    "I want an agent that can notice its own mistakes and retry with a different strategy. What self-correction loop should I use?": {
+      "baseline": {
+        "top5_avg_score": 2.1364,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.5737,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Set A provides more directly relevant top results, including a high-scoring entry on self-improving agents that analyze their own performance and explicitly describe the reflection-revision cycle mechanism for self-correction. Set B replaces these with lower-scoring results focused on training data bottlenecks and expert models, which are less practical for answering the user's question about implementing a self-correction loop."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Set A provides more directly relevant top results, including a high-scoring entry on self-improving agents that analyze their own performance and explicitly describe the reflection-revision cycle mechanism for self-correction. Set B replaces these with lower-scoring results focused on training data bottlenecks and expert models, which are less practical for answering the user's question about implementing a self-correction loop."
+      }
+    },
+    "How do I make a coding agent ask clarifying questions only when needed instead of either guessing wildly or stopping constantly?": {
+      "baseline": {
+        "top5_avg_score": 2.1692,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3494,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B includes a highly targeted paper ('Ask or Assume? Uncertainty-Aware Clarification-Seeking in Coding Agents') that directly matches the query's focus on balancing clarification requests with avoiding unnecessary stops or guesses. While both sets share the ClarifyGPT reference, B's direct hit on uncertainty-aware clarification-seeking makes it significantly more relevant and useful."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B includes a highly targeted paper ('Ask or Assume? Uncertainty-Aware Clarification-Seeking in Coding Agents') that directly matches the query's focus on balancing clarification requests with avoiding unnecessary stops or guesses. While both sets share the ClarifyGPT reference, B's direct hit on uncertainty-aware clarification-seeking makes it significantly more relevant and useful."
+      }
+    },
+    "What should I measure to catch post-merge quality problems in agent-generated pull requests?": {
+      "baseline": {
+        "top5_avg_score": 1.8624,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3769,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B contains specific empirical snippets directly discussing Agentic-PRs, merge times, and review efficiency, which directly addresses measuring quality and performance of agent-generated pull requests. Result Set A is dominated by generic book titles and a CI snippet that does not specifically address post-merge quality for AI-generated PRs."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B contains specific empirical snippets directly discussing Agentic-PRs, merge times, and review efficiency, which directly addresses measuring quality and performance of agent-generated pull requests. Result Set A is dominated by generic book titles and a CI snippet that does not specifically address post-merge quality for AI-generated PRs."
+      }
+    },
+    "How would you build a GUI agent that can operate a clunky enterprise web app with inconsistent layouts?": {
+      "baseline": {
+        "top5_avg_score": 2.0086,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4526,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B includes text (B4) that directly addresses the query's core challenge by contrasting GUI agents (relying on typing/scrolling) with API-driven agents, which is highly relevant to operating 'clunky' web apps without APIs. It provides more specific technical context on agent constraints and implementation trade-offs compared to Set A's reliance on generic book titles and broad introductions."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B includes text (B4) that directly addresses the query's core challenge by contrasting GUI agents (relying on typing/scrolling) with API-driven agents, which is highly relevant to operating 'clunky' web apps without APIs. It provides more specific technical context on agent constraints and implementation trade-offs compared to Set A's reliance on generic book titles and broad introductions."
+      }
+    },
+    "What are the main failure modes of web agents in realistic browsing tasks, and how should I evaluate them?": {
+      "baseline": {
+        "top5_avg_score": 1.9967,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4694,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the query's core components with highly relevant snippets: it discusses agent errors and limitations (failure modes), outlines evaluation methods such as task completion testing and benchmarks, and explicitly mentions environments simulating realistic browsing tasks. Result Set A contains mostly generic titles and vague snippets that do not specifically address failure modes or evaluation methodologies."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the query's core components with highly relevant snippets: it discusses agent errors and limitations (failure modes), outlines evaluation methods such as task completion testing and benchmarks, and explicitly mentions environments simulating realistic browsing tasks. Result Set A contains mostly generic titles and vague snippets that do not specifically address failure modes or evaluation methodologies."
+      }
+    },
+    "I want a mobile agent that can carry out a multi-step task across apps. What architecture would make that robust?": {
+      "baseline": {
+        "top5_avg_score": 2.0187,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.5687,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Set A's top results directly address the query by outlining specific architectural components required for robustness (structured memory, reasoning engines, dynamic toolchains, observability) and multi-step execution patterns. Set B's top result is irrelevant (a human learning curve example), and while B includes a cross-device concept, A provides more targeted, high-quality architectural guidance aligned with the prompt."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Set A's top results directly address the query by outlining specific architectural components required for robustness (structured memory, reasoning engines, dynamic toolchains, observability) and multi-step execution patterns. Set B's top result is irrelevant (a human learning curve example), and while B includes a cross-device concept, A provides more targeted, high-quality architectural guidance aligned with the prompt."
+      }
+    },
+    "How should an enterprise agent handle permissions, approvals, and audit logs when acting on behalf of employees?": {
+      "baseline": {
+        "top5_avg_score": 2.0325,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.428,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B is more relevant because it directly addresses the 'approvals' aspect with a concrete employee confirmation workflow (B5), while maintaining strong coverage of permissions and monitoring. It also avoids the low-value title-only result in Set A (A2) and provides more complete, contextual snippets across all results."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B is more relevant because it directly addresses the 'approvals' aspect with a concrete employee confirmation workflow (B5), while maintaining strong coverage of permissions and monitoring. It also avoids the low-value title-only result in Set A (A2) and provides more complete, contextual snippets across all results."
+      }
+    },
+    "What is the cleanest way to build an API agent that can discover schema details and recover from malformed tool responses?": {
+      "baseline": {
+        "top5_avg_score": 1.8369,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4523,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A includes documents directly addressing schema specification (A1) and API invocation errors (A3), which align closely with the query's focus on schema discovery and error recovery. Set B replaces these with less relevant topics like XML generation and agent selection, reducing overall semantic relevance."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Result Set A includes documents directly addressing schema specification (A1) and API invocation errors (A3), which align closely with the query's focus on schema discovery and error recovery. Set B replaces these with less relevant topics like XML generation and agent selection, reducing overall semantic relevance."
+      }
+    },
+    "I need a data agent that can query a warehouse, validate the SQL, and then generate charts with commentary. How would you structure it?": {
+      "baseline": {
+        "top5_avg_score": 2.0893,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4198,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B provides more directly relevant technical content, including a specific framework (SQLAgent) for database querying and structural concepts like PipelineOrchestration and LLM/Code/ToolHybridExecution that align closely with the query's request for agent architecture. Result Set A's top result is a generic book title without a descriptive snippet, making B more informative and precise for this technical use case."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B provides more directly relevant technical content, including a specific framework (SQLAgent) for database querying and structural concepts like PipelineOrchestration and LLM/Code/ToolHybridExecution that align closely with the query's request for agent architecture. Result Set A's top result is a generic book title without a descriptive snippet, making B more informative and precise for this technical use case."
+      }
+    },
+    "What would a serious research agent pipeline look like for literature review, source ranking, note synthesis, and citation tracking?": {
+      "baseline": {
+        "top5_avg_score": 1.9896,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.5243,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B replaces generic book titles with highly specific snippets that directly address the query's components, such as 'Agent Laboratory', 'Literature Review', and 'Relevance Ranking and Filtering' by a 'Literature Agent'. These results provide more targeted information about the requested research agent pipeline architecture."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B replaces generic book titles with highly specific snippets that directly address the query's components, such as 'Agent Laboratory', 'Literature Review', and 'Relevance Ranking and Filtering' by a 'Literature Agent'. These results provide more targeted information about the requested research agent pipeline architecture."
+      }
+    },
+    "How do deep research agents verify intermediate conclusions instead of just producing polished nonsense?": {
+      "baseline": {
+        "top5_avg_score": 1.9024,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.2509,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Set B provides more informative and relevant snippets regarding dynamic iterative workflows and current agent limitations, which align better with the query's focus on verification processes than the generic titles and introductory text in Set A."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Set B provides more informative and relevant snippets regarding dynamic iterative workflows and current agent limitations, which align better with the query's focus on verification processes than the generic titles and introductory text in Set A."
+      }
+    },
+    "I'm interested in agentic scientific simulation. How would an agent iteratively propose, run, and revise model configurations?": {
+      "baseline": {
+        "top5_avg_score": 2.0605,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4622,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B replaces generic book titles with technical snippets that directly address iterative cycles, tool use, and verification, aligning better with the query's focus on iterative configuration revision in scientific simulation."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B replaces generic book titles with technical snippets that directly address iterative cycles, tool use, and verification, aligning better with the query's focus on iterative configuration revision in scientific simulation."
+      }
+    },
+    "What are the tradeoffs between a single AI scientist agent and a multi-agent scientific discovery pipeline?": {
+      "baseline": {
+        "top5_avg_score": 2.1265,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4933,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B is more semantically relevant as it removes generic Agentic AI books and replaces them with papers directly addressing scientific discovery pipelines. B4 explicitly contrasts conventional inference with multi-agent interacting models, and B5 discusses autonomy levels in AI-driven science, making it better aligned with the query's focus on single vs. multi-agent tradeoffs."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B is more semantically relevant as it removes generic Agentic AI books and replaces them with papers directly addressing scientific discovery pipelines. B4 explicitly contrasts conventional inference with multi-agent interacting models, and B5 discusses autonomy levels in AI-driven science, making it better aligned with the query's focus on single vs. multi-agent tradeoffs."
+      }
+    },
+    "How should sub-agent creation work in a larger orchestration system so I do not end up with agent sprawl?": {
+      "baseline": {
+        "top5_avg_score": 2.167,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3986,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A directly addresses the agent sprawl concern by highlighting the need for centralized registration and discovery to prevent duplication, and provides clearer architectural guidance (e.g., root orchestrator coordination) with higher relevance scores. Set B lacks specific sprawl-mitigation strategies and focuses on tangential concepts like emergent behaviors."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Result Set A directly addresses the agent sprawl concern by highlighting the need for centralized registration and discovery to prevent duplication, and provides clearer architectural guidance (e.g., root orchestrator coordination) with higher relevance scores. Set B lacks specific sprawl-mitigation strategies and focuses on tangential concepts like emergent behaviors."
+      }
+    },
+    "I want to experiment with multi-agent problem solving where agents debate, specialize, and then converge. What patterns are worth trying first?": {
+      "baseline": {
+        "top5_avg_score": 1.8711,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4048,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the query's core concepts with highly relevant snippets on the 'debate pattern' and consensus/convergence at the top. It also provides additional informative results on problem decomposition and iterative problem-solving that align with the 'specialize' and 'problem solving' aspects of the query. Result Set A is dominated by generic book titles that offer less actionable information."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the query's core concepts with highly relevant snippets on the 'debate pattern' and consensus/convergence at the top. It also provides additional informative results on problem decomposition and iterative problem-solving that align with the 'specialize' and 'problem solving' aspects of the query. Result Set A is dominated by generic book titles that offer less actionable information."
+      }
+    },
+    "How do self-evolving agents accumulate reusable skills without drifting into unstable behavior?": {
+      "baseline": {
+        "top5_avg_score": 2.043,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.2348,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B is significantly more relevant because it contains specific text snippets directly addressing the query's core themes: the definition of self-evolving agents, persistent challenges, and explicitly covers safety and controllability to prevent unstable behavior. In contrast, Result Set A is dominated by generic book titles and broad statements that do not answer how skills are accumulated or how instability is mitigated."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B is significantly more relevant because it contains specific text snippets directly addressing the query's core themes: the definition of self-evolving agents, persistent challenges, and explicitly covers safety and controllability to prevent unstable behavior. In contrast, Result Set A is dominated by generic book titles and broad statements that do not answer how skills are accumulated or how instability is mitigated."
+      }
+    },
+    "What safeguards are needed when agents can modify their own prompts, memories, or tool policies over time?": {
+      "baseline": {
+        "top5_avg_score": 1.7774,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.4434,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B includes a highly relevant section on 'Safe and Controllable Self-Evolving Agents' that directly addresses safeguards for autonomous agents modifying themselves over time, alongside runtime defense pipelines and trustworthy memory mechanisms. This aligns more precisely with the query's focus on self-modification and temporal evolution than Set A's broader security and account management topics."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B includes a highly relevant section on 'Safe and Controllable Self-Evolving Agents' that directly addresses safeguards for autonomous agents modifying themselves over time, alongside runtime defense pipelines and trustworthy memory mechanisms. This aligns more precisely with the query's focus on self-modification and temporal evolution than Set A's broader security and account management topics."
+      }
+    },
+    "Help me think through safety for agents that can browse the web, run code, and call external APIs.": {
+      "baseline": {
+        "top5_avg_score": 1.9522,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.3218,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B directly addresses the specific capabilities mentioned in the query (code execution, web APIs, agent vulnerabilities) with concrete risks like code injection, data poisoning, and API rate limiting, as well as safety benchmarks and operational principles like least privilege. Result Set A focuses more on generic enterprise readiness, ethics, and logging, which is less targeted to the technical safety concerns outlined in the query."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B directly addresses the specific capabilities mentioned in the query (code execution, web APIs, agent vulnerabilities) with concrete risks like code injection, data poisoning, and API rate limiting, as well as safety benchmarks and operational principles like least privilege. Result Set A focuses more on generic enterprise readiness, ethics, and logging, which is less targeted to the technical safety concerns outlined in the query."
+      }
+    },
+    "How does agent tuning look like in practice for a smaller open model that needs to behave more like a reliable operator?": {
+      "baseline": {
+        "top5_avg_score": 2.0056,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.436,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B includes documents specifically focused on edge-scale/open models and practical post-training/case studies (e.g., B5 on AgentCPM-Explore for edge-scale models and B4 on open-source post-training), directly addressing the query's focus on smaller models and practical tuning. Set A primarily discusses large proprietary models like GPT-4.1 and o3, making it less relevant to the specific request."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B includes documents specifically focused on edge-scale/open models and practical post-training/case studies (e.g., B5 on AgentCPM-Explore for edge-scale models and B4 on open-source post-training), directly addressing the query's focus on smaller models and practical tuning. Set A primarily discusses large proprietary models like GPT-4.1 and o3, making it less relevant to the specific request."
+      }
+    },
+    "How should I evaluate agents in production beyond task success rate\u2014latency, cost, recovery rate, human override rate, what else?": {
+      "baseline": {
+        "top5_avg_score": 2.0282,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.488,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set A consistently addresses production evaluation metrics, KPIs, productivity, quality, speed, and human alignment, directly matching the query's intent. Result Set B includes less relevant content (e.g., agent applications) and more fragmented metric discussions, making it less informative."
+      },
+      "judgment": {
+        "winner": "A",
+        "reason": "Result Set A consistently addresses production evaluation metrics, KPIs, productivity, quality, speed, and human alignment, directly matching the query's intent. Result Set B includes less relevant content (e.g., agent applications) and more fragmented metric discussions, making it less informative."
+      }
+    },
+    "Can you sketch a benchmark for comparing a data-analysis agent against human analysts on realistic business tasks?": {
+      "baseline": {
+        "top5_avg_score": 2.2789,
+        "top1_category": "apress",
+        "cross_collection_ratio": 1.0,
+        "has_metadata_match": false
+      },
+      "semantic": {
+        "top5_avg_score": 1.1923,
+        "top1_category": "apress",
+        "cross_collection_ratio": 0.6667,
+        "has_metadata_match": false,
+        "judge_wins_against_baseline": false,
+        "judge_reason": "Result Set B is more relevant because it directly addresses benchmarks for data-analysis agents, discusses current benchmark limitations, and explicitly mentions frameworks evaluating agents on realistic business workflows. Set A focuses more on general enterprise AI competitions and high-level implementation guides, offering less specific guidance on benchmark design."
+      },
+      "judgment": {
+        "winner": "B",
+        "reason": "Result Set B is more relevant because it directly addresses benchmarks for data-analysis agents, discusses current benchmark limitations, and explicitly mentions frameworks evaluating agents on realistic business workflows. Set A focuses more on general enterprise AI competitions and high-level implementation guides, offering less specific guidance on benchmark design."
+      }
+    }
+  },
+  "aggregate": {
+    "semantic": {
+      "wins_against_baseline": 24,
+      "losses_against_baseline": 6,
+      "ties": 0,
+      "win_rate": 0.8,
+      "total_comparisons": 30,
+      "avg_score_improvement": -0.5942,
+      "avg_cross_collection_improvement": -0.3333,
+      "elapsed_seconds": 321.8
+    }
+  }
+}
