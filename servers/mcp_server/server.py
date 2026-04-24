@@ -159,6 +159,38 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "pick_random_chunk",
+        "description": (
+            "Sample a random substantive passage from a collection and expand it "
+            "to a minimum token budget by appending/prepending neighboring chunks "
+            "from the same source file. Returns a contiguous passage of at least "
+            "min_total_tokens tokens (default 4000), the seed point ID for "
+            "traceability, and enough metadata to navigate via get_context. "
+            "Call this to discover arbitrary content for question generation "
+            "or exploration."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "collection": {
+                    "type": "string",
+                    "description": "Collection to sample from. Defaults to the server default collection.",
+                },
+                "min_tokens": {
+                    "type": "integer",
+                    "description": "Minimum token count for the seed chunk (default 200).",
+                    "default": 200,
+                },
+                "min_total_tokens": {
+                    "type": "integer",
+                    "description": "Minimum total tokens for the expanded passage (default 4000).",
+                    "default": 4000,
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -363,10 +395,164 @@ def _handle_list_collections(_args: dict) -> dict:
     return {"collections": storage.list_collections_info()}
 
 
+MIN_TOTAL_TOKENS = 4000
+
+
+def _handle_pick_random_chunk(args: dict) -> dict:
+    """Handle the pick_random_chunk tool call.
+
+    Picks a random seed chunk, then expands outward through neighboring
+    chunks (by chunk_index within the same source_file) until the combined
+    passage reaches min_total_tokens (defaults to MIN_TOTAL_TOKENS).
+    """
+    from qdrant_client import models
+
+    collection = args.get("collection") or settings.DEFAULT_COLLECTION
+    min_tokens = args.get("min_tokens", 200)
+    min_total_tokens = args.get("min_total_tokens", MIN_TOTAL_TOKENS)
+
+    client = get_retriever()._client
+
+    # Build adaptive filter based on fields present in collection.
+    conditions = [
+        models.FieldCondition(
+            key="token_count",
+            range=models.Range(gte=min_tokens),
+        ),
+    ]
+    try:
+        probe = client.scroll(
+            collection_name=collection, limit=1, with_payload=True,
+        )
+        if probe[0]:
+            keys = set(probe[0][0].payload.keys())
+            if "chunk_count" in keys:
+                conditions.append(
+                    models.FieldCondition(
+                        key="chunk_count",
+                        range=models.Range(gte=2),
+                    )
+                )
+            if "has_heading_context" in keys:
+                conditions.append(
+                    models.FieldCondition(
+                        key="has_heading_context",
+                        match=models.MatchValue(value=True),
+                    )
+                )
+    except Exception:
+        pass
+
+    # Pick random seed chunk.
+    results = client.query_points(
+        collection_name=collection,
+        query=models.SampleQuery(sample=models.Sample.RANDOM),
+        limit=1,
+        with_payload=True,
+        query_filter=models.Filter(must=conditions),
+    )
+
+    if not results.points:
+        return {"error": "No substantive chunks found in collection", "collection": collection}
+
+    seed = results.points[0]
+    seed_payload = seed.payload or {}
+    seed_file = seed_payload.get("source_file", "")
+    seed_idx = seed_payload.get("chunk_index", 0)
+    seed_tokens = seed_payload.get("token_count", 0)
+
+    # Collect chunks: {chunk_index: (text, token_count)}
+    collected = {seed_idx: (seed_payload.get("text", ""), seed_tokens)}
+    total_tokens = seed_tokens
+
+    # Expand outward if we haven't hit budget.
+    if total_tokens < min_total_tokens and seed_file:
+        # Fetch a generous window of neighbors from same source_file.
+        # Estimate how many chunks we might need (assume ~400 tokens avg).
+        fetch_radius = max(20, (min_total_tokens - total_tokens) // 200)
+        lo = max(0, seed_idx - fetch_radius)
+        hi = seed_idx + fetch_radius
+
+        neighbors, _ = client.scroll(
+            collection_name=collection,
+            scroll_filter=models.Filter(must=[
+                models.FieldCondition(
+                    key="source_file",
+                    match=models.MatchValue(value=seed_file),
+                ),
+                models.FieldCondition(
+                    key="chunk_index",
+                    range=models.Range(gte=lo, lte=hi),
+                ),
+            ]),
+            limit=fetch_radius * 2 + 1,
+            with_payload=True,
+        )
+
+        # Index neighbors by chunk_index.
+        neighbor_map = {}
+        for pt in neighbors:
+            pl = pt.payload or {}
+            ci = pl.get("chunk_index", 0)
+            if ci not in collected:
+                neighbor_map[ci] = (pl.get("text", ""), pl.get("token_count", 0))
+
+        # Alternate prepend/append from seed outward.
+        lo_cursor = seed_idx - 1
+        hi_cursor = seed_idx + 1
+        while total_tokens < min_total_tokens and (lo_cursor >= lo or hi_cursor <= hi):
+            added = False
+            # Try prepend.
+            if lo_cursor >= lo and lo_cursor in neighbor_map:
+                text, tc = neighbor_map[lo_cursor]
+                collected[lo_cursor] = (text, tc)
+                total_tokens += tc
+                added = True
+            lo_cursor -= 1
+
+            if total_tokens >= min_total_tokens:
+                break
+
+            # Try append.
+            if hi_cursor <= hi and hi_cursor in neighbor_map:
+                text, tc = neighbor_map[hi_cursor]
+                collected[hi_cursor] = (text, tc)
+                total_tokens += tc
+                added = True
+            hi_cursor += 1
+
+            if not added:
+                # No more neighbors in either direction.
+                if lo_cursor < lo and hi_cursor > hi:
+                    break
+
+    # Assemble passage in chunk_index order.
+    ordered = sorted(collected.items())
+    combined_text = "\n\n".join(text for _, (text, _tc) in ordered)
+    chunk_indices = [idx for idx, _ in ordered]
+
+    return {
+        "point_id": str(seed.id),
+        "collection": collection,
+        "text": combined_text,
+        "source_file": seed_file,
+        "title": seed_payload.get("book_title") or seed_payload.get("title", ""),
+        "section_title": seed_payload.get("section_title", ""),
+        "seed_chunk_index": seed_idx,
+        "chunk_range": [chunk_indices[0], chunk_indices[-1]] if chunk_indices else [seed_idx, seed_idx],
+        "chunks_used": len(collected),
+        "total_tokens": total_tokens,
+        "token_count": seed_tokens,
+        "arxiv_id": seed_payload.get("arxiv_id"),
+        "authors": seed_payload.get("authors"),
+    }
+
+
 HANDLERS = {
     "query": _handle_query,
     "get_context": _handle_get_context,
     "list_collections": _handle_list_collections,
+    "pick_random_chunk": _handle_pick_random_chunk,
 }
 
 
@@ -657,4 +843,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()M
