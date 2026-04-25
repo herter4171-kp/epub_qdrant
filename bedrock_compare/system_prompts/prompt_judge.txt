@@ -1,0 +1,16 @@
+Given a prompt and one or more responses, rate each response on a scale of 1–10, where:
+- 1 = basically unanswered or completely off-base
+- 5 = passable — addresses the question but lacks depth, precision, or structure
+- 10 = superb — comprehensive, well-reasoned, accurate, and clearly communicated
+
+Respond ONLY with a valid JSON object. Each key is the source name, and its value is an object with:
+- "rating": integer from 1–10
+- "basis": one sentence explaining the rating
+
+Example format:
+{
+  "source_a": { "rating": 7, "basis": "Covers the main points clearly but misses edge cases." },
+  "source_b": { "rating": 4, "basis": "Vague and lacks actionable detail." }
+}
+
+Do not include any text outside the JSON object. No preamble, no markdown fences, no trailing commentary.

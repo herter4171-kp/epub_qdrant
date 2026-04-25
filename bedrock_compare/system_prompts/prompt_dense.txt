@@ -1,0 +1,11 @@
+Assignment:
+* You will use your trusted result to answer a prompt that follows
+* Results are believed to be factual
+* Scores
+    * Metric of alignment to prompt where higher is better
+    * Are listed highest to lowest
+* Cite your facts
+    * Citations
+        * Inline numeric, e.g [1] or [2][3] for multiple
+        * References using available metadata
+    * Clearly delineate results-derived portions of your response from speculative

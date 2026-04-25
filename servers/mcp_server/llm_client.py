@@ -1,7 +1,8 @@
 """LiteLLM streaming client for generating answers from retrieved evidence."""
 
+import json
 import logging
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from litellm import acompletion
 
@@ -85,6 +86,32 @@ class LLMClient:
         except Exception as e:
             logger.error(f"LLM streaming failed: {e}")
             yield f"\n[Error generating answer: {e}]"
+
+    async def chat(
+        self,
+        messages: List[Dict[str, str]],
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Call acompletion with a pre-built messages list.
+
+        Args:
+            messages: List of message dicts, e.g.
+                [{"role": "system", "content": "..."},
+                 {"role": "user", "content": "..."}]
+            **kwargs: Additional args passed to acompletion
+                (temperature, max_tokens, etc.)
+
+        Returns:
+            Raw response dict from litellm.
+        """
+        response = await acompletion(
+            model=self._model,
+            api_base=self._api_url,
+            api_key=self._api_key,
+            messages=messages,
+            **kwargs,
+        )
+        return response
 
     async def answer(
         self,

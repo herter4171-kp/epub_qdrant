@@ -7,5 +7,5 @@
 
 # Loop over topK
 for TOP_K in 2 4 8 16 32; do
-    python3 query_all.py --topk $TOP_K
+    bedrock_compare/query_all.py --topk
 done
