@@ -1,0 +1,2856 @@
+[
+    [
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "HLER: HUMAN-IN-THE-LOOP ECONOMIC RESEARCH VIA MULTI-AGENT PIPELINES FOR EMPIRICAL DISCOVERY "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                148,
+                119,
+                849,
+                167
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Chen Zhu "
+                    }
+                ]
+            },
+            "bbox": [
+                300,
+                231,
+                372,
+                243
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "China Agricultural University\nzhuchen@cau.edu.cn "
+                    }
+                ]
+            },
+            "bbox": [
+                235,
+                244,
+                433,
+                272
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Xiaolu Wang "
+                    }
+                ]
+            },
+            "bbox": [
+                614,
+                231,
+                709,
+                244
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "China Agricultural University\nwangxiaolu77@cau.edu.cn "
+                    }
+                ]
+            },
+            "bbox": [
+                560,
+                244,
+                759,
+                273
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "March 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                444,
+                308,
+                552,
+                321
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "ABSTRACT "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                449,
+                340,
+                547,
+                356
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Large language models (LLMs) have enabled agent-based systems that attempt to automate scientific research workflows. Existing approaches often pursue fully autonomous discovery, in which AI systems generate research ideas, conduct experiments, and produce manuscripts with minimal human involvement. However, empirical research in economics and the social sciences poses additional challenges: research questions must be grounded in available datasets, identification strategies require careful design, and human judgment remains essential for evaluating economic significance. We introduce HLER (Human-in-the-Loop Economic Research), a multi-agent architecture that supports empirical research automation while preserving critical human oversight. The system orchestrates specialized agents for data auditing, data profiling, hypothesis generation, econometric analysis, manuscript drafting, and automated review. A central design principle is dataset-aware hypothesis generation, in which candidate research questions are constrained by dataset structure, variable availability, and distributional diagnostics. This prevents infeasible or hallucinated hypotheses that frequently arise in unconstrained LLM ideation. HLER further introduces a two-loop research architecture: a question quality loop in which candidate hypotheses are generated, screened for feasibility, and selected by a human researcher; and a research revision loop in which automated review triggers re-analysis and manuscript revision. Human decision gates are embedded at key stages, including question selection and publication approval, allowing researchers to steer the automated pipeline. We evaluate the framework on three empirical datasets, including longitudinal survey data. Across 14 pipeline runs, dataset-aware hypothesis generation produces feasible research questions in 87% of cases, compared with 41% under unconstrained generation, and the system successfully completes end-to-end empirical manuscripts at an average API cost of $0.8-$1.5 per run. A detailed case study on the China Health and Nutrition Survey illustrates the full workflow from data inspection to a revised draft manuscript. These results suggest that Human-AI collaborative pipelines may provide a practical path toward scalable empirical research. The HLER working paper repository is publicly available at https://github.com/maxwell2732/hler-working-papers. "
+                    }
+                ]
+            },
+            "bbox": [
+                169,
+                369,
+                826,
+                715
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "1 Introduction "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                734,
+                253,
+                750
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Recent advances in large language models (LLMs) have substantially improved automated scientific writing, including summarization, drafting, and the generation of coherent technical narratives   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[1, 2, 3]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . Frontier model reports document broad improvements in academic and professional task performance   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[1, 2]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " , and domain-targeted scientific LLMs illustrate the feasibility of using language models as interfaces for scientific knowledge   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[3]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . At the same time, most existing LLM-based workflows remain primarily text-centric: they can draft plausible prose but struggle to reliably perform the end-to-end steps required for credible empirical research, particularly in data-driven social sciences. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                765,
+                883,
+                851
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "One widely documented limitation is hallucination, generation models can produce fluent but unsupported claims, which motivates verification, constraint, and critique mechanisms when models are used in research settings   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[4]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . A second limitation is that empirical research requires interaction with external artifacts (datasets, code, econometric software, and intermediate results). Agentic paradigms such as ReAct demonstrate that reliable task completion often "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                854,
+                883,
+                912
+            ]
+        },
+        {
+            "type": "page_aside_text",
+            "content": {
+                "page_aside_text_content": [
+                    {
+                        "type": "text",
+                        "content": "arXiv:2603.07444v1 [cs.AI] 8 Mar 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                22,
+                284,
+                57,
+                710
+            ]
+        }
+    ],
+    [
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "requires coupling LLM reasoning with tool-mediated actions that query external sources and reduce error propagation [5]. These limitations imply that simply generating a paper-like narrative is insufficient for empirical disciplines where credibility depends on data validation, transparent estimation, and robustness. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                90,
+                883,
+                133
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "A growing body of work explores autonomous research, vibe research, and “AI scientist” pipelines that extend LLMs beyond writing to include idea generation, code execution, and automated review, largely in machine learning research environments   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[6]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . These systems provide an important precedent for end-to-end automation, but they also highlight a gap for empirical economics and related social sciences: credible empirical contribution depends on dataset feasibility checks, econometric identification choices, and reproducible workflows, not only on experimental iteration in simulated or ML-centric settings. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                138,
+                883,
+                223
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Empirical economics is inherently procedural and iterative. A typical study requires (i) validating dataset structure and variable definitions, (ii) selecting feasible questions that match observed variation, (iii) specifying an identification strategy, (iv) estimating models, and (v) subjecting results to critical scrutiny prior to dissemination. Evidence from replication audits suggests that even when papers are required to provide data and code, reproducing published economics findings often fails or requires substantial author assistance, underscoring the fragility of empirical workflows [7]. More broadly, social-scientific conclusions can be highly sensitive to analytic choices: even holding data and the research question fixed, different teams can arrive at meaningfully different estimates due to modeling decisions [8]. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                229,
+                883,
+                327
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "This paper introduces the Human-in-the-Loop Economic Research (HLER) pipeline, a multi-agent architecture designed to automate the empirical research workflow while preserving key human oversight. The system orchestrates specialized agents that sequentially perform data auditing, data profiling, research question generation, econometric analysis, manuscript drafting, and automated review. Our orchestration approach is inspired by recent multi-agent frameworks that coordinate specialized LLM roles and allow flexible mixtures of tool use and human inputs   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[9]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . To improve feasibility and reduce hallucinated hypotheses, HLER implements dataset-aware question generation, constraining candidate questions by dataset structure, variable availability, missingness, and distributional diagnostics rather than unconstrained ideation. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                332,
+                883,
+                444
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "A central design feature of HLER is a two-loop research architecture. The question quality loop generates candidate hypotheses, screens them for feasibility using dataset diagnostics, and presents them to a human researcher for selection. The research revision loop subjects the resulting manuscript to automated review; the reviewer agent may request additional robustness checks or improved exposition, triggering re-analysis and manuscript revision. This iterative design is motivated by evidence that structured self-feedback can substantially improve model outputs without additional training   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[10]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . By integrating data constraints, econometric execution, and iterative critique within a single orchestrated pipeline, HLER aims to extend LLM utility from automated writing toward scalable, human-supervised empirical discovery in economics. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                449,
+                883,
+                561
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Our main contributions are: "
+                    }
+                ]
+            },
+            "bbox": [
+                112,
+                566,
+                297,
+                580
+            ]
+        },
+        {
+            "type": "list",
+            "content": {
+                "list_type": "text_list",
+                "list_items": [
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "1. A dataset-aware hypothesis generation mechanism that conditions research question generation on dataset audits and statistical profiles, reducing infeasible hypotheses from 59% to 13% compared with unconstrained LLM ideation. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "2. A two-loop research architecture consisting of a question quality loop (generation  "
+                            },
+                            {
+                                "type": "equation_inline",
+                                "content": "\\rightarrow"
+                            },
+                            {
+                                "type": "text",
+                                "content": " screening  "
+                            },
+                            {
+                                "type": "equation_inline",
+                                "content": "\\rightarrow"
+                            },
+                            {
+                                "type": "text",
+                                "content": " human selection) and a research revision loop (review  "
+                            },
+                            {
+                                "type": "equation_inline",
+                                "content": "\\rightarrow"
+                            },
+                            {
+                                "type": "text",
+                                "content": " re-analysis  "
+                            },
+                            {
+                                "type": "equation_inline",
+                                "content": "\\rightarrow"
+                            },
+                            {
+                                "type": "text",
+                                "content": " revision), with empirical evidence that reviewer scores improve across revision iterations. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "3. An end-to-end evaluation across three empirical datasets and 14 pipeline runs, demonstrating that the system can reliably produce complete research manuscripts at an average cost of $0.8-$1.5 per run. "
+                            }
+                        ]
+                    }
+                ]
+            },
+            "bbox": [
+                150,
+                595,
+                879,
+                724
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "2 Related Work "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                752,
+                264,
+                767
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "2.1 LLM Agents for Scientific Discovery "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                786,
+                408,
+                801
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Recent advances in large language models have led to growing interest in using AI systems as autonomous or semi-autonomous researchers. Several studies propose multi-agent architectures capable of generating hypotheses, implementing experiments, and producing scientific manuscripts. The AI Scientist introduces an end-to-end framework in which LLM agents autonomously generate research ideas, write code, analyze results, and produce full scientific papers, followed by an automated review process   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[6]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . More broadly, a growing literature explores agent-based research automation, where multiple specialized agents coordinate to perform different components of the scientific workflow   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[11]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                814,
+                883,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "2 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                935,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "table",
+            "content": {
+                "image_source": {
+                    "path": "images/5da78a253cac499464a9acec715659a1740b8fabe454c96c1a8895b75ced8cc7.jpg"
+                },
+                "table_caption": [
+                    {
+                        "type": "text",
+                        "content": "Table 1: Comparison of HLER with existing AI research automation systems.  "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "\\checkmark ="
+                    },
+                    {
+                        "type": "text",
+                        "content": " supported,  "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "\\circ ="
+                    },
+                    {
+                        "type": "text",
+                        "content": " partially supported,  "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "- ="
+                    },
+                    {
+                        "type": "text",
+                        "content": " not supported. \"LLM Agents\" refers to general-purpose multi-agent frameworks such as AutoGen [9] and similar systems [11]. \"Writing Tools\" refers to LLM-based writing assistants without empirical analysis capabilities. "
+                    }
+                ],
+                "table_footnote": [],
+                "html": "<table><tr><td>Feature</td><td>HLER</td><td>AI Scientist</td><td>APE</td><td>LLM Agents</td><td>Writing Tools</td></tr><tr><td>Domain</td><td>Empirical Econ</td><td>ML</td><td>Policy</td><td>General</td><td>Writing</td></tr><tr><td>Hypothesis generation</td><td>√</td><td>√</td><td>√</td><td>○</td><td>-</td></tr><tr><td>Empirical / experimental analysis</td><td>√</td><td>√</td><td>√</td><td>-</td><td>-</td></tr><tr><td>Automated paper drafting</td><td>√</td><td>√</td><td>√</td><td>-</td><td>√</td></tr><tr><td>Automated review / critique</td><td>√</td><td>√</td><td>○</td><td>-</td><td>-</td></tr><tr><td>Human-in-the-loop</td><td>√</td><td>-</td><td>○</td><td>○</td><td>√</td></tr><tr><td colspan=\"6\">HLER-specific capabilities</td></tr><tr><td>Data-aware hypothesis generation</td><td>√</td><td>-</td><td>-</td><td>-</td><td>-</td></tr><tr><td>Data auditing / profiling</td><td>√</td><td>-</td><td>-</td><td>-</td><td>-</td></tr></table>",
+                "table_type": "complex_table",
+                "table_nest_level": 1
+            },
+            "bbox": [
+                153,
+                137,
+                844,
+                287
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Related work has also explored domain-specific autonomous research pipelines. BioResearcher proposes a modular multi-agent system for biomedical research workflows, including literature processing, experiment design, and protocol generation   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[12]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . AutoLabs attempts to automate experimental workflows in chemistry using self-correcting agents and structured reasoning   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[13]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . While these systems demonstrate the feasibility of AI-assisted research, most existing architectures focus on computational or experimental sciences, where experiments can be directly executed in simulation or laboratory environments. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                330,
+                883,
+                412
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "2.2 Autonomous Research Systems in Economics "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                449,
+                468,
+                465
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "In economics and policy evaluation, research automation poses different challenges. Empirical social science requires not only hypothesis generation and analysis but also careful handling of observational datasets, identification strategies, and causal inference. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                482,
+                883,
+                523
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "A prominent recent effort is the Autonomous Policy Evaluation (APE) project developed by the Social Catalyst Lab at the University of Zurich   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[14]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . APE explores whether an AI system can autonomously generate empirical economics research at scale using publicly available data. The system produces full research papers end-to-end by identifying research questions, retrieving public datasets, writing econometric analysis code (primarily in R), generating figures and tables, and drafting LATEX manuscripts. APE papers are evaluated through a tournament framework in which AI-generated papers are compared against human-written research using automated LLM referees. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                530,
+                883,
+                614
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "However, the APE framework intentionally emphasizes full automation, where most analysis code and manuscripts are generated without direct human intervention. While this approach enables large-scale experimentation, it also highlights challenges related to hallucinated hypotheses and limited feasibility checks. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                619,
+                883,
+                662
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "2.3 Human-in-the-Loop Research Automation "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                698,
+                449,
+                713
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "An alternative approach emphasizes Human-AI collaboration rather than full automation   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[15, 16]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . In complex empirical fields such as economics, research design often requires domain expertise, judgment about identification strategies, and evaluation of economic significance. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                731,
+                883,
+                773
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "HLER builds on this perspective by combining autonomous agent execution with explicit human decision gates. The framework differs from prior systems in three key ways. First, HLER explicitly integrates human decision gates within the research workflow, while systems such as APE primarily explore the feasibility of fully autonomous pipelines. Second, HLER introduces a data-driven question generation stage based on dataset auditing and profiling, which constrains hypothesis generation using information about variable availability, missingness, and distributional properties. Third, HLER incorporates a structured two-loop research architecture: a question quality loop (generation → feasibility screening → human selection) and a research revision loop (automated review → re-analysis → manuscript revision), designed to approximate the iterative review processes typical of empirical research. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                779,
+                883,
+                891
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Table 1 summarizes the key differences between HLER and existing AI research automation systems. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                897,
+                777,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "3 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                935,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "3 System Design and Implementation "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                89,
+                444,
+                107
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "HLER (Human-in-the-Loop Economic Research) is a multi-agent pipeline that decomposes empirical research into structured stages executed by specialized agents coordinated by a central orchestrator. This section describes both the conceptual architecture and its implementation. Multi-agent architectures have recently been used to automate aspects of scientific discovery, including hypothesis generation, experiment design, and iterative refinement   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[17, 18]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . HLER adapts this paradigm to the structure of economic empirical research. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                122,
+                883,
+                191
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "3.1 Architecture Overview "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                209,
+                313,
+                224
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Figure 1 illustrates the overall architecture. At the top level, a human principal investigator (PI) interacts with the system through two decision gates: research question selection and publication approval. Between these gates, a central orchestrator coordinates the activities of multiple specialized agents. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                236,
+                883,
+                279
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The orchestrator maintains a shared state object (RunState) that records intermediate outputs from each stage of the pipeline. Tasks are dispatched sequentially to agents according to the predefined workflow: "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                284,
+                883,
+                314
+            ]
+        },
+        {
+            "type": "equation_interline",
+            "content": {
+                "math_content": "\\begin{array}{c} \\text { DATA   AUDIT } \\to \\text { DATA   PROFILING } \\to \\text { QUESTIONING } \\to \\text { DATA   COLLECTION } \\to \\text { ANALYSIS } \\to \\text { WRITING } \\to \\\\ \\text { SELF - CRITIQUE } \\to \\text { REVIEW } \\end{array}",
+                "math_type": "latex",
+                "image_source": {
+                    "path": "images/cde699474d89d88ff0373679f8617f6aa4236ea3a63f74e57f6357e895322809.jpg"
+                }
+            },
+            "bbox": [
+                133,
+                325,
+                859,
+                354
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Each agent produces structured outputs that are stored in the shared state and passed to the next stage. The final stage returns either a completed research draft or revision requests, which may trigger an additional pipeline iteration. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                369,
+                883,
+                398
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "3.2 Agent Roles "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                415,
+                238,
+                430
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "HLER consists of seven specialized agents, each responsible for a distinct component of the research workflow. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                441,
+                844,
+                458
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Data Audit Agent. The DataAuditAgent validates the structure of available datasets before any research questions are generated. The agent reads dataset headers and schema information to construct an inventory of available variables and data sources. This step prevents the system from proposing hypotheses that require variables absent from the dataset. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                473,
+                883,
+                529
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Data Profiling Agent. The DataProfilingAgent analyzes the statistical properties of the dataset, including summary statistics, missingness patterns, variable distributions, and pairwise correlations. The agent also identifies potential endogeneity risks and suggests variable transformations. These diagnostics are summarized in a structured DataProfile object that informs subsequent hypothesis generation. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                546,
+                883,
+                603
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Question Agent. The QuestionAgent generates candidate empirical research questions using a large language model constrained by the dataset audit and data profile. Unlike conventional LLM brainstorming, the hypothesis generation process is explicitly conditioned on dataset availability and statistical properties, reducing the frequency of infeasible research questions. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                619,
+                883,
+                676
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Data Agents. Data collection agents retrieve relevant data from public APIs (e.g., World Bank, FRED) and local datasets. The retrieved data are merged and prepared for analysis. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                691,
+                883,
+                722
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Econometrics Agent. The EconometricsAgent constructs an empirical analysis plan and executes the appropriate econometric models. Depending on the dataset structure, the agent may estimate ordinary least squares (OLS), fixed-effects panel models, difference-in-differences designs, or event-study specifications. Results are exported as tables, figures, and structured output summaries. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                737,
+                883,
+                794
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Paper Agent. The PaperAgent generates a full research manuscript based on the econometric results. The draft includes an abstract, introduction, methodology, results, and discussion sections, following standard academic paper conventions. Drafts are versioned (e.g., draft_v1.md, draft_v2.md) to support iterative revision. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                810,
+                883,
+                854
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Reviewer Agent. The ReviewerAgent evaluates the draft across several criteria including novelty, identification credibility, data quality, clarity, and policy relevance. The agent produces structured review reports with numerical scores (1-10 scale) and identifies specific areas requiring revision. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                869,
+                883,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "4 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                936,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "image",
+            "content": {
+                "image_source": {
+                    "path": "images/898272e43c74408b73ce49eef582df216783897dc8fe8a388e533a9336c2236a.jpg"
+                },
+                "content": "```mermaid\ngraph TD\n    A[\"Human PI\"] --> B[\"Research question selection\"]\n    B --> C[\"ORCHESTRATOR\"]\n    C --> D[\"Owns RunState · Dispatches tasks · Manages gates\"]\n    D --> E[\"Data Audit Agent\"]\n    D --> F[\"Data Profiling Agent\"]\n    D --> G[\"Question Agent\"]\n    D --> H[\"Data Agent\"]\n    D --> I[\"Econometrics Agent\"]\n    D --> J[\"Paper Agent\"]\n    D --> K[\"Reviewer Agent\"]\n    style A fill:#f9f,stroke:#333\n    style B fill:#ccf,stroke:#333\n    style C fill:#cfc,stroke:#333\n    style D fill:#fcc,stroke:#333\n    subgraph Question Quality Loop\n        E\n        F\n        G\n        H\n    end\n    subgraph Research Revision Loop\n        I\n        J\n        K\n    end\n```",
+                "image_caption": [
+                    {
+                        "type": "text",
+                        "content": "Figure 1: Architecture of the HLER system. The orchestrator coordinates a multi-agent empirical research pipeline. The core workflow includes data auditing, data profiling, question generation and screening, econometric analysis, manuscript drafting, and automated critique. Two feedback loops are shown: the question quality loop (left), in which candidates are generated and screened before human selection; and the research revision loop (right), in which the reviewer agent triggers re-analysis and manuscript revision through the Econometrics and Paper agents. Human decision gates allow researchers to select research questions and approve final outputs. "
+                    }
+                ],
+                "image_footnote": []
+            },
+            "sub_type": "flowchart",
+            "bbox": [
+                178,
+                98,
+                823,
+                330
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "3.3 Control Loops "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                452,
+                256,
+                468
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "HLER incorporates two feedback loops that improve research quality. "
+                    }
+                ]
+            },
+            "bbox": [
+                112,
+                478,
+                571,
+                493
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Question Quality Loop. During hypothesis generation, the system produces multiple candidate research questions. These questions are evaluated using feasibility checks and preliminary statistical diagnostics. The human PI then selects the most promising research direction through the question-selection gate. If none of the candidates are satisfactory, the researcher can request a new generation round with modified constraints, making this a genuine iterative loop. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                506,
+                885,
+                564
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Research Revision Loop. After the manuscript is generated, the ReviewerAgent evaluates the paper and may request revisions. Each iteration of this loop consists of two phases: a production phase, in which the EconometricsAgent performs additional analyses requested by the reviewer (e.g., robustness checks, alternative specifications) and the PaperAgent updates the manuscript; and a critique phase, in which the ReviewerAgent re-evaluates the revised draft and determines whether further revisions are needed. This loop can repeat multiple times. In practice, we observe convergence within 2-4 iterations (see Section 4.4). "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                577,
+                887,
+                662
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "3.4 Human Oversight "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                676,
+                282,
+                691
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Despite its high level of automation, HLER is designed as a human-in-the-loop system. Humans intervene at two key decision points: "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                700,
+                885,
+                729
+            ]
+        },
+        {
+            "type": "list",
+            "content": {
+                "list_type": "text_list",
+                "list_items": [
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "1. Research Question Selection — the human researcher selects the most promising hypothesis among the generated candidates, applying domain knowledge and research judgment. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "2. Publication Decision — the human decides whether the resulting paper is sufficiently credible and interesting to be finalized, acting as a final quality gate. "
+                            }
+                        ]
+                    }
+                ]
+            },
+            "bbox": [
+                150,
+                741,
+                883,
+                803
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "This design balances automation with human judgment, ensuring that critical scientific decisions remain under researcher control while routine tasks such as data processing and manuscript drafting are automated. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                813,
+                885,
+                843
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "3.5 Implementation Details "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                857,
+                318,
+                873
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "HLER is implemented in Python. All LLM reasoning is performed via the Anthropic API using Claude Sonnet 4.6, though the architecture is model-agnostic. Each agent is a Python class derived from a shared BaseAgent interface that "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                883,
+                885,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                885,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "5 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                936,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "standardizes task reception, shared context access, and result return. Agent outputs are represented using structured data objects (e.g., ResearchQuestion, DataProfile, AnalysisResult) defined in a shared message schema, enabling logging, validation, and reuse across pipeline stages. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                90,
+                883,
+                133
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The system supports both local datasets and external data sources. Local datasets are accessed through dataset-specific client modules that standardize file loading, metadata extraction, and variable inspection. The current prototype supports the China Health and Nutrition Survey (CHNS), the China Multi-Generational Panel Dataset (CMGPD-Liaoning), and the UK Biobank. Public macroeconomic data can be retrieved through external APIs such as the World Bank, FRED, and OpenAlex. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                138,
+                883,
+                209
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The econometric analysis stage combines LLM-generated analysis plans with programmatic statistical estimation using standard Python libraries (e.g., statsmodels, linearmodels). The current implementation supports OLS, fixed-effects panel regression, difference-in-differences, and event-study specifications. Research manuscripts are generated in Markdown format and compiled into PDF using Pandoc and  "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "\\mathrm{LATEX}"
+                    },
+                    {
+                        "type": "text",
+                        "content": ". "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                215,
+                883,
+                272
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4 Experimental Evaluation "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                111,
+                291,
+                357,
+                308
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "We evaluate HLER along four dimensions: (1) the feasibility of generated research questions under dataset-aware versus unconstrained generation, (2) the end-to-end pipeline completion rate, (3) the dynamics of the revision loop, and (4) the computational cost. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                321,
+                883,
+                364
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4.1 Experimental Setup "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                380,
+                294,
+                395
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "All experiments use the implementation described in Section 3 with Claude Sonnet 4.6 through the Anthropic API. We evaluate on three empirical datasets commonly used in economic research: "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                405,
+                883,
+                434
+            ]
+        },
+        {
+            "type": "list",
+            "content": {
+                "list_type": "text_list",
+                "list_items": [
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "- China Health and Nutrition Survey (CHNS) — longitudinal survey, 285 variables, 57,203 observations, 1989-2011 "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "- China Multi-Generational Panel Dataset (CMGPD-Liaoning) — historical demographic records "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "- UK Biobank — large-scale biomedical dataset with socioeconomic variables "
+                            }
+                        ]
+                    }
+                ]
+            },
+            "bbox": [
+                156,
+                446,
+                883,
+                512
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "For each dataset, we executed the full HLER pipeline multiple times with different research domain constraints (e.g., labor economics, health economics, education). A total of 14 complete pipeline runs were conducted across the three datasets. The human researcher selected one research question per run from the generated candidates. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                525,
+                883,
+                568
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4.2 Research Question Feasibility "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                583,
+                361,
+                598
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "A central goal of HLER is to produce empirically feasible research questions. To evaluate this, we compare questions generated under two conditions: "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                609,
+                883,
+                638
+            ]
+        },
+        {
+            "type": "list",
+            "content": {
+                "list_type": "text_list",
+                "list_items": [
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "- Dataset-aware generation (HLER default): The QuestionAgent receives the full dataset audit and statistical profile before generating hypotheses. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "- Unconstrained generation (ablation): The same LLM generates research questions given only a dataset name and broad domain description, without audit or profiling information. "
+                            }
+                        ]
+                    }
+                ]
+            },
+            "bbox": [
+                156,
+                650,
+                880,
+                710
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Each generated question was evaluated against three feasibility criteria: (1) the required variables exist in the dataset, (2) the proposed empirical design is compatible with the dataset structure, and (3) the question can be addressed using the supported econometric methods. Two researchers independently assessed each question; disagreements were resolved through discussion. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                723,
+                883,
+                779
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Table 2 reports the results. Across 14 runs, the dataset-aware mechanism generated 79 candidate questions, of which 69 (87%) satisfied all three feasibility criteria. The unconstrained ablation generated 82 questions, of which only 34 (41%) were fully feasible. The most common failure mode under unconstrained generation was proposing variables not present in the dataset (42% of failures), followed by designs incompatible with the data structure (35%). "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                785,
+                883,
+                842
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4.3 End-to-End Pipeline Completion "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                111,
+                857,
+                382,
+                872
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Of the 14 pipeline runs, 12 (86%) completed the full workflow from dataset auditing through manuscript generation and review without manual intervention beyond the two planned decision gates. The two incomplete runs failed during the "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                883,
+                883,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "6 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                936,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "table",
+            "content": {
+                "image_source": {
+                    "path": "images/b768448b95330c339b2e24666f0a9359228ddde031f76d6c84c2a5e53cca19ce.jpg"
+                },
+                "table_caption": [
+                    {
+                        "type": "text",
+                        "content": "Table 2: Feasibility of generated research questions under dataset-aware versus unconstrained generation across 14 pipeline runs on three datasets. "
+                    }
+                ],
+                "table_footnote": [],
+                "html": "<table><tr><td>Condition</td><td>Questions</td><td>Feasible (%)</td><td>Var. missing</td><td>Design incompat.</td></tr><tr><td>Dataset-aware (HLER)</td><td>79</td><td>69 (87%)</td><td>4</td><td>6</td></tr><tr><td>Unconstrained (ablation)</td><td>82</td><td>34 (41%)</td><td>20</td><td>17</td></tr></table>",
+                "table_type": "simple_table",
+                "table_nest_level": 1
+            },
+            "bbox": [
+                210,
+                123,
+                785,
+                178
+            ]
+        },
+        {
+            "type": "table",
+            "content": {
+                "image_source": {
+                    "path": "images/2831e21cfe16da01ae7b58208b276e245144458b149663fd040efa07ff28e1a3.jpg"
+                },
+                "table_caption": [
+                    {
+                        "type": "text",
+                        "content": "Table 3: Mean reviewer scores (1-10 scale) across revision iterations for 12 completed pipeline runs. SD in parentheses. "
+                    }
+                ],
+                "table_footnote": [],
+                "html": "<table><tr><td>Dimension</td><td>Draft v1</td><td>Draft v2</td><td>Final draft</td></tr><tr><td>Novelty</td><td>5.2 (1.1)</td><td>5.3 (1.0)</td><td>5.5 (0.9)</td></tr><tr><td>Identification</td><td>4.1 (1.2)</td><td>5.2 (0.9)</td><td>5.5 (0.8)</td></tr><tr><td>Data quality</td><td>5.4 (0.8)</td><td>5.8 (0.7)</td><td>6.1 (0.6)</td></tr><tr><td>Clarity</td><td>4.3 (1.0)</td><td>5.8 (0.8)</td><td>6.4 (0.7)</td></tr><tr><td>Policy relevance</td><td>5.1 (0.9)</td><td>5.5 (0.8)</td><td>5.8 (0.7)</td></tr><tr><td>Overall</td><td>4.8 (0.9)</td><td>5.9 (0.7)</td><td>6.3 (0.6)</td></tr></table>",
+                "table_type": "simple_table",
+                "table_nest_level": 1
+            },
+            "bbox": [
+                323,
+                210,
+                674,
+                323
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "econometric analysis stage due to convergence issues in fixed-effects estimation on sparse subsamples. In both cases, the EconometricsAgent logged the error and the pipeline halted gracefully, allowing the researcher to adjust sample restrictions and re-run. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                348,
+                883,
+                390
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "For completed runs, the system produced regression tables, figures, and structured summaries of empirical results. The PaperAgent generated full research manuscripts including abstract, introduction, empirical strategy, results, and discussion sections. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                396,
+                883,
+                436
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4.4 Revision Loop Dynamics "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                454,
+                328,
+                469
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "To evaluate whether the research revision loop improves manuscript quality, we tracked the ReviewerAgent's numerical scores across revision iterations for the 12 completed runs. The reviewer evaluates each draft on five dimensions (novelty, identification credibility, data quality, clarity, and policy relevance) using a 1-10 scale. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                479,
+                883,
+                522
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Table 3 reports the mean reviewer scores across iterations. Initial drafts received a mean overall score of 4.8 (SD = 0.9). After the first revision, scores improved to 5.9 (SD = 0.7). Most runs converged after 2-3 iterations, with final drafts scoring 6.3 (SD = 0.6) on average. The largest improvements were observed in clarity (+2.1 points on average) and identification credibility (+1.4), while novelty scores showed minimal change across iterations (+0.3), consistent with the expectation that the revision loop improves exposition and robustness rather than the underlying research contribution. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                527,
+                883,
+                609
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The most frequent reviewer requests in the first iteration were: additional robustness checks (10 of 12 runs), clearer identification strategy discussion (8 of 12), and improved variable descriptions (7 of 12). "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                617,
+                883,
+                646
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4.5 Runtime and Cost "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                661,
+                282,
+                674
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "A complete HLER pipeline run typically requires approximately 20-25 minutes on a standard research workstation. The average LLM API cost per run is $0.8-$1.5, depending on the number of generated research questions and revision iterations. This is substantially lower than the AI Scientist framework, which reports approximately $6-$15 per generated research paper [6], primarily because HLER limits the scope of LLM calls to reasoning and text generation while delegating statistical computation to programmatic libraries. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                686,
+                883,
+                756
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "4.6 Case Study: Rural Women's Labor Outcomes in China "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                111,
+                772,
+                537,
+                787
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "To illustrate the full HLER workflow, we present a detailed case study from a pipeline run on the China Health and Nutrition Survey (CHNS). "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                797,
+                883,
+                825
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Setup. The researcher specified a research domain (labor economics) and a broad constraint focusing on rural women in China. The system then executed the full pipeline. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                840,
+                883,
+                869
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Dataset inspection. The DataAuditAgent identified the CHNS panel as the primary dataset, detecting 285 variables covering 1989-2011. The DataProfilingAgent computed summary statistics for 57,203 observations, identified "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                883,
+                883,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "7 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                935,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "variables with high missingness (e.g., income variables missing for 23% of observations), and flagged potential endogeneity concerns between education and occupation variables. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                90,
+                883,
+                122
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Hypothesis generation and selection. The QuestionAgent generated eight candidate research questions. The QuestionScreeningAgent scored each candidate on feasibility and empirical tractability. Of the eight candidates, seven satisfied all feasibility criteria. The top-ranked question selected by the researcher was: "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                133,
+                883,
+                176
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Does higher education attainment reduce the occupational gender gap among rural women in China? "
+                    }
+                ]
+            },
+            "bbox": [
+                169,
+                186,
+                823,
+                200
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Empirical analysis. The EconometricsAgent constructed a panel dataset with individual and wave identifiers and implemented a fixed-effects regression model. After applying sample restrictions, the analytic dataset contained 19,466 observations. The main specification estimated the relationship between education attainment and occupational category using within-individual variation. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                214,
+                883,
+                271
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Revision dynamics. The ReviewerAgent evaluated the initial draft (5,563 words) and identified concerns about reverse causality and identification credibility. The reviewer recommended event-study specifications, sensitivity analyses, and a clearer discussion of the fixed-effects identification assumption. Over three revision iterations, the EconometricsAgent performed additional analyses and the PaperAgent incorporated the new results and improved the exposition. The final manuscript contained 7,282 words. Reviewer scores improved from 4.6 (initial) to 6.5 (final), with the largest gains in identification credibility (3.2 → 5.8) and clarity (4.1 → 6.9). "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                284,
+                883,
+                369
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Outcome. The final run produced a complete research manuscript together with replication files, regression outputs, and figures, demonstrating that HLER can execute the full empirical workflow while maintaining human oversight at key decision points. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                381,
+                883,
+                424
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "5 Discussion "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                441,
+                235,
+                458
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "5.1 Human-AI Co-Production of Empirical Research "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                470,
+                496,
+                486
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The results suggest a paradigm for empirical research in which AI agents automate routine tasks while human researchers retain control over key scientific decisions. Recent work on AI-driven scientific discovery has demonstrated the potential of multi-agent systems to automate hypothesis generation, experiment planning, and manuscript writing   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[6, 18]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . However, scientific research is fundamentally an interpretive activity that involves judgment, domain expertise, and value-based decisions. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                497,
+                883,
+                566
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Human-in-the-loop approaches offer an alternative design philosophy in which human expertise complements machine intelligence. Prior studies have shown that Human-AI collaboration can improve decision accuracy, reliability, and trust compared with fully automated approaches   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[19]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . HLER operationalizes this paradigm through explicit human decision gates embedded within the research pipeline, allowing researchers to select promising hypotheses, evaluate intermediate results, and determine whether generated manuscripts should be pursued further. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                573,
+                883,
+                643
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "5.2 Scaling Empirical Research "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                657,
+                346,
+                672
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "A key motivation for the HLER framework is the potential to scale empirical research. Many stages of empirical work, such as dataset inspection, variable screening, robustness checks, and manuscript drafting, are repetitive and time-consuming. By automating these steps, HLER allows researchers to explore a much larger space of potential research questions. This capability may be particularly valuable for data-rich fields such as health economics, labor economics, and development economics, where large observational datasets contain thousands of variables and complex panel structures. Multi-agent scientific systems have already demonstrated the ability to accelerate discovery in other domains   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[17]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " ; our results suggest similar approaches can be adapted to empirical social science workflows. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                683,
+                883,
+                782
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "5.3 Researcher Degrees of Freedom and Ethical Considerations "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                796,
+                568,
+                811
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The ability to rapidly generate and test many hypotheses raises important methodological concerns. When a system can produce dozens of candidate research questions for a single dataset, the risk of selective reporting and multiple-testing problems increases substantially. A researcher who evaluates many HLER-generated hypotheses but reports only the one with statistically significant results would be engaging in a form of automated p-hacking. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                821,
+                883,
+                878
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Several design features of HLER partially mitigate this concern. The question-selection gate creates a record of all generated hypotheses, not only those ultimately pursued. The structured pipeline logs all intermediate outputs, including "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                883,
+                883,
+                914
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "8 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                936,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "generated questions that were not selected and analysis results from earlier iterations. These logs provide an audit trail that could support pre-registration-like transparency. "
+                    }
+                ]
+            },
+            "bbox": [
+                111,
+                90,
+                883,
+                119
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "However, we emphasize that HLER does not solve the multiple-testing problem. Responsible use of the system requires that researchers apply the same standards of statistical discipline that govern conventional empirical work, including appropriate multiple-testing corrections when exploring many hypotheses and transparent reporting of the full set of questions considered. More broadly, the prospect of low-cost automated empirical research raises questions about the potential for flooding preprint servers and journals with large volumes of machine-generated manuscripts. We believe that human decision gates, particularly the publication approval stage, are a necessary safeguard, but the research community should develop norms and standards for AI-assisted empirical research as these tools become more widespread. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                126,
+                883,
+                238
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "5.4 Limitations "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                252,
+                235,
+                266
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The HLER system has several limitations. First, the quality of generated research questions depends on the available datasets and the variable inventory. While dataset-aware generation reduces infeasible questions, it does not guarantee that generated hypotheses are theoretically meaningful or novel. Second, the econometric analysis stage currently supports only a limited set of empirical designs. Many economic studies require instrumental variables, regression discontinuity designs, or structural models; expanding the supported methods is an important direction for future work. Third, the ReviewerAgent scores are generated by the same underlying LLM that produces the manuscripts, creating a potential circularity in the evaluation. While the reviewer and paper agents use different prompts and roles, an independent evaluation by human reviewers or a different LLM would provide stronger evidence of manuscript quality. Fourth, our evaluation is based on 14 pipeline runs across three datasets. While the results are consistent, larger-scale benchmarking across more datasets and research domains would strengthen the generalizability of our findings. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                277,
+                883,
+                417
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "5.5 Implications for Scientific Workflows "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                431,
+                413,
+                448
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "The emergence of LLMs and multi-agent architectures may fundamentally change how scientific research is conducted. Future research workflows may involve collaborative systems in which AI agents assist researchers at multiple stages of the scientific process   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[20]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . In this context, systems such as HLER should not be viewed as replacements for researchers but as tools that extend the capabilities of scientists, allowing them to explore larger hypothesis spaces and conduct more systematic robustness checks. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                458,
+                883,
+                527
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "6 Conclusion "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                547,
+                241,
+                561
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "This paper introduces HLER (Human-in-the-Loop Economic Research), a multi-agent pipeline that automates the empirical research workflow while preserving human oversight in key scientific decisions. The system decomposes economic research into structured stages including dataset auditing, data profiling, hypothesis generation, econometric analysis, manuscript drafting, and automated review. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                577,
+                883,
+                633
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Our evaluation across three empirical datasets and 14 pipeline runs demonstrates that dataset-aware hypothesis generation produces feasible research questions in 87% of cases, compared with 41% under unconstrained LLM ideation. The system completes end-to-end research pipelines in 86% of runs, and the research revision loop improves reviewer scores from 4.8 to 6.3 on average across 2-3 revision iterations. A detailed case study on labor outcomes for rural women in China illustrates the full workflow from data inspection to a revised draft manuscript. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                638,
+                883,
+                710
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Unlike fully autonomous research systems, HLER adopts an explicitly human-in-the-loop architecture. Human researchers intervene at key decision gates, ensuring that domain expertise and scientific judgment remain central to the research process   "
+                    },
+                    {
+                        "type": "equation_inline",
+                        "content": "[19]"
+                    },
+                    {
+                        "type": "text",
+                        "content": " . This positions HLER as a collaborative tool rather than a replacement for researchers. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                715,
+                883,
+                758
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "Future work could extend the HLER framework in several directions: expanding the econometric toolkit to include instrumental variables, regression discontinuity designs, and structural models; conducting large-scale benchmarking across diverse datasets and domains; incorporating independent human evaluation of generated manuscripts; and developing standards for transparent reporting in AI-assisted empirical research. "
+                    }
+                ]
+            },
+            "bbox": [
+                109,
+                763,
+                883,
+                820
+            ]
+        },
+        {
+            "type": "title",
+            "content": {
+                "title_content": [
+                    {
+                        "type": "text",
+                        "content": "References "
+                    }
+                ],
+                "level": 1
+            },
+            "bbox": [
+                112,
+                838,
+                209,
+                854
+            ]
+        },
+        {
+            "type": "list",
+            "content": {
+                "list_type": "reference_list",
+                "list_items": [
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. arXiv preprint arXiv:2303.08774, 2023. "
+                            }
+                        ]
+                    }
+                ]
+            },
+            "bbox": [
+                119,
+                869,
+                883,
+                912
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "9 "
+                    }
+                ]
+            },
+            "bbox": [
+                493,
+                935,
+                504,
+                946
+            ]
+        }
+    ],
+    [
+        {
+            "type": "list",
+            "content": {
+                "list_type": "reference_list",
+                "list_items": [
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[2] Sonnet Anthropic. Model card addendum: Claude 3.5 haiku and upgraded claude 3.5 sonnet. URL https://api.semanticscholar.org/CorpusID, 273639283:24, 2024. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[3] Ross Taylor, Marcin Kardas, Guillem Cucurull, Thomas Scialom, Anthony Hartshorn, Elvis Saravia, Andrew Poulton, Viktor Kerkez, and Robert Stojnic. Galactica: A large language model for science. arXiv preprint arXiv:2211.09085, 2022. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[4] Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang, Andrea Madotto, and Pascale Fung. Survey of hallucination in natural language generation. ACM computing surveys, 55(12):1–38, 2023. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[5] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R Narasimhan, and Yuan Cao. React: Synergizing reasoning and acting in language models. In The eleventh international conference on learning representations, 2022. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[6] Chris Lu, Cong Lu, Robert Tjarko Lange, Jakob Foerster, Jeff Clune, and David Ha. The ai scientist: Towards fully automated open-ended scientific discovery. arXiv preprint arXiv:2408.06292, 2024. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[7] Andrew C Chang, Phillip Li, et al. Is economics research replicable? sixty published papers from thirteen journals say “often not”. Critical Finance Review, 7:1–25, 2018. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[8] Raphael Silberzahn, Eric Luis Uhlmann, Daniel P. Martin, Pasquale Anselmi, Frederik Aust, Eli Awtrey, Simon Bahnik, Feng Bai, Colin Bannard, Elin Bonnier, ..., and Brian A. Nosek. Many analysts, one data set: Making transparent how variations in analytic choices affect results. Advances in Methods and Practices in Psychological Science, 1(3):337–356, 2018. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[9] Qingyun Wu, Gagan Bansal, Jieyu Zhang, Yiran Wu, Beibin Li, Erkang Zhu, Li Jiang, Xiaoyun Zhang, Shaokun Zhang, Jiale Liu, et al. Autogen: Enabling next-gen llm applications via multi-agent conversations. In First conference on language modeling, 2024. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[10] Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et al. Self-refine: Iterative refinement with self-feedback. Advances in neural information processing systems, 36:46534–46594, 2023. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[11] Chengwei Liu, Chong Wang, Jiayue Cao, Jingquan Ge, Kun Wang, Lyuye Zhang, Ming-Ming Cheng, Penghai Zhao, Tianlin Li, Xiaojun Jia, et al. A vision for auto research with llm agents. arXiv preprint arXiv:2504.18765, 2025. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[12] Yi Luo, Linghang Shi, Yihao Li, Aobo Zhuang, Yeyun Gong, Ling Liu, and Chen Lin. From intention to implementation: automating biomedical research via llms. Science China Information Sciences, 68(7):170105, 2025. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[13] Gihan Panapitiya, Emily Saldanha, Heather Job, and Olivia Hess. Autolabs: Cognitive multi-agent systems with self-correction for autonomous chemical experimentation. arXiv preprint arXiv:2509.25651, 2025. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[14] The Social Catalyst Lab. APE Working Papers. https://github.com/SocialCatalystLab/ape-papers, 2026. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[15] Kerstin Dautenhahn. The art of designing socially intelligent agents: Science, fiction, and the human in the loop. Applied artificial intelligence, 12(7-8):573–617, 1998. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[16] Wannita Takerngsaksiri, Jirat Pasuksmit, Patanamon Thongtanunam, Chakkrit Tantithamthavorn, Ruixiong Zhang, Fan Jiang, Jing Li, Evan Cook, Kun Chen, and Ming Wu. Human-in-the-loop software development agents. In 2025 IEEE/ACM 47th International Conference on Software Engineering: Software Engineering in Practice (ICSE-SEIP), pages 342–352. IEEE, 2025. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[17] Yutaro Yamada, Robert Tjarko Lange, et al. The ai scientist-v2: Workshop-level automated scientific discovery via agentic tree search. arXiv preprint arXiv:2504.08066, 2025. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[18] Ali Essam Ghareeb, Benjamin Chang, Ludovico Mitchener, Angela Yiu, Caralyn Szostkiewicz, Jon M. Laurent, Muhammed T. Razzak, Andrew D. White, Michaela M. Hinks, and Samuel G. Rodrigues. Robin: A multi-agent system for automating scientific discovery. arXiv preprint arXiv:2505.13400, 2025. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[19] Eduardo Mosqueira-Rey, Elena Hernández-Pereira, David Alonso-Ríos, José Bobes-Bascarán, and Ángel Fernández-Leal. Human-in-the-loop machine learning: a state of the art. Artificial Intelligence Review, 56(4):3005–3054, 2023. "
+                            }
+                        ]
+                    },
+                    {
+                        "item_type": "text",
+                        "item_content": [
+                            {
+                                "type": "text",
+                                "content": "[20] Atsuyuki Miyai, Mashiro Toyooka, et al. Jr. ai scientist and its risk report: Autonomous scientific exploration from a baseline paper. arXiv preprint arXiv:2511.04583, 2025. "
+                            }
+                        ]
+                    }
+                ]
+            },
+            "bbox": [
+                104,
+                85,
+                892,
+                890
+            ]
+        },
+        {
+            "type": "page_header",
+            "content": {
+                "page_header_content": [
+                    {
+                        "type": "text",
+                        "content": "A PREPRINT - MARCH 10, 2026 "
+                    }
+                ]
+            },
+            "bbox": [
+                658,
+                42,
+                883,
+                56
+            ]
+        },
+        {
+            "type": "page_number",
+            "content": {
+                "page_number_content": [
+                    {
+                        "type": "text",
+                        "content": "10 "
+                    }
+                ]
+            },
+            "bbox": [
+                488,
+                935,
+                508,
+                946
+            ]
+        }
+    ]
+]
