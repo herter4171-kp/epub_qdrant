@@ -58,11 +58,45 @@ class DocumentLoader(ABC):
             return PdfLoader()
         raise ValueError(f"No loader for extension '{ext}'")
 
+    @staticmethod
+    def _read_sidecar(path: Path) -> Dict[str, str]:
+        """Read sidecar metadata JSON adjacent to an EPUB or PDF.
+
+        Convention: {filename}.metadata.json
+          - EPUB: book.epub.metadata.json
+          - PDF:  2010_03768.pdf.metadata.json
+
+        Schema: {"metadataAttributes": {"key": "value", ...}}
+        """
+        json_path = path.with_name(path.name + ".metadata.json")
+        if not json_path.exists():
+            return {}
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            attrs = data.get("metadataAttributes", {})
+            if isinstance(attrs, dict):
+                return {k: str(v) for k, v in attrs.items()}
+            # Backward compat: list of "key: value" strings
+            if isinstance(attrs, list):
+                result: Dict[str, str] = {}
+                for attr in attrs:
+                    if ": " in attr:
+                        k, v = attr.split(": ", 1)
+                        result[k] = v
+                    elif ":" in attr:
+                        k, v = attr.split(":", 1)
+                        result[k.strip()] = v.strip()
+                return result
+            return {}
+        except Exception as e:
+            logger.warning("Failed to parse %s: %s", json_path.name, e)
+            return {}
+
 
 # ── EPUB loader ───────────────────────────────────────────────────────────────
 
 class EpubLoader(DocumentLoader):
-    """Parse an EPUB, chunk sections with semantic chunker, return DocumentChunks."""
+    """Parse an EPUB, read optional sidecar metadata, chunk sections with semantic chunker, return DocumentChunks."""
 
     def load(self, path: Path) -> List[DocumentChunk]:
         from src.ingestion.epub_parser import parse_epub
@@ -70,6 +104,24 @@ class EpubLoader(DocumentLoader):
         from servers.embedding_server.client import get_dense_vectors
 
         book = parse_epub(str(path))
+
+        # ── sidecar metadata (optional) ───────────────────────────────
+        meta = DocumentLoader._read_sidecar(path)
+
+        # Override EPUB OPF values when sidecar provides them
+        if meta.get("title"):
+            book.title = meta["title"]
+        if meta.get("authors"):
+            book.creator = meta["authors"]
+        if meta.get("publisher"):
+            book.publisher = meta["publisher"]
+        if meta.get("language"):
+            book.language = meta["language"]
+        if meta.get("isbn"):
+            book.isbn = meta["isbn"]
+        if meta.get("publish_date"):
+            book.publication_date = meta["publish_date"]
+
         logger.info(
             "EPUB  %s — %s (%s, %s) — %d sections",
             path.name, book.title, book.publisher, book.language,
@@ -453,22 +505,3 @@ class PdfLoader(DocumentLoader):
             logger.warning("  Re-download failed for %s: %s", pdf_path.name, e)
             return False
 
-    @staticmethod
-    def _read_sidecar(pdf_path: Path) -> Dict[str, str]:
-        json_path = pdf_path.with_suffix(".json")
-        if not json_path.exists():
-            return {}
-        try:
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-            result: Dict[str, str] = {}
-            for attr in data.get("metadataAttributes", []):
-                if ": " in attr:
-                    k, v = attr.split(": ", 1)
-                    result[k] = v
-                elif ":" in attr:
-                    k, v = attr.split(":", 1)
-                    result[k.strip()] = v.strip()
-            return result
-        except Exception as e:
-            logger.warning("Failed to parse %s: %s", json_path.name, e)
-            return {}
