@@ -219,6 +219,55 @@ TOOLS = [
             "required": ["collection"],
         },
     },
+    {
+        "name": "list_sources",
+        "description": (
+            "List unique source documents (books or papers) in a collection "
+            "with pagination, category filtering, and text search. "
+            "Use limit=0 to get only summary stats (total count + category "
+            "breakdown) without any titles — ideal for initial discovery. "
+            "Then paginate with offset/limit or filter by category/search "
+            "to drill into specific subsets."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "collection": {
+                    "type": "string",
+                    "description": "Collection to list sources from.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Pagination offset (default 0).",
+                    "default": 0,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": (
+                        "Max sources to return (default 50). "
+                        "Set to 0 to return only summary stats "
+                        "(total count + categories) with no source list."
+                    ),
+                    "default": 50,
+                },
+                "category": {
+                    "type": "string",
+                    "description": (
+                        "Filter by category or subcategory "
+                        "(e.g. 'reasoning', 'application-papers')."
+                    ),
+                },
+                "search": {
+                    "type": "string",
+                    "description": (
+                        "Text search across title, authors, arxiv_id, "
+                        "and source_file. Case-insensitive substring match."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -627,12 +676,31 @@ def _handle_list_books(args: dict) -> dict:
     return {"books": books}
 
 
+def _handle_list_sources(args: dict) -> dict:
+    """Handle the list_sources tool call — paginated source listing."""
+    collection = args.get("collection") or settings.DEFAULT_COLLECTION
+    offset = args.get("offset", 0)
+    limit = args.get("limit", 50)
+    category = args.get("category")
+    search = args.get("search")
+
+    storage = get_storage()
+    return storage.list_sources(
+        collection_name=collection,
+        offset=offset,
+        limit=limit,
+        category=category,
+        search=search,
+    )
+
+
 HANDLERS = {
     "query": _handle_query,
     "get_context": _handle_get_context,
     "list_collections": _handle_list_collections,
     "pick_random_chunk": _handle_pick_random_chunk,
     "list_books": _handle_list_books,
+    "list_sources": _handle_list_sources,
 }
 
 

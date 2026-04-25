@@ -265,6 +265,7 @@ def chunk_section(
     config: ChunkConfig,
     token_counter: Callable[[str], int],
     embedding_fn: Optional[Callable[[List[str]], List[List[float]]]] = None,
+    sentence_splitter: Optional[Callable[[str], List[str]]] = None,
 ) -> List[ChunkResult]:
     """Three-layer semantic chunking pipeline.
 
@@ -273,6 +274,11 @@ def chunk_section(
     Layer 3: Recursive sub-splitting via semchunk within each segment.
 
     Then: merge runts, prepend heading context, emit ChunkResults.
+
+    Args:
+        sentence_splitter: Optional custom sentence splitter for Layer 2.
+            If provided, replaces the default ``_split_sentences``.
+            Used by the MinerU path to inject ``citation_aware_split``.
     """
     import semchunk
 
@@ -305,7 +311,8 @@ def chunk_section(
         ]
 
     # ── Layer 2: Semantic boundary detection on ORIGINAL content ──
-    sentences = _split_sentences(content)
+    _splitter = sentence_splitter or _split_sentences
+    sentences = _splitter(content)
     segments = [content]  # default: whole section = one segment
 
     if (

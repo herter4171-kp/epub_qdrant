@@ -17,7 +17,13 @@ from typing import Dict, Iterator, List, Optional
 
 from src.config import settings
 
+import os
+
 logger = logging.getLogger(__name__)
+
+# PDF backend constants
+PDF_BACKEND_PYPDF = "pypdf"
+PDF_BACKEND_MINERU = "mineru"
 
 
 # ── Uniform chunk produced by every loader ────────────────────────────────────
@@ -119,11 +125,22 @@ class EpubLoader(DocumentLoader):
 class PdfLoader(DocumentLoader):
     """Extract text from a PDF, chunk with semantic chunker, attach sidecar metadata.
 
+    Supports two backends via ``PDF_BACKEND`` env var:
+    - ``"pypdf"`` (default): existing pypdf extraction + paper_section_splitter
+    - ``"mineru"``: MinerU layout-aware PDF→Markdown + md_section_splitter + citation masking
+
     Expects ``downloads/<id>.pdf`` with an optional ``downloads/<id>.json``
     containing ``{"metadataAttributes": ["key: value", ...]}``.
     """
 
     def load(self, path: Path) -> List[DocumentChunk]:
+        backend = os.getenv("PDF_BACKEND", PDF_BACKEND_PYPDF).lower()
+        if backend == PDF_BACKEND_MINERU:
+            return self._load_mineru(path)
+        return self._load_pypdf(path)
+
+    def _load_pypdf(self, path: Path) -> List[DocumentChunk]:
+        """Existing pypdf extraction path — unchanged behavior."""
         from pypdf import PdfReader
         from src.ingestion.paper_section_splitter import split_paper_sections
         from src.ingestion.semantic_chunker import ChunkConfig, chunk_section, load_tokenizer
@@ -204,6 +221,95 @@ class PdfLoader(DocumentLoader):
                         "chunk_count": chunk_count,
                         "token_count": cr.token_count,
                         "has_heading_context": cr.has_heading_context,
+                    },
+                ))
+        return chunks
+
+    def _load_mineru(self, path: Path) -> List[DocumentChunk]:
+        """MinerU path: convert → split by Markdown headings → chunk with citation masking."""
+        from src.ingestion.semantic_chunker import ChunkConfig, chunk_section, load_tokenizer
+        from servers.embedding_server.client import get_dense_vectors
+
+        try:
+            from src.ingestion.mineru_converter import convert_pdf_to_markdown
+            from src.ingestion.md_section_splitter import split_markdown_sections
+            from src.ingestion.citation_masker import citation_aware_split
+        except ImportError:
+            logger.warning(
+                "MinerU dependencies not available for %s — falling back to pypdf",
+                path.name,
+            )
+            return self._load_pypdf(path)
+
+        # ── convert PDF → Markdown ────────────────────────────────────
+        try:
+            markdown = convert_pdf_to_markdown(str(path))
+        except ConnectionError:
+            logger.warning(
+                "MinerU service unreachable for %s — falling back to pypdf. "
+                "Start with: mineru-api --host 0.0.0.0 --port 8010",
+                path.name,
+            )
+            return self._load_pypdf(path)
+
+        # ── sidecar metadata ──────────────────────────────────────────
+        meta = self._read_sidecar(path)
+        arxiv_id = meta.get("arxiv_id", path.stem.replace("_", "."))
+        title = meta.get("title", path.stem)
+        category = meta.get("category", "")
+        subcategory = meta.get("subcategory", "")
+        authors = meta.get("authors", "")
+        publish_date = meta.get("publish_date", "")
+
+        logger.info(
+            "PDF   %s [mineru] — %s (cat=%s) — %d chars",
+            path.name, title[:60], category, len(markdown),
+        )
+
+        # ── split into sections, then chunk each ─────────────────────
+        token_counter = load_tokenizer(settings.TOKENIZER_JSON or None)
+        config = ChunkConfig(
+            chunk_size=settings.CHUNK_SIZE,
+            overlap_ratio=settings.CHUNK_OVERLAP_RATIO,
+            similarity_percentile=settings.SIMILARITY_PERCENTILE,
+            min_distance_floor=settings.MIN_DISTANCE_FLOOR,
+            min_sentences_for_semantic=settings.MIN_SENTENCES_FOR_SEMANTIC,
+            min_chunk_tokens=settings.MIN_CHUNK_TOKENS,
+            enable_semantic=settings.SEMANTIC_CHUNKING_ENABLED,
+            tokenizer_path=settings.TOKENIZER_JSON or None,
+        )
+
+        md_sections = split_markdown_sections(markdown)
+        chunks: List[DocumentChunk] = []
+
+        for ms in md_sections:
+            results = chunk_section(
+                title=ms.title,
+                content=ms.content,
+                config=config,
+                token_counter=token_counter,
+                embedding_fn=get_dense_vectors,
+                sentence_splitter=citation_aware_split,
+            )
+            chunk_count = len(results)
+            for cr in results:
+                chunks.append(DocumentChunk(
+                    text=cr.text,
+                    metadata={
+                        "doc_type": "paper",
+                        "source_file": path.name,
+                        "title": title or "",
+                        "arxiv_id": arxiv_id or "",
+                        "category": category or "",
+                        "subcategory": subcategory or "",
+                        "authors": authors or "",
+                        "publish_date": publish_date or "",
+                        "section_title": cr.section_title or "",
+                        "chunk_index": cr.chunk_index,
+                        "chunk_count": chunk_count,
+                        "token_count": cr.token_count,
+                        "has_heading_context": cr.has_heading_context,
+                        "heading_level": ms.heading_level,
                     },
                 ))
         return chunks

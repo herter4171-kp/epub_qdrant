@@ -32,6 +32,9 @@ epubq = "src.cli.main:cli"
 test = [
     "pytest>=7.0.0",
 ]
+mineru = [
+    "pysbd>=0.3.4",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

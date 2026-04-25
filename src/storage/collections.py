@@ -335,3 +335,135 @@ class Storage:
             {**entry, "source_file": sf}
             for sf, entry in books_map.items()
         ]
+
+    def list_sources(
+        self,
+        collection_name: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 50,
+        category: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        """List unique sources in a collection with pagination and filtering.
+
+        Scrolls the collection once to build a deduplicated source list,
+        then applies optional category/search filters and pagination.
+
+        Returns:
+            {
+                "sources": [...],   # paginated slice
+                "total": int,       # total matching sources
+                "offset": int,
+                "limit": int,
+                "has_more": bool,
+                "categories": {...}  # category → count mapping (always included)
+            }
+        """
+        from collections import defaultdict
+
+        coll = collection_name or settings.QDRANT_COLLECTION
+        coll = _sanitize_collection_name(coll)
+
+        # Payload fields to fetch — covers both books and papers
+        payload_fields = [
+            "source_file", "title", "book_title", "arxiv_id",
+            "category", "subcategory", "authors", "publish_date",
+            "doc_type", "publisher", "language", "isbn",
+        ]
+
+        sources_map: dict = defaultdict(lambda: {
+            "title": "",
+            "arxiv_id": "",
+            "category": "",
+            "subcategory": "",
+            "authors": "",
+            "publish_date": "",
+            "doc_type": "",
+            "publisher": "",
+            "language": "",
+            "isbn": "",
+            "chunk_count": 0,
+        })
+
+        scroll_offset = None
+        while True:
+            points, next_offset = self._client.scroll(
+                collection_name=coll,
+                limit=500,
+                offset=scroll_offset,
+                with_payload=payload_fields,
+                with_vectors=False,
+            )
+            if not points:
+                break
+
+            for p in points:
+                sf = p.payload.get("source_file", "unknown")
+                entry = sources_map[sf]
+                entry["chunk_count"] += 1
+                if not entry["title"]:
+                    entry["title"] = (
+                        p.payload.get("title")
+                        or p.payload.get("book_title")
+                        or ""
+                    )
+                    entry["arxiv_id"] = p.payload.get("arxiv_id", "")
+                    entry["category"] = p.payload.get("category", "")
+                    entry["subcategory"] = p.payload.get("subcategory", "")
+                    entry["authors"] = p.payload.get("authors", "")
+                    entry["publish_date"] = p.payload.get("publish_date", "")
+                    entry["doc_type"] = p.payload.get("doc_type", "")
+                    entry["publisher"] = p.payload.get("publisher", "")
+                    entry["language"] = p.payload.get("language", "")
+                    entry["isbn"] = p.payload.get("isbn", "")
+
+            if next_offset is None:
+                break
+            scroll_offset = next_offset
+
+        # Build flat list with source_file key
+        all_sources = [
+            {**entry, "source_file": sf}
+            for sf, entry in sources_map.items()
+        ]
+
+        # Category summary (always computed before filtering)
+        cat_counts: dict = defaultdict(int)
+        for s in all_sources:
+            cat = s.get("category") or s.get("doc_type") or "uncategorized"
+            cat_counts[cat] += 1
+
+        # Apply category filter
+        if category:
+            cat_lower = category.lower()
+            all_sources = [
+                s for s in all_sources
+                if (s.get("category") or "").lower() == cat_lower
+                or (s.get("subcategory") or "").lower() == cat_lower
+            ]
+
+        # Apply text search filter (title, authors, arxiv_id)
+        if search:
+            q = search.lower()
+            all_sources = [
+                s for s in all_sources
+                if q in (s.get("title") or "").lower()
+                or q in (s.get("authors") or "").lower()
+                or q in (s.get("arxiv_id") or "").lower()
+                or q in (s.get("source_file") or "").lower()
+            ]
+
+        # Sort by title for stable pagination
+        all_sources.sort(key=lambda s: (s.get("title") or s.get("source_file") or "").lower())
+
+        total = len(all_sources)
+        page = all_sources[offset:offset + limit] if limit > 0 else []
+
+        return {
+            "sources": page,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": (offset + limit) < total if limit > 0 else False,
+            "categories": dict(cat_counts),
+        }
