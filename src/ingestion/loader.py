@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # PDF backend constants
 PDF_BACKEND_PYPDF = "pypdf"
 PDF_BACKEND_MINERU = "mineru"
+PDF_BACKEND_MINERU_JSON = "mineru_json"
 
 
 # ── Uniform chunk produced by every loader ────────────────────────────────────
@@ -137,6 +138,8 @@ class PdfLoader(DocumentLoader):
         backend = os.getenv("PDF_BACKEND", PDF_BACKEND_PYPDF).lower()
         if backend == PDF_BACKEND_MINERU:
             return self._load_mineru(path)
+        if backend == PDF_BACKEND_MINERU_JSON:
+            return self._load_mineru_json(path)
         return self._load_pypdf(path)
 
     def _load_pypdf(self, path: Path) -> List[DocumentChunk]:
@@ -310,6 +313,120 @@ class PdfLoader(DocumentLoader):
                         "token_count": cr.token_count,
                         "has_heading_context": cr.has_heading_context,
                         "heading_level": ms.heading_level,
+                    },
+                ))
+        return chunks
+
+    def _load_mineru_json(self, path: Path) -> List[DocumentChunk]:
+        """JSON path: resolve sidecar → parse → chunk → DocumentChunk assembly.
+
+        Falls back to _load_pypdf() if:
+          - JSON path cannot be resolved (logs warning with arxiv_id + base_dir)
+          - JSON file fails to parse (logs warning with parse error)
+        """
+        from src.ingestion.mineru_json_parser import resolve_json_path, parse_content_list
+        from src.ingestion.semantic_chunker import ChunkConfig, chunk_section, load_tokenizer
+        from src.ingestion.citation_masker import citation_aware_split
+        from servers.embedding_server.client import get_dense_vectors
+
+        # Derive arxiv_id from PDF stem: "2603_07444.pdf" → "2603_07444"
+        import re
+        m = re.match(r'^(\d+_\d+)', path.stem)
+        if not m:
+            logger.warning(
+                "PDF %s stem '%s' does not match expected arxiv format (NNNN_NNNNN) — falling back to pypdf",
+                path.name, path.stem,
+            )
+            return self._load_pypdf(path)
+        arxiv_id = m.group(1)
+
+        # Resolve JSON sidecar
+        json_path = resolve_json_path(arxiv_id)
+        if json_path is None:
+            base_dir = os.getenv("MINERU_OUTPUT_DIR", "mineru_output")
+            logger.warning(
+                "JSON not found for arxiv_id=%s, base_dir=%s — falling back to pypdf",
+                arxiv_id, base_dir,
+            )
+            return self._load_pypdf(path)
+
+        # Read sidecar metadata (same as pypdf/mineru paths)
+        meta = self._read_sidecar(path)
+
+        # Bug 3 fix: prefer dot-format arxiv_id from sidecar (e.g. "2201.11903")
+        # over the underscore directory key (e.g. "2201_11903").
+        arxiv_id_dot = meta.get("arxiv_id", arxiv_id.replace("_", "."))
+
+        title = meta.get("title", path.stem)
+        category = meta.get("category", "")
+        subcategory = meta.get("subcategory", "")
+        authors = meta.get("authors", "")
+        publish_date = meta.get("publish_date", "")
+
+        logger.info(
+            "PDF   %s [mineru_json] — %s (cat=%s, arxiv=%s) — JSON=%s",
+            path.name, title[:60], category, arxiv_id_dot, json_path,
+        )
+
+        # Parse JSON → sections
+        try:
+            json_sections = parse_content_list(json_path)
+        except (ValueError, Exception) as e:
+            logger.warning(
+                "JSON parse failed for %s (%s) — falling back to pypdf",
+                json_path, e,
+            )
+            return self._load_pypdf(path)
+
+        if not json_sections:
+            logger.warning(
+                "JSON %s produced 0 sections — falling back to pypdf",
+                json_path,
+            )
+            return self._load_pypdf(path)
+
+        # Chunk each section
+        token_counter = load_tokenizer(settings.TOKENIZER_JSON or None)
+        config = ChunkConfig(
+            chunk_size=settings.CHUNK_SIZE,
+            overlap_ratio=settings.CHUNK_OVERLAP_RATIO,
+            similarity_percentile=settings.SIMILARITY_PERCENTILE,
+            min_distance_floor=settings.MIN_DISTANCE_FLOOR,
+            min_sentences_for_semantic=settings.MIN_SENTENCES_FOR_SEMANTIC,
+            min_chunk_tokens=settings.MIN_CHUNK_TOKENS,
+            enable_semantic=settings.SEMANTIC_CHUNKING_ENABLED,
+            tokenizer_path=settings.TOKENIZER_JSON or None,
+        )
+
+        chunks: List[DocumentChunk] = []
+        for js in json_sections:
+            results = chunk_section(
+                title=js.title,
+                content=js.content,
+                config=config,
+                token_counter=token_counter,
+                embedding_fn=get_dense_vectors,
+                sentence_splitter=citation_aware_split,
+            )
+            chunk_count = len(results)
+            for cr in results:
+                chunks.append(DocumentChunk(
+                    text=cr.text,
+                    metadata={
+                        "doc_type": "paper",
+                        "source_file": path.name,
+                        "title": title or "",
+                        "arxiv_id": arxiv_id_dot or "",
+                        "category": category or "",
+                        "subcategory": subcategory or "",
+                        "authors": authors or "",
+                        "publish_date": publish_date or "",
+                        "section_title": cr.section_title or "",
+                        "chunk_index": cr.chunk_index,
+                        "chunk_count": chunk_count,
+                        "token_count": cr.token_count,
+                        "has_heading_context": cr.has_heading_context,
+                        "heading_level": js.heading_level,
                     },
                 ))
         return chunks

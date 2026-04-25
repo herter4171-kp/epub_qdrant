@@ -302,46 +302,41 @@ class Retriever:
             if conditions:
                 qdrant_filter = Filter(must=conditions)
 
-        # Generate dense query vector via unified embedding server
-        query_dense = get_dense_vectors([query])[0]
-
-        # Generate sparse query vector via unified embedding server
-        sparse_query = get_sparse_vectors([query], is_query=True)[0]
-
-        # Dense search (top k*2 for fusion headroom)
-        # Use using="dense" + raw list[float] — NOT NamedVector
-        dense_hits = self._client.query_points(
-            collection_name=collection,
-            query=query_dense,
-            using="dense",
-            limit=top_k * 2,
-            query_filter=qdrant_filter,
-        )
-
-        # Sparse search (top k*2 for fusion headroom)
-        # Pass SparseVector directly — it's accepted by query_points natively
-        sparse_hits = self._client.query_points(
-            collection_name=collection,
-            query=SparseVector(
-                indices=sparse_query["indices"],
-                values=sparse_query["values"],
-            ),
-            using="sparse",
-            limit=top_k * 2,
-            query_filter=qdrant_filter,
-        )
-
-        # Reciprocal Rank Fusion
+        # Only embed and query the signals that will actually contribute to scoring.
+        # Skipping a zero-weight signal avoids polluting rrf_scores with 0.0 entries
+        # (defaultdict keys) that would otherwise let zero-weight hits sneak into results.
         rrf_scores = defaultdict(float)
         k_rrf = 60
+        all_points = []
 
-        for rank, hit in enumerate(dense_hits.points):
-            rrf_scores[hit.id] += dense_weight * (1.0 / (k_rrf + rank + 1))
-        for rank, hit in enumerate(sparse_hits.points):
-            rrf_scores[hit.id] += sparse_weight * (1.0 / (k_rrf + rank + 1))
+        if dense_weight > 0:
+            query_dense = get_dense_vectors([query])[0]
+            dense_hits = self._client.query_points(
+                collection_name=collection,
+                query=query_dense,
+                using="dense",
+                limit=top_k * 2,
+                query_filter=qdrant_filter,
+            )
+            for rank, hit in enumerate(dense_hits.points):
+                rrf_scores[hit.id] += dense_weight * (1.0 / (k_rrf + rank + 1))
+            all_points.extend(dense_hits.points)
 
-        # Merge: build a lookup from id → full hit (prefer dense for metadata)
-        all_points = list(dense_hits.points) + list(sparse_hits.points)
+        if sparse_weight > 0:
+            sparse_query = get_sparse_vectors([query], is_query=True)[0]
+            sparse_hits = self._client.query_points(
+                collection_name=collection,
+                query=SparseVector(
+                    indices=sparse_query["indices"],
+                    values=sparse_query["values"],
+                ),
+                using="sparse",
+                limit=top_k * 2,
+                query_filter=qdrant_filter,
+            )
+            for rank, hit in enumerate(sparse_hits.points):
+                rrf_scores[hit.id] += sparse_weight * (1.0 / (k_rrf + rank + 1))
+            all_points.extend(sparse_hits.points)
         id_to_point = {}
         for p in all_points:
             id_to_point[p.id] = p

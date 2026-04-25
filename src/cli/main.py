@@ -1,15 +1,16 @@
 """CLI entry point for the ingestion pipeline.
 
 Commands:
-    create-collection  Create a named-vector collection (dense + sparse)
-    ingest-dense       Pass 1: load files → chunk → embed dense → upsert
-    ingest-sparse      Pass 2: scroll collection → embed sparse → upsert same IDs
-    ingest             Convenience: create + dense + sparse in one shot
-    search             Search a collection
-    list-collections   List all Qdrant collections
-    delete-collection  Delete a collection
-    list-books         List books in a collection
-    health             Check embedding server health
+    create-collection       Create a named-vector collection (dense + sparse)
+    ingest-dense            Pass 1: load files → chunk → embed dense → upsert
+    ingest-sparse           Pass 2: scroll collection → embed sparse → upsert same IDs
+    ingest                  Convenience: create + dense + sparse in one shot
+    ingest-papers           Bulk ingest MinerU JSON papers (JSON sidecars + PDF metadata)
+    search                  Search a collection
+    list-collections        List all Qdrant collections
+    delete-collection       Delete a collection
+    list-books              List books in a collection
+    health                  Check embedding server health
 """
 
 import logging
@@ -53,6 +54,20 @@ def _find_files(directory: str) -> List[Path]:
     dirpath = Path(directory)
     files = sorted(dirpath.glob("*.epub")) + sorted(dirpath.glob("*.pdf"))
     return files
+
+
+def _ensure_collection(client, name: str, protected: frozenset) -> None:
+    """Create a named-vector collection if it doesn't exist."""
+    from qdrant_client.models import Distance, Modifier, VectorParams, SparseVectorParams
+    if name in protected:
+        raise ValueError(f"Refusing to overwrite protected collection '{name}'")
+    existing = {c.name for c in client.get_collections().collections}
+    if name not in existing:
+        client.create_collection(
+            collection_name=name,
+            vectors_config={"dense": VectorParams(size=768, distance=Distance.COSINE)},
+            sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.IDF)},
+        )
 
 
 # ── CLI group ─────────────────────────────────────────────────────────────────
@@ -293,6 +308,354 @@ def ingest(directory: str, collection: str, limit: int, tokenizer_json: str):
     click.echo(result.output, nl=False)
     if result.exit_code != 0:
         sys.exit(result.exit_code)
+
+
+# ── ingest-papers (MinerU JSON) ─────────────────────────────────────────────
+
+@cli.command("ingest-papers")
+@click.argument("collection")
+@click.option("--base-dir", default=None,
+              help="MinerU output directory (overrides MINERU_OUTPUT_DIR env). Defaults to ./mineru_output.")
+@click.option("--metadata-dir", default="./downloads",
+              help="Directory containing sidecar metadata JSON files. Defaults to ./downloads.")
+@click.option("--limit", type=int, default=None, help="Max papers to process")
+@click.option("--arxiv-id", default=None, help="Process a single paper by ID")
+def ingest_papers_cmd(collection: str, base_dir: str, metadata_dir: str,
+                      limit: int, arxiv_id: str):
+    """Bulk ingest MinerU JSON files (content_list_v2.json) into a Qdrant collection.
+
+    Walks the MinerU output tree, discovers all content_list_v2.json files,
+    parses them, chunks sections, and runs the full two-pass dense + sparse
+    embedding pipeline.
+    """
+    import glob as glob_mod
+    import json as json_mod
+    import os
+    import re as re_mod
+
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import (
+        Distance, FieldCondition, Filter, MatchValue,
+        Modifier, PointStruct, PointVectors, SparseVector,
+        SparseVectorParams, VectorParams,
+    )
+    from servers.embedding_server.client import (
+        get_dense_vectors, get_sparse_vectors, health_check,
+    )
+
+    PAPER_PROTECTED = {"books", "books-named", "papers", "papers-named"}
+    DENSE_BATCH = 128
+    SPARSE_BATCH = 32
+    SCROLL_BATCH = 256
+    MAX_SPARSE_WORDS = 512
+
+    # Health check
+    if not health_check():
+        click.echo(f"Embedding server not healthy at {settings.EMBEDDING_SERVER_URL}", err=True)
+        sys.exit(1)
+    click.echo("Embedding server: OK")
+
+    # Qdrant client
+    client = QdrantClient(url=settings.QDRANT_URL)
+    existing = [c.name for c in client.get_collections().collections]
+    click.echo(f"Qdrant OK — existing collections: {existing}")
+
+    # Resolve base directory
+    env_base = os.environ.get("MINERU_OUTPUT_DIR")
+    if base_dir:
+        pass  # use args value
+    elif env_base:
+        base_dir = env_base
+    else:
+        base_dir = "./mineru_output"
+    click.echo(f"MinerU output dir: {base_dir}")
+
+    # Ensure collection
+    try:
+        _ensure_collection(client, collection, PAPER_PROTECTED)
+    except ValueError as e:
+        click.echo(str(e), err=True)
+        sys.exit(1)
+    click.echo(f"Collection '{collection}' ready")
+
+    # Chunk config + tokenizer
+    from src.ingestion.semantic_chunker import ChunkConfig, chunk_section, load_tokenizer
+    from src.ingestion.mineru_json_parser import parse_content_list
+
+    token_counter = load_tokenizer(settings.TOKENIZER_JSON or None)
+    config = ChunkConfig(
+        chunk_size=settings.CHUNK_SIZE,
+        overlap_ratio=settings.CHUNK_OVERLAP_RATIO,
+        similarity_percentile=settings.SIMILARITY_PERCENTILE,
+        min_distance_floor=settings.MIN_DISTANCE_FLOOR,
+        min_sentences_for_semantic=settings.MIN_SENTENCES_FOR_SEMANTIC,
+        min_chunk_tokens=settings.MIN_CHUNK_TOKENS,
+        enable_semantic=settings.SEMANTIC_CHUNKING_ENABLED,
+        tokenizer_path=settings.TOKENIZER_JSON or None,
+    )
+
+    # Discover JSONs
+    jsons: dict = {}
+
+    # Tree layout
+    tree_pattern = str(Path(base_dir) / "**" / "vlm" / "*_content_list_v2.json")
+    for p in glob_mod.glob(tree_pattern, recursive=True):
+        pp = Path(p)
+        aid = pp.stem.replace("_content_list_v2", "")
+        jsons[aid] = pp
+
+    # Flat layout
+    flat_pattern = str(Path(base_dir) / "*_content_list_v2.json")
+    for p in glob_mod.glob(flat_pattern, recursive=True):
+        pp = Path(p)
+        aid = pp.stem.replace("_content_list_v2", "")
+        if aid not in jsons:
+            jsons[aid] = pp
+
+    click.echo(f"Discovered {len(jsons)} JSON file(s)")
+
+    if not jsons:
+        click.echo("No JSON files found. Exiting.")
+        return
+
+    # Filter by arxiv_id
+    if arxiv_id:
+        normalized = arxiv_id.replace(".", "_")
+        if normalized not in jsons:
+            click.echo(f"No JSON found for arxiv_id={arxiv_id}", err=True)
+            sys.exit(1)
+        jsons = {normalized: jsons[normalized]}
+        click.echo(f"Single paper mode: {arxiv_id}")
+
+    # Apply limit
+    arxiv_ids = sorted(jsons.keys())
+    if limit is not None:
+        if limit <= 0:
+            click.echo(f"Error: --limit must be a positive integer, got {limit}", err=True)
+            sys.exit(1)
+        arxiv_ids = arxiv_ids[:limit]
+
+    def read_sidecar(mdir: str, aid: str) -> dict:
+        meta_path = Path(mdir) / f"{aid}.json"
+        if not meta_path.exists():
+            return {}
+        try:
+            raw = meta_path.read_text(encoding="utf-8")
+            data = json_mod.loads(raw)
+            result = {}
+            for attr in data.get("metadataAttributes", []):
+                if ": " in attr:
+                    k, v = attr.split(": ", 1)
+                    result[k] = v
+                elif ":" in attr:
+                    k, v = attr.split(":", 1)
+                    result[k.strip()] = v.strip()
+            return result
+        except Exception:
+            return {}
+
+    def chunk_text_for_sparse(text: str) -> list:
+        words = text.split()
+        if not words:
+            return []
+        return [" ".join(words[i:i + MAX_SPARSE_WORDS]) for i in range(0, len(words), MAX_SPARSE_WORDS)]
+
+    def aggregate_sparse(vecs: list) -> dict:
+        agg = {}
+        for v in vecs:
+            for idx, val in zip(v["indices"], v["values"]):
+                if idx not in agg or val > agg[idx]:
+                    agg[idx] = val
+        return {"indices": list(agg.keys()), "values": list(agg.values())}
+
+    # Process each paper
+    total_processed = 0
+    total_chunks = 0
+    total_skipped = 0
+    total_failed = 0
+
+    for i, aid in enumerate(arxiv_ids, 1):
+        json_path = jsons[aid]
+
+        # Idempotency check
+        try:
+            f = Filter(must=[FieldCondition(key="arxiv_id", match=MatchValue(value=aid))])
+            pts, _ = client.scroll(
+                collection_name=collection, limit=1,
+                with_payload=False, with_vectors=False, scroll_filter=f,
+            )
+            if pts:
+                # Count total points for this paper
+                count = 0
+                off = None
+                while True:
+                    pts2, noff = client.scroll(
+                        collection_name=collection, limit=SCROLL_BATCH,
+                        offset=off, with_payload=False, with_vectors=False, scroll_filter=f,
+                    )
+                    if not pts2:
+                        break
+                    count += len(pts2)
+                    if noff is None:
+                        break
+                    off = noff
+                total_skipped += count
+                click.echo(f"  [{i}/{len(arxiv_ids)}] {aid} — already ingested ({count} chunks), skipping")
+                continue
+        except Exception:
+            pass
+
+        # Parse JSON → sections
+        try:
+            json_sections = parse_content_list(json_path)
+        except Exception as e:
+            click.echo(f"  [{i}/{len(arxiv_ids)}] {aid} — JSON parse failed: {e}", err=True)
+            total_failed += 1
+            continue
+
+        if not json_sections:
+            click.echo(f"  [{i}/{len(arxiv_ids)}] {aid} — 0 sections, skipping")
+            total_failed += 1
+            continue
+
+        # Read sidecar metadata
+        meta = read_sidecar(metadata_dir, aid)
+        paper_title = meta.get("title", aid)
+        category = meta.get("category", "")
+        subcategory = meta.get("subcategory", "")
+        authors = meta.get("authors", "")
+        publish_date = meta.get("publish_date", "")
+
+        def _build_metadata_prefix(chunk_meta: dict) -> str:
+            """Build structured metadata prefix for embedding.
+
+            Per design doc: metadata is prepended to text before embedding
+            so that metadata influences the vector space.
+            """
+            parts = []
+            if chunk_meta.get("category"):
+                parts.append(f"category:{chunk_meta['category']}")
+            if chunk_meta.get("subcategory"):
+                parts.append(f"subcategory:{chunk_meta['subcategory']}")
+            if chunk_meta.get("publish_date"):
+                parts.append(f"date:{chunk_meta['publish_date']}")
+            if chunk_meta.get("section_title"):
+                parts.append(f"section:{chunk_meta['section_title']}")
+            return " ".join(parts)
+
+        # Chunk sections — prepend metadata prefix to text for embedding
+        all_chunks = []  # list of (embed_text, payload_dict)
+        for js in json_sections:
+            results = chunk_section(
+                title=js.title, content=js.content, config=config,
+                token_counter=token_counter, embedding_fn=None,
+            )
+            chunk_count = len(results)
+            for cr in results:
+                chunk_meta = {
+                    "doc_type": "paper",
+                    "source_file": f"{aid}.pdf",
+                    "title": paper_title or "",
+                    "arxiv_id": aid,
+                    "category": category or "",
+                    "subcategory": subcategory or "",
+                    "authors": authors or "",
+                    "publish_date": publish_date or "",
+                    "section_title": cr.section_title or "",
+                    "chunk_index": cr.chunk_index,
+                    "chunk_count": chunk_count,
+                    "token_count": cr.token_count,
+                    "has_heading_context": cr.has_heading_context,
+                    "heading_level": js.heading_level,
+                }
+                # Embedding input: metadata prefix + clean text
+                meta_prefix = _build_metadata_prefix(chunk_meta)
+                if meta_prefix:
+                    embed_text = f"{meta_prefix} {cr.text}"
+                else:
+                    embed_text = cr.text
+                all_chunks.append((embed_text, chunk_meta))
+
+        if not all_chunks:
+            click.echo(f"  [{i}/{len(arxiv_ids)}] {aid} — 0 chunks, skipping")
+            total_failed += 1
+            continue
+
+        # Embed dense
+        texts = [c[0] for c in all_chunks]  # embed_text = metadata_prefix + text
+        all_vecs = []
+        for b in range(0, len(texts), DENSE_BATCH):
+            all_vecs.extend(get_dense_vectors(texts[b:b + DENSE_BATCH]))
+
+        # Upsert dense
+        try:
+            point_offset = client.get_collection(collection).points_count or 0
+        except Exception:
+            point_offset = 0
+
+        points = []
+        for idx, ((chunk_text, metadata), vec) in enumerate(zip(all_chunks, all_vecs)):
+            points.append(PointStruct(
+                id=point_offset + total_processed + idx,
+                vector={"dense": vec},
+                payload={"text": chunk_text, **metadata},
+            ))
+
+        client.upsert(collection_name=collection, points=points)
+
+        total_tokens = sum(c[1]["token_count"] for c in all_chunks)
+
+        # Pass 2: sparse
+        click.echo(f"  [{i}/{len(arxiv_ids)}] {aid} — {len(json_sections)} sections, {len(all_chunks)} chunks, {total_tokens} tokens — embedding sparse...", nl=False)
+        click.echo()
+        sparse_count = 0
+
+        f = Filter(must=[FieldCondition(key="arxiv_id", match=MatchValue(value=aid))])
+        soff = None
+        while True:
+            pts, noff = client.scroll(
+                collection_name=collection, limit=SCROLL_BATCH,
+                offset=soff, with_vectors=False, with_payload=["text"], scroll_filter=f,
+            )
+            if not pts:
+                break
+
+            upsert_pts = []
+            for p in pts:
+                text = (p.payload.get("text") or "").strip()
+                if not text:
+                    continue
+                windows = chunk_text_for_sparse(text)
+                all_sparse = []
+                for b2 in range(0, len(windows), SPARSE_BATCH):
+                    all_sparse.extend(get_sparse_vectors(windows[b2:b2 + SPARSE_BATCH], is_query=False))
+                sv = aggregate_sparse(all_sparse)
+                upsert_pts.append(PointVectors(
+                    id=p.id,
+                    vector={"sparse": SparseVector(indices=sv["indices"], values=sv["values"])},
+                ))
+
+            if upsert_pts:
+                client.update_vectors(collection_name=collection, points=upsert_pts)
+                sparse_count += len(upsert_pts)
+
+            if noff is None:
+                break
+            soff = noff
+
+        click.echo(f"sparse: {sparse_count} points")
+        total_processed += 1
+        total_chunks += len(all_chunks)
+
+    # Summary
+    click.echo("")
+    click.echo("=" * 60)
+    click.echo("SUMMARY:")
+    click.echo(f"  Processed: {total_processed}")
+    click.echo(f"  Chunks:    {total_chunks}")
+    click.echo(f"  Skipped:   {total_skipped}")
+    click.echo(f"  Failed:    {total_failed}")
+    click.echo("=" * 60)
 
 
 # ── search ────────────────────────────────────────────────────────────────────

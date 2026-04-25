@@ -37,24 +37,32 @@ REQUIRED_PAYLOAD_FIELDS = (
 
 
 def run_pipeline(
-    pdf_path: str,
+    pdf_path: Optional[str] = None,
+    json_path: Optional[str] = None,
     output_path: Optional[str] = None,
 ) -> List[dict]:
-    """Run full MinerU ingestion pipeline.
+    """Run MinerU ingestion pipeline (PDF→Markdown OR JSON→sections).
 
-    1. MinerU_Converter → Markdown
-    2. Markdown_Section_Splitter → sections
-    3. For each section: citation masking → sentence splitting → Semantic_Chunker
-    4. Assemble Embedding_Payload dicts
+    Args:
+        pdf_path: Path to PDF (uses MinerU HTTP API → Markdown).
+        json_path: Path to content_list_v2.json (direct parse).
+        output_path: Optional JSON output file.
 
     Returns list of payload dicts.
     """
-    # ── Step 1: Convert PDF → Markdown ────────────────────────────
-    markdown = convert_pdf_to_markdown(pdf_path)
-    source_file = Path(pdf_path).name
+    # ── Step 1: Obtain sections ───────────────────────────────────
+    if json_path is not None:
+        # JSON path: parse content_list_v2.json directly
+        source_file = Path(json_path).name
+        from src.ingestion.mineru_json_parser import parse_content_list
+        sections = parse_content_list(json_path)
+    else:
+        # PDF path: MinerU HTTP API → Markdown → sections
+        assert pdf_path is not None, "Either pdf_path or json_path must be provided"
+        markdown = convert_pdf_to_markdown(pdf_path)
+        source_file = Path(pdf_path).name
+        sections = split_markdown_sections(markdown)
 
-    # ── Step 2: Split into sections ───────────────────────────────
-    sections = split_markdown_sections(markdown)
     logger.info("Sections found: %d", len(sections))
 
     # ── Step 3: Chunk each section ────────────────────────────────
@@ -114,14 +122,16 @@ def run_pipeline(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="MinerU PDF ingestion pipeline (proof-of-concept)",
+        description="MinerU ingestion pipeline (proof-of-concept)",
     )
-    parser.add_argument("--pdf", required=True, help="Path to input PDF")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--pdf", help="Path to input PDF")
+    group.add_argument("--json", help="Path to content_list_v2.json")
     parser.add_argument("--output", default=None, help="Path to write JSON output")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    run_pipeline(args.pdf, args.output)
+    run_pipeline(pdf_path=args.pdf, json_path=args.json, output_path=args.output)
 
 
 if __name__ == "__main__":

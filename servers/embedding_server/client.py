@@ -38,7 +38,6 @@ _RETRY = Retry(
     connect=None,          # no cap on connect retries
     read=None,             # no cap on read retries
     backoff_factor=2,      # 2s, 4s, 8s, 16s, … between retries
-    backoff_max=60,        # cap backoff at 60s
     status_forcelist=[502, 503, 504],
     allowed_methods=["POST", "GET"],
 )

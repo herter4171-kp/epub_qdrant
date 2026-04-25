@@ -147,7 +147,7 @@ class TestPipelineOutput:
 
         with patch("scripts.mineru_pipeline.convert_pdf_to_markdown", return_value=mock_md):
             with patch("scripts.mineru_pipeline.load_tokenizer", return_value=lambda x: len(x.split())):
-                payloads = run_pipeline("/fake/test.pdf", str(output_file))
+                payloads = run_pipeline(pdf_path="/fake/test.pdf", output_path=str(output_file))
 
         assert output_file.exists()
         data = json.loads(output_file.read_text())
@@ -160,7 +160,7 @@ class TestPipelineOutput:
 
         with patch("scripts.mineru_pipeline.convert_pdf_to_markdown", return_value=mock_md):
             with patch("scripts.mineru_pipeline.load_tokenizer", return_value=lambda x: len(x.split())):
-                run_pipeline("/fake/test.pdf")
+                run_pipeline(pdf_path="/fake/test.pdf")
 
         captured = capsys.readouterr()
         assert "Sections found:" in captured.out
@@ -174,7 +174,7 @@ class TestPipelineOutput:
 
         with patch("scripts.mineru_pipeline.convert_pdf_to_markdown", return_value=mock_md):
             with patch("scripts.mineru_pipeline.load_tokenizer", return_value=lambda x: len(x.split())):
-                payloads = run_pipeline("/some/path/2303_09014.pdf")
+                payloads = run_pipeline(pdf_path="/some/path/2303_09014.pdf")
 
         for p in payloads:
             assert p["source_file"] == "2303_09014.pdf"
