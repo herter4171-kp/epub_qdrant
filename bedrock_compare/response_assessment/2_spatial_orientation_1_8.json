@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "2_spatial_orientation_1_8.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 24.02,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T01:02:05.493844+00:00",
+  "proficiency": 1,
+  "prompt": "If a text passage seems cut off, how do I get the very next chunk from the same document?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 9,\n    \"retrieval_basis\": \"The retrieved chunks explicitly cover sequential chunk indexing, sliding window overlaps, and directly recommend reading adjacent chunks (+/- 1) when truncation occurs.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response provides a highly practical, framework-agnostic explanation of how to fetch the next chunk, correctly distinguishes between truncation causes, and appropriately offers further help based on the user's specific stack.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 8,\n    \"retrieval_basis\": \"The chunks provide relevant information on sliding window chunking, agentic navigation, and document pagination, offering a solid theoretical foundation for handling cut-off passages.\",\n    \"response_score\": 8,\n    \"response_basis\": \"The response effectively synthesizes the retrieval into three actionable strategies with clear explanations and proper citations, though it leans slightly more abstract than necessary.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 7,\n    \"retrieval_basis\": \"The retrieval is narrowly focused on the A-RAG paper's chunk_read tool, which directly answers the question but lacks broader context on general chunking pipelines.\",\n    \"response_score\": 8,\n    \"response_basis\": \"The response accurately leverages the specific tool mentioned in the retrieval and supplements it with standard overlapping segmentation practices, delivering a concise and correct answer.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"RAG Chunking and Retrieval Survey\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T01:01:41.471452+00:00",
+      "elapsed_seconds": 24.316,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on standard chunking and retrieval practices, when a passage appears truncated, you typically retrieve the next chunk by targeting the sequential index or ID immediately following the current one. Here’s how this works in practice:\n\n**1. Increment the Sequential Chunk ID**\nMost chunking pipelines assign incremental identifiers. If your system uses a retrieval function that accepts chunk IDs, you can fetch the next chunk by incrementing the current ID [2]. For example, if you’re processing `chunk_ids = [\"12\"]`, you would request `[\"13\"]`.\n\n**2. Request Adjacent Chunks Directly**\nMany document-processing frameworks explicitly support retrieving neighboring segments when context is incomplete. You can request adjacent chunks (e.g., `+1` or `-1` relative to the current chunk) to capture text that spills over the boundary [2]. \n\n**3. Why Truncation Happens & How Chunking Strategies Affect It**\n- **Fixed/Sequential Chunking:** If your pipeline splits documents into strict, non-overlapping segments, a cut-off at the end of one chunk is expected. The next chunk in the sequence will contain the continuation.\n- **Sliding Window/Overlap:** Many systems intentionally retain a subset of tokens from the end of one chunk at the start of the next to prevent hard truncations [3][9]. If your pipeline doesn’t use this strategy, you’ll need to manually fetch the subsequent chunk.\n- **Zero-Overlap Designs:** Some pipelines enforce zero-overlap to prevent redundant processing or duplicate fact extraction, meaning truncation at boundaries is handled purely by sequential fetching [7].\n\n---\n**🔍 Clearly Delineated: Results-Derived vs. General/Speculative**\n- *Results-Derived:* Retrieving adjacent chunks (`+/- 1`) is a documented mitigation when information appears truncated [2]. Overlap strategies are commonly used to preserve sentence integrity across boundaries [3][9], while some architectures enforce zero-overlap to simplify aggregation [7]. Chunking is fundamentally a sequential process (`D = {c1, c2, ..., cn}`) that dictates how segments are ordered [6].\n- *Speculative/General Guidance:* The exact command depends entirely on your framework or API (e.g., LangChain, LlamaIndex, custom vector DB client, or a proprietary pipeline). Most libraries expose a method like `get_chunk(index)`, `fetch(id=next_id)`, or accept an array of IDs for batch retrieval. In code, you can typically compute `next_chunk_index = current_chunk_index + 1` and pass it to your document reader or retriever function.\n\nIf you share the specific library, API, or code snippet you're working with, I can provide the exact syntax to fetch the next chunk.",
+      "started_at": "2026-04-26T01:01:17.155235+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T01:01:06.770882+00:00",
+      "elapsed_seconds": 11.576,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To retrieve the \"very next chunk\" when a passage appears cut off, you typically rely on **overlap strategies during pre-processing**, **hierarchical document structures**, or **agentic iterative navigation**.\n\n### 1. Pre-processing: Sliding Window Chunking\nThe most effective way to prevent cutting off information is to use **sliding window chunking** during the document preparation phase. This strategy ensures that the end of one chunk and the beginning of the next overlap, preserving context across boundaries [5].\n*   **How it works:** It retains a subset of tokens (or sentences) from the *previous* chunk in the *current* chunk [5].\n*   **Result:** If your passage cuts off mid-sentence, the overlapping tokens in the subsequent chunk will allow you to complete the thought without needing to \"fetch\" a new chunk; the content is already available.\n\n### 2. Structured Navigation (Section IDs & Page Numbers)\nIf your documents are structured, you can retrieve the next chunk by tracking **structural metadata** rather than just token indices.\n*   **Tools like \"DocDancer\"** demonstrate this by using tools such as `Search` and `Read` [4].\n*   **Method:** You can query for specific **Section IDs** or **Page Numbers**. If the current chunk ends at Section 2.4, you explicitly request the \"next\" chunk by querying for the next logical ID or the subsequent page number [4].\n\n### 3. Agentic or Iterative Approaches\nFor long documents or complex retrieval tasks, **Agentic workflows** or **Recursive Language Models** can manage this process programmatically using buffers [7].\n*   **Agent Logic:** An agent can maintain a \"cursor\" or state (e.g., `current_page = 5`). Upon detecting a cut-off or a natural break, the agent increments the cursor (e.g., `current_page = 6`) and executes a `Read` tool to fetch that specific page or section [4].\n*   **Context Management:** Advanced models can use a **REPL environment** to store information in **buffers**, allowing them to search for specific keywords or section markers to decide when to \"step\" forward to the next segment [7].\n\n### Summary of Strategy\n| Method | Best For | Mechanism |\n| :--- | :--- | :--- |\n| **Sliding Window** | RAG Systems | Overlapping token chunks to bridge boundaries [5]. |\n| **Section/Page IDs** | Structured Docs | Requesting the next logical unit (e.g., Page 2 after Page 1) [4]. |\n| **Agentic Iteration** | Long Contexts | Using an agent to track state (buffers) and fetch the next section [4][7]. |",
+      "started_at": "2026-04-26T01:00:55.194669+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T01:01:17.155219+00:00",
+      "elapsed_seconds": 10.384,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "If a text passage appears to be cut off, you can retrieve the continuing text using the following strategies:\n\n*   **Read Adjacent Chunks:** In agentic retrieval systems (like A-RAG), if a snippet looks incomplete, you should use a tool such as `chunk_read` to fetch the full text of adjacent chunks (e.g., the next chunk ID, or `chunk_id + 1`) to gather the missing context [1].\n*   **Use Overlapping Segmentation:** To prevent text from being split mid-sentence or mid-thought, documents are often processed using a sliding window approach with **overlaps**. For instance, a system might split text into chunks of 200 words with a 20-word overlap, or 1,000 tokens with a 100-token overlap, ensuring that information is preserved across segment boundaries [5][11].\n\n### References\n[1] Mingxuan Du et al., \"A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces\", arXiv:2602_03442. \n[5] Zhuofeng Li et al., \"In-the-Flow Agentic System Optimization for Effective Planning and Tool Use\", arXiv:2510_05592. \n[11] Blessy Antony et al., \"VILLA: Versatile Information Retrieval From Scientific Literature Using Large LAnguage Models\", arXiv:2603_23849.",
+      "started_at": "2026-04-26T01:01:06.770887+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response provides a highly practical, framework-agnostic explanation of how to fetch the next chunk, correctly distinguishes between truncation causes, and appropriately offers further help based on the user's specific stack.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks explicitly cover sequential chunk indexing, sliding window overlaps, and directly recommend reading adjacent chunks (+/- 1) when truncation occurs.",
+      "retrieval_score": 9
+    },
+    "papers": {
+      "response_basis": "The response effectively synthesizes the retrieval into three actionable strategies with clear explanations and proper citations, though it leans slightly more abstract than necessary.",
+      "response_score": 8,
+      "retrieval_basis": "The chunks provide relevant information on sliding window chunking, agentic navigation, and document pagination, offering a solid theoretical foundation for handling cut-off passages.",
+      "retrieval_score": 8
+    },
+    "papers_semantic": {
+      "response_basis": "The response accurately leverages the specific tool mentioned in the retrieval and supplements it with standard overlapping segmentation practices, delivering a concise and correct answer.",
+      "response_score": 8,
+      "retrieval_basis": "The retrieval is narrowly focused on the A-RAG paper's chunk_read tool, which directly answers the question but lacks broader context on general chunking pipelines.",
+      "retrieval_score": 7
+    }
+  },
+  "timestamp": "2026-04-25T19:14:27.362657+00:00",
+  "topk": 8
+}

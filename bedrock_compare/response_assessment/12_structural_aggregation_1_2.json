@@ -1,0 +1,59 @@
+{
+  "category": "structural_aggregation",
+  "input_file": "12_structural_aggregation_1_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 14.359,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T02:21:41.101613+00:00",
+  "proficiency": 1,
+  "prompt": "If I have a text chunk, is there a way to tell whether it is from the introduction or the conclusion of a document?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 4,\n    \"retrieval_basis\": \"The retrieved snippets focus on chunking methodologies and context preservation rather than structural classification, offering only tangential relevance to the user's intent.\",\n    \"response_score\": 5,\n    \"response_basis\": \"The response correctly identifies the retrieval gap and begins outlining effective classification strategies, but it cuts off mid-sentence, leaving the answer incomplete.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 4,\n    \"retrieval_basis\": \"The retrieved results emphasize document parsing and semantic chunking strategies, which are only loosely related to the specific task of classifying introduction or conclusion sections.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response accurately acknowledges the retrieval gap, supplements it with highly practical and well-structured NLP methodologies, and clearly distinguishes between retrieved context and general knowledge.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved results are completely irrelevant to the prompt and provide no actionable information for classifying document sections.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The model generated an empty response, failing to address the user's prompt entirely.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"MDocAgent: A Multi-Modal Multi-Agent Framework for Document Understanding\",\n    \"source_file\": \"2503_13964.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T02:21:26.740168+00:00",
+      "elapsed_seconds": 21.364,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results focus on **chunking methodologies** (fixed-size, sliding window, semantic breakpoints) rather than **structural classification**, so they don't directly cover how to identify an introduction vs. a conclusion. However, I can outline established approaches to solve this:\n\n**[From Provided Results]**\nThe literature highlights that when chunks lose their broader document context, they risk losing thematic coherence and producing suboptimal embeddings [2]. To mitigate this, some retrieval frameworks attach metadata (like document summaries or titles) to each chunk before embedding [2]. Similarly, LLM-generated scoring can be used to evaluate chunk properties or relevance [1]. These insights suggest that structural classification is most reliable when metadata or global context is preserved during preprocessing, rather than inferred from an isolated chunk alone.\n\n**[General NLP/Document Processing Knowledge]**\nIf you only have an isolated text chunk, identifying it as an introduction or conclusion relies on lexical, rhetorical, or positional signals. Here are the most effective approaches:\n\n1. **Lexical & Rhetorical Markers (",
+      "started_at": "2026-04-26T02:21:05.376249+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T02:20:40.927843+00:00",
+      "elapsed_seconds": 19.5,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, there is no direct method listed for specifically classifying a text chunk as belonging to the introduction or conclusion. The results focus on document preprocessing, OCR/PDF parsing, and semantic chunking strategies [1][2]. However, this is a well-established problem in document understanding and NLP. Below is a practical breakdown of how to solve it, ranging from simple heuristic methods to more advanced ML approaches.\n\n**Source Attribution Note:**\n* *Search-derived context:* The provided results emphasize extracting text segments via OCR/PDF parsing to preserve layout and visual features [1], and highlight that semantic chunking should follow natural breakpoints rather than fixed token counts to preserve document structure [2].\n* *Proposed solution:* The classification methods below are based on standard NLP and document AI best practices.\n\n### 1. Structural & Heuristic Cues (Low Technical Barrier)\nBefore applying complex models, you can often detect section boundaries using metadata and linguistic patterns:\n* **Positional Weighting:** In most academic and technical documents, the introduction occupies the first 10–15% of the text, while the conclusion spans the final 5–10%. You can assign a high confidence score if a chunk's relative position aligns with these ranges.\n* **Linguistic Markers:** \n  * *Introductory signals:* `\"In this paper, we...\"`, `\"The rest of this article is organized as follows...\"`, `\"We survey the following contributions...\"`\n  * *Conclusive signals:* `\"In summary...\"`, `\"We conclude that...\"`, `\"Future work will focus on...\"`, `\"Taken together, these results demonstrate...\"`\n* **Formatting & Headers:** Modern parsers can detect section titles like `1. Introduction` or `VI. Conclusion`, which provide unambiguous labels before the text is even chunked [1].\n\n### 2. Classifier-Based Approaches (Medium to High Accuracy)\nWhen structural cues are unreliable (e.g., non-standard layouts, multi-section compilations, or poorly formatted PDFs), machine learning offers robust alternatives:\n* **Zero-Shot/Few-Shot LLM Classification:** You can prompt a large language model to act as a section classifier. For example: `Classify this text chunk into one of the following: [Introduction, Conclusion, Background, Methodology, Results, Discussion, Conclusion]. Output only the category.` This works well out-of-the-box for most English documents.\n* **Fine-Tuned Lightweight Models:** For higher throughput or constrained environments, models like DeBERTa or RoBERTa can be fine-tuned on publicly available document section datasets (e.g., PubLayNet, DocLayNet). These models achieve >90% accuracy on standard academic corpora when trained on section-labeled data.\n\n### 3. Embedding & Similarity Matching (Technical)\nIf you prefer a retrieval-based or vectorized approach:\n* **Reference Embeddings:** Create vector embeddings for a few known introduction and conclusion samples from your target domain. When a new chunk arrives, compute cosine similarity between the chunk embedding and your reference vectors.\n* **Contextual Chunking & Boundary Preservation:** As noted in recent retrieval literature, appending global document context (like titles or summaries) to each chunk can help maintain section coherence, though care must be taken to avoid \"embedding collapse\" where metadata dominates the semantic signal [2]. Using semantic chunking—which splits text at natural breakpoints based on similarity thresholds rather than fixed token counts—helps ensure that introduction or conclusion boundaries aren't artificially fragmented [2].\n\n### Recommended Production Pipeline\n1. **Parse & Segment:** Extract text using OCR/PDF parsing while preserving layout metadata [1].\n2. **Apply Heuristics:** Filter chunks using positional thresholds and keyword matching.\n3. **Classify Ambiguous Chunks:** Route uncertain cases to an LLM prompt or fine-tuned classifier.\n4. **Validate & Iterate:** Track misclassifications and adjust thresholds as you encounter new document types or domains.\n\nWould you like a code example for any of these approaches (e.g., a Python snippet for positional/keyword filtering, a ready-to-use LLM prompt template, or a lightweight classifier setup)?\n\n---\n**References**\n[1] Siwei Han, Peng Xia, Ruiyi Zhang, Tong Sun, Yun Li, Hongtu Zhu, Huaxiu Yao. *MDocAgent: A Multi-Modal Multi-Agent Framework for Document Understanding*. arXiv:2503.13964.\n[2] Deep Shah, Sanket Badhe, Nehal Kathrotia. *Taxonomy of the Retrieval System Framework: Pitfalls and Paradigms*. arXiv:2601.20131.",
+      "started_at": "2026-04-26T02:20:21.427947+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T02:21:05.376233+00:00",
+      "elapsed_seconds": 24.448,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T02:20:40.927848+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response correctly identifies the retrieval gap and begins outlining effective classification strategies, but it cuts off mid-sentence, leaving the answer incomplete.",
+      "response_score": 5,
+      "retrieval_basis": "The retrieved snippets focus on chunking methodologies and context preservation rather than structural classification, offering only tangential relevance to the user's intent.",
+      "retrieval_score": 4
+    },
+    "papers": {
+      "response_basis": "The response accurately acknowledges the retrieval gap, supplements it with highly practical and well-structured NLP methodologies, and clearly distinguishes between retrieved context and general knowledge.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved results emphasize document parsing and semantic chunking strategies, which are only loosely related to the specific task of classifying introduction or conclusion sections.",
+      "retrieval_score": 4
+    },
+    "papers_semantic": {
+      "response_basis": "The model generated an empty response, failing to address the user's prompt entirely.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved results are completely irrelevant to the prompt and provide no actionable information for classifying document sections.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:13:24.371185+00:00",
+  "topk": 2
+}

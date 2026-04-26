@@ -1,0 +1,59 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "24_lexical_vs_semantic_2_8.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.733,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T04:05:35.860254+00:00",
+  "proficiency": 2,
+  "prompt": "How do I find chunks that discuss semantic alignment conceptually while requiring them to contain the exact keyword cosine?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 6,\n    \"retrieval_basis\": \"The retrieved chunks contained relevant tool definitions for keyword and semantic search alongside a snippet on cosine similarity, but were cluttered with unrelated chunking strategies and URLs.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was completely missing, failing to utilize the retrieved context or address the user's query.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 7,\n    \"retrieval_basis\": \"The retrieval successfully identified a paper detailing conceptual label alignment and cosine similarity, providing a solid foundation for answering the conceptual aspect of the query.\",\n    \"response_score\": 8,\n    \"response_basis\": \"The response effectively extracted and explained the conceptual use of cosine similarity from the retrieved paper, offering clear examples and practical pipeline advice.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 8,\n    \"retrieval_basis\": \"The retrieval directly surfaced a framework that explicitly separates semantic and keyword search tools, perfectly aligning with the user's methodological question.\",\n    \"response_score\": 8,\n    \"response_basis\": \"The response provided a comprehensive, actionable guide on hybrid retrieval strategies, rank fusion, and the conceptual role of cosine similarity, directly answering the how-to prompt.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces\",\n    \"source_file\": \"2602_03442.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T04:05:20.125785+00:00",
+      "elapsed_seconds": 22.744,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T04:04:57.381672+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T04:04:34.354794+00:00",
+      "elapsed_seconds": 19.195,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided results, your search criteria already surface the most relevant material. The following chunks explicitly discuss the **conceptual mechanics of semantic alignment** while containing the exact keyword **\"cosine\"**:\n\n### 1. Conceptual Label Alignment via Cosine Similarity\n**Source:** *Can Deep Research Agents Retrieve and Organize? Evaluating the Synthesis Gap with Expert Taxonomies* [1]  \n**Relevant Section:** A.2 Semantic Label Similarity and Cost Calibration\n- **Conceptual Framework:** The authors treat semantic alignment as a cost-calibration problem. For each topic label, they compute a dense embedding and measure semantic relatedness using **cosine similarity** [1]:\n  `Sim(s, t) := max(0, cos(e(s), e(t)))`\n- **Why it's conceptual:** Rather than treating cosine similarity as a raw output score, they conceptually clip negative values to zero and convert the similarity into a `renaming cost` (`1 - Sim`). This ensures that alignment penalties stay on a consistent `[0, 1]` scale, avoiding pathological cases where negative cosine values would artificially inflate edit distances. They explicitly note that in embedding spaces for short labels, negative cosine does not reliably indicate \"semantic opposition\" and should be treated as *no semantic match* [1].\n\n### 2. Structural/Path Alignment via Clipped Cosine Distance\n**Source:** *Can Deep Research Agents Retrieve and Organize? Evaluating the Synthesis Gap with Expert Taxonomies* [1]  \n**Relevant Section:** A.4.2 Distance function and monotone alignment\n- **Conceptual Framework:** This chunk extends label alignment to hierarchical tree structures. It defines a **clipped cosine distance** (`d(s, t) := 1 - Sim(s, t)`) and uses it within a dynamic programming alignment that is both *order-preserving* and *minimum-cost* [1].\n- **Why it's conceptual:** The alignment tolerates different taxonomic granularities (different tree depths) while preserving relative semantic order. The cosine-derived distance is normalized against a fixed \"unmatched-node penalty\" to balance label mismatches against structural insertions/deletions [1].\n\n---\n\n### 💡 How to Apply This Conceptually in Your Pipeline\nIf you are building a retrieval or alignment system, the results suggest these best practices for semantic alignment using cosine:\n1. **Clip before converting:** Always constrain cosine similarity to `[0, 1]` or use `1 - cos(·)` as a distance metric to avoid negative distance penalties [1][4].\n2. **Pair with structural constraints:** Cosine alone measures lexical/semantic proximity, but for true conceptual alignment, embed it within order-preserving or minimum-cost frameworks that tolerate depth/granularity mismatches [1].\n3. **Aggregate by semantic peak:** In hierarchical retrieval, compute cosine scores at the finest granularity (e.g., sentences), then propagate the highest-scoring match upward to parent chunks to preserve context [4].\n\n*Citations:*  \n[1] Ming Zhang et al., *Can Deep Research Agents Retrieve and Organize? Evaluating the Synthesis Gap with Expert Taxonomies*, arXiv:2601.12369 (2026).  \n[4] Mingxuan Du et al., *A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces*, arXiv:2602.03442 (2026).",
+      "started_at": "2026-04-26T04:04:15.159166+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T04:04:57.381652+00:00",
+      "elapsed_seconds": 23.027,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To find chunks that discuss a concept conceptually while guaranteeing the presence of a specific exact term like `\"cosine\"`, you should use a **hybrid or hierarchical retrieval strategy** that decouples semantic meaning from lexical matching. Recent frameworks demonstrate this approach effectively:\n\n### 1. Decouple Search Tools (A-RAG Approach)\nThe `A-RAG` framework explicitly solves this by providing two parallel retrieval tools that operate at different granularities [1]:\n* **`semantic_search`**: Uses dense embeddings to find conceptual matches. It encodes your conceptual query (e.g., `\"semantic alignment\"`) and computes **cosine similarity** against all sentence embeddings in the corpus. This captures conceptual relatedness even if the exact wording differs [1].\n* **`keyword_search`**: Performs strict, case-insensitive exact text matching. You pass `[\"cosine\"]` as a keyword list to guarantee the term appears in the returned chunks.\nBy running these tools in parallel and intersecting the results (or letting an agent sequentially filter `semantic_search` results through `keyword_search`), you ensure conceptual alignment without sacrificing exact keyword requirements [1].\n\n### 2. Combine Results via Rank Fusion (MirrorMind Approach)\nIf you need a single unified retrieval pipeline, you can run dense semantic search and sparse keyword search in parallel and merge the ranked lists. Techniques like **Reciprocal Rank Fusion (RRF)** are highly effective for this, as they balance the relevance scores from both paradigms without requiring a complex re-ranking model [5]. This ensures chunks that are both conceptually aligned and lexically contain `\"cosine\"` rise to the top.\n\n### 3. How \"Cosine\" is Conceptually Used in These Systems\nIn the retrieved literature, `cosine` (specifically cosine similarity) is frequently cited as the mathematical foundation for measuring semantic alignment and specificity [8][9]:\n* It quantifies how closely two text embeddings point in the same direction within a high-dimensional vector space, capturing conceptual overlap even when vocabulary diverges [8].\n* Researchers use it to measure semantic novelty by computing cosine similarity between generated content and reference corpora, treating lower cosine similarity as higher conceptual divergence/novelty [9].\n\n**Practical Implementation Tip:** \nWhen querying your system, structure your request to invoke both a semantic search for the conceptual topic and a keyword search for `\"cosine\"`. If your system supports it, use a filter or intersection step to guarantee exact term presence, or apply RRF to weight both exact matches and semantic closeness appropriately [1][5].\n\n**References:**\n[1] Mingxuan Du, et al. *A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces*. arXiv:2602_03442.  \n[5] Qingbin Zeng, et al. *MirrorMind: Empowering OmniScientist with the Expert Perspectives and Collective Knowledge of Human Scientists*. arXiv:2511_16997.  \n[8] Sarath Shekkizhar, Adam Earle. *Interaction Theater: A case of LLM Agents Interacting at Scale*. arXiv:2602_20059.  \n[9] Weiyue Li, et al. *LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback*. arXiv:2601_08003.",
+      "started_at": "2026-04-26T04:04:34.354800+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response was completely missing, failing to utilize the retrieved context or address the user's query.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunks contained relevant tool definitions for keyword and semantic search alongside a snippet on cosine similarity, but were cluttered with unrelated chunking strategies and URLs.",
+      "retrieval_score": 6
+    },
+    "papers": {
+      "response_basis": "The response effectively extracted and explained the conceptual use of cosine similarity from the retrieved paper, offering clear examples and practical pipeline advice.",
+      "response_score": 8,
+      "retrieval_basis": "The retrieval successfully identified a paper detailing conceptual label alignment and cosine similarity, providing a solid foundation for answering the conceptual aspect of the query.",
+      "retrieval_score": 7
+    },
+    "papers_semantic": {
+      "response_basis": "The response provided a comprehensive, actionable guide on hybrid retrieval strategies, rank fusion, and the conceptual role of cosine similarity, directly answering the how-to prompt.",
+      "response_score": 8,
+      "retrieval_basis": "The retrieval directly surfaced a framework that explicitly separates semantic and keyword search tools, perfectly aligning with the user's methodological question.",
+      "retrieval_score": 8
+    }
+  },
+  "timestamp": "2026-04-25T19:14:49.365084+00:00",
+  "topk": 8
+}

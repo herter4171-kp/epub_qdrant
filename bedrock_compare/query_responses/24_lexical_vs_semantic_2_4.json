@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "24_lexical_vs_semantic_2_4.json",
+  "input_id": 24,
+  "proficiency": 2,
+  "prompt": "How do I find chunks that discuss semantic alignment conceptually while requiring them to contain the exact keyword cosine?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T04:03:51.636176+00:00",
+      "elapsed_seconds": 21.607,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T04:03:30.029544+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T04:03:03.304107+00:00",
+      "elapsed_seconds": 16.787,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To find chunks that discuss **semantic alignment conceptually** while strictly requiring the exact keyword **“cosine”**, you need a retrieval strategy that bridges conceptual relevance with lexical precision. Below is a breakdown of proven approaches, grounded in current retrieval research and practical implementation patterns.\n\n### 🔍 What the Retrieved Literature Shows\nYour goal aligns closely with modern agentic and hierarchical retrieval systems that balance conceptual matching with exact lexical constraints. For example:\n- One study on deep research agents explicitly evaluates semantic alignment using **“clipped cosine distance”** as a core metric, directly tying conceptual alignment evaluation to the exact term “cosine” [1].\n- Semantic chunking frameworks emphasize that preserving conceptual coherence requires natural boundary detection, but lexical keywords must still be preserved for exact matching and downstream filtering [2].\n- Agentic RAG systems often use hierarchical retrieval interfaces to let agents selectively access semantic units while enforcing retrieval constraints [4].\n\nThese findings confirm that conceptual alignment and exact keyword presence are routinely combined in production retrieval pipelines.\n\n---\n\n### 🛠️ How to Implement This in Practice\n\n#### 1. **Hybrid Search (Dense Vector + BM25/Lexical)**\nThe most robust out-of-the-box solution combines semantic similarity with exact keyword matching:\n- **Dense vector layer** captures conceptual relevance (e.g., “semantic alignment,” “order-preserving alignment,” “similarity metrics”).\n- **BM25 or lexical layer** enforces the exact match for `\"cosine\"`.\n- **Score fusion**: Use Reciprocal Rank Fusion (RRF) or weighted scoring:  \n  `final_score = α * dense_score + β * BM25_score`\n- *Implementation*: Supported natively in Elasticsearch/OpenSearch, Weaviate, Milvus, and Qdrant.\n\n#### 2. **Two-Stage Retrieval (Concept → Post-Filter)**\nIf hybrid scoring isn't available:\n1. Run a semantic search for conceptual terms (e.g., `semantic_alignment`, `conceptual alignment`, `similarity metric`).\n2. Post-filter the top-K results for the exact string `\"cosine\"` using regex or simple containment:  \n   `if \"cosine\" not in chunk_text: continue`\n3. Re-rank by semantic score if needed.\n- *Pros*: Guarantees exact keyword presence with minimal compute.\n- *Cons*: May reduce recall if conceptual hits rarely contain the exact keyword.\n\n#### 3. **Metadata/Tag-Based Filtering**\nIf your chunking pipeline precomputes lexical flags:\n- Add a metadata field like `contains_cosine: true` during ingestion.\n- Filter at query time: `filter: { term: { contains_cosine: \"true\" } }` combined with a semantic query.\n- *Tools*: LangChain's `FilterRetriever`, LlamaIndex's `MetadataRetriever`, or custom Elasticsearch queries.\n\n#### 4. **LLM-Agent Guided Filtering**\nIf you're using an agentic search system:\n- Prompt the agent with explicit constraints:  \n  `\"Retrieve documents conceptually about semantic alignment. Then, filter out any chunks that do not contain the exact keyword 'cosine' before ranking.\"`\n- Recent hierarchical retrieval architectures explicitly delegate lexical guards to separate retrieval modules to prevent embedding collapse [2].\n\n---\n\n### ✅ Recommended Workflow\n1. **Ingest**: Chunk documents at semantic boundaries (preserves conceptual coherence) [2].\n2. **Index**: Enable hybrid search or add lexical metadata flags.\n3. **Query**: Use a `bool` query with a semantic vector clause + exact `\"cosine\"` term clause.\n4. **Post-process**: Optionally enforce `text.contains(\"cosine\")` if your vector DB doesn't guarantee exact-match scoring.\n\nWould you like a concrete code example tailored to your stack (e.g., LangChain, Elasticsearch, FAISS, or a custom pipeline)? I can also show how to adjust the prompt if you're using an LLM-based retriever.",
+      "started_at": "2026-04-26T04:02:46.516693+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T04:03:30.029531+00:00",
+      "elapsed_seconds": 26.725,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T04:03:03.304124+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:06.620539+00:00",
+  "topk": 4
+}

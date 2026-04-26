@@ -67,6 +67,16 @@ class LLMClient:
         ]
 
         try:
+            # Compute reply token budget.
+            # For thinking models (Qwen3/3.6), the reasoning trace + prompt
+            # + reply must all fit within LITELLM_CONTEXT_WINDOW.
+            # We reserve max_thinking_tokens for the reasoning trace,
+            # then leave the rest for the reply.  We do NOT try to estimate
+            # prompt_tokens — instead we just set max_tokens to a very high
+            # value so the reply is never artificially truncated.  The model
+            # server enforces the hard context-window ceiling regardless.
+            max_new_tokens = settings.LITELLM_CONTEXT_WINDOW // 4  # generous but bounded
+
             response = await acompletion(
                 model=self._model,
                 api_base=self._api_url,
@@ -74,7 +84,7 @@ class LLMClient:
                 messages=messages,
                 stream=True,
                 temperature=0.3,
-                max_tokens=4096,
+                max_tokens=max_new_tokens,
                 timeout=60,
             )
 

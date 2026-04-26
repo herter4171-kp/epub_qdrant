@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -22,6 +23,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
+
+# Import shared logging helpers (still keep logger for backward compat).
+try:
+    from bedrock_compare.logging_utils import (
+        log_key, log_info, log_dim, log_green, log_red, log_yellow,
+        log_blue, log_cyan,
+        truncate_line, seen_prompt,
+    )
+except ImportError:
+    from logging_utils import (
+        log_key, log_info, log_dim, log_green, log_red, log_yellow,
+        log_blue, log_cyan,
+        truncate_line, seen_prompt,
+    )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -152,13 +167,20 @@ def process_file(
     overwrite: bool,
 ) -> bool:
     """Process one input file. Returns True on success."""
-    logger.info("Processing %s", fpath.name)
+    log_cyan(f"▶ {fpath.name}")
 
     with open(fpath, "r", encoding="utf-8") as f:
         result = json.load(f)
 
     prompt = result["prompt"]
     sources = result.get("sources", {})
+
+    # Print the prompt if we haven't seen it before
+    prompt_trunc = truncate_line(prompt, shutil.get_terminal_size().columns - 10)
+    if not seen_prompt(prompt):
+        log_key(f"  [NEW] {prompt_trunc}")
+    else:
+        log_dim(f"  [SEEN] {prompt_trunc}")
 
     output: Dict[str, Any] = {
         "input_file": fpath.name,
@@ -175,15 +197,19 @@ def process_file(
     for source_name, source_payload in sources.items():
         started_epoch = time.time()
 
-        logger.info("  calling source: %s", source_name)
+        # Blue LLM announcement before each source call
+        log_blue(f"  LLM calling: {source_name}...")
 
         try:
             system_prompt = resolve_source_prompt(source_name)
             response = call_llm(client, system_prompt, source_payload, prompt, model)
             elapsed = round(time.time() - started_epoch, 3)
 
+            resp_text = extract_response_text(response)
+            log_green(f"  ✓ {source_name}: {truncate_line(resp_text)} ({elapsed}s)")
+
             output["responses"][source_name] = {
-                "response_text": extract_response_text(response),
+                "response_text": resp_text,
                 "model": model_name_from_response(response) or model,
                 "started_at": datetime.fromtimestamp(started_epoch, tz=timezone.utc).isoformat(),
                 "completed_at": datetime.fromtimestamp(time.time(), tz=timezone.utc).isoformat(),
@@ -193,6 +219,7 @@ def process_file(
             success = True
         except Exception as exc:
             elapsed = 0.0
+            log_red(f"  ✗ {source_name}: {type(exc).__name__}: {truncate_line(str(exc))}")
             logger.warning("  source %s FAILED: %s", source_name, exc)
 
             output["responses"][source_name] = {
@@ -212,9 +239,9 @@ def process_file(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, sort_keys=True, indent=2)
-        logger.info("Wrote %s", out_path.name)
+        log_dim(f"  → {out_path.name}")
     else:
-        logger.info("Skipping %s (already exists, use --overwrite)", out_path.name)
+        log_dim(f"  ⏭ {out_path.name} (already exists)")
 
     return success
 
@@ -295,27 +322,27 @@ def main():
         api_key=args.api_key,
     )
 
-    # Health check
+    # Health check — dimmed, background
     try:
         models = client.models.list()
-        logger.info("Connected to %s (model: %s)", args.api_base, args.model)
+        log_dim(f"Connected to {args.api_base} (model: {args.model})")
     except Exception as e:
-        logger.error("Failed to connect to %s: %s", args.api_base, e)
+        log_red(f"Failed to connect to {args.api_base}: {e}")
         sys.exit(1)
 
     # Select files
     files = select_input_files(results_dir, args.limit)
     if not files and args.limit not in (0, None):
-        logger.error("No JSON files found in %s", results_dir)
+        log_red(f"No JSON files found in {results_dir}")
         sys.exit(1)
 
     if args.limit is not None:
-        logger.info("Selected %d input files from %s", len(files), results_dir)
+        log_key(f"Selected {len(files)} input files from {results_dir}")
     else:
-        logger.info("Selected all input files from %s", results_dir)
+        log_key(f"Selected all input files from {results_dir}")
 
     if args.limit == 0:
-        logger.info("Limit is 0, exiting.")
+        log_key("Limit is 0, exiting.")
         return
 
     responses_dir.mkdir(parents=True, exist_ok=True)
@@ -323,6 +350,7 @@ def main():
     # Process files
     success_count = 0
     fail_count = 0
+    seen_count = 0
 
     for fpath in files:
         out_path = responses_dir / fpath.name
@@ -333,12 +361,11 @@ def main():
             else:
                 fail_count += 1
         except Exception as e:
-            logger.error("Failed to process %s: %s", fpath.name, e)
+            log_red(f"Failed to process {fpath.name}: {e}")
             fail_count += 1
 
-    logger.info("\nDone. %d succeeded, %d failed out of %d files.",
-                success_count, fail_count, len(files))
-    logger.info("Responses in: %s", responses_dir)
+    log_key(f"\nDone. {success_count} succeeded, {fail_count} failed out of {len(files)} files.")
+    log_dim(f"Responses in: {responses_dir}")
 
 
 if __name__ == "__main__":

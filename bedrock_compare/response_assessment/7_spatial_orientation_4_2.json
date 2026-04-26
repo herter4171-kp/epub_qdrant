@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "7_spatial_orientation_4_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.276,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T01:39:10.995277+00:00",
+  "proficiency": 4,
+  "prompt": "How do I retrieve adjacent chunks in both directions to provide a full context window around a specific methodological claim?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 9,\n    \"retrieval_basis\": \"Retrieved text explicitly contains the exact strategy requested, including the ±1 adjacent chunk reading rule and the chunk_ids parameter specification.\",\n    \"response_score\": 9,\n    \"response_basis\": \"Synthesizes the retrieved strategy into a comprehensive, technically sound implementation guide that addresses indexing, fetching, and chunking variations without fabrication.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 3,\n    \"retrieval_basis\": \"Retrieved survey and benchmark papers focused on broad context engineering and citation networks rather than the specific mechanics of adjacent chunk retrieval.\",\n    \"response_score\": 6,\n    \"response_basis\": \"Honestly acknowledges the lack of specific technical guidance without fabricating details, though it offers limited actionable value for the user's technical query.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 7,\n    \"retrieval_basis\": \"Retrieved the A-RAG paper which explicitly discusses hierarchical retrieval interfaces and the use of a chunk_read tool for adjacent segments.\",\n    \"response_score\": 8,\n    \"response_basis\": \"Effectively translates the retrieved A-RAG framework into a clear, step-by-step strategy for capturing full context around a claim, though it lacks deeper implementation details.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Context Retrieval Strategy & Tool Descriptions\",\n    \"source_file\": \"bedrock_system_docs.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T01:38:55.717277+00:00",
+      "elapsed_seconds": 21.302,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Retrieving adjacent chunks bidirectionally around a specific methodological claim is best achieved by combining sequential document indexing with a `±N` retrieval strategy. Below is a practical implementation guide based on retrieval system frameworks and chunking literature.\n\n### 1. Index with Sequential Metadata\nWhen chunking your corpus, assign each segment a unique, sequential identifier tied to its original document position (e.g., `document_id_chunk_index`). This preserves logical reading order, which is critical for bidirectional lookups. You can pass these identifiers as a `chunk_ids` array to your retrieval pipeline to fetch specific segments directly [2].\n\n### 2. Implement Bidirectional ±N Fetching\nAfter your search identifies the target chunk, compute neighboring indices (`target_index - N` to `target_index + N`). In practice, retrieving `±1` adjacent chunks is typically sufficient to capture surrounding context without overwhelming downstream context windows [2]. Use bulk-read capabilities (e.g., `chunk_read`) to retrieve them in a single API call for efficiency.\n\n### 3. Account for Your Chunking Strategy\nHow you define \"adjacent\" depends heavily on how the document was segmented:\n* **Fixed/Token-based chunks:** Adjacency is strictly linear by token count. Simple index arithmetic works.\n* **Semantic/Structural chunks:** Breakpoints are determined by natural demarcations (e.g., headers, code blocks) or drops in semantic similarity between consecutive sentences [1]. In these cases, true adjacency is preserved in your metadata, not necessarily in the vector index order. You may need to reconstruct logical flow by merging spatial relationships with semantic similarity [1].\n\n### 4. Mitigate Boundary",
+      "started_at": "2026-04-26T01:38:34.414963+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T01:38:27.254966+00:00",
+      "elapsed_seconds": 8.393,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, I couldn't find specific instructions or methodologies on how to retrieve adjacent chunks in both directions to provide a full context window around a specific methodological claim. The available sources focus more broadly on context retrieval and generation, noting that these processes encompass prompt engineering techniques and external knowledge acquisition through structured data sources [1]. Additionally, they highlight the importance of relation-aware retrieval models for understanding scholarly networks and capturing nuanced citation contexts [2].\n\nFor technical implementation details regarding bidirectional chunk retrieval, sliding window techniques, or context window expansion strategies, the current search results do not cover this specific area.",
+      "started_at": "2026-04-26T01:38:18.862008+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T01:38:34.414957+00:00",
+      "elapsed_seconds": 7.16,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "In the **A-RAG (Agentic Retrieval-Augmented Generation)** framework, retrieving a full context window around a specific claim involves using the **`chunk_read`** tool in combination with a specific reading strategy [1].\n\nTo capture the full context surrounding a methodological claim, you should follow this approach [1]:\n\n1.  **Initial Retrieval:** Use tools like `keyword_search` or `semantic_search` to identify the most relevant chunks. Note that these tools typically return abbreviated snippets marked with \"...\" [1].\n2.  **Read Adjacent Chunks:** If the initial information seems incomplete or truncated, use the `chunk_read` tool to retrieve the content of the adjacent chunks. Specifically, the recommended strategy is to read **adjacent chunks (+/- 1)** relative to the primary retrieved chunk [1].\n3.  **Iterative Reading:** Continue reading the full text of these chunks to ensure you have all the necessary details and context required to formulate an accurate answer [1].\n\nThis hierarchical approach ensures that the system captures the complete context window around a claim rather than relying solely on the partial snippets provided by search results [1].\n\n**References:**\n[1] Mingxuan Du, Benfeng Xu, Chiwei Zhu, Shaohan Wang, Pengyu Wang, Xiaorui Wang, Zhendong Mao, *A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces*, arXiv:2602_03442.",
+      "started_at": "2026-04-26T01:38:27.254978+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "Synthesizes the retrieved strategy into a comprehensive, technically sound implementation guide that addresses indexing, fetching, and chunking variations without fabrication.",
+      "response_score": 9,
+      "retrieval_basis": "Retrieved text explicitly contains the exact strategy requested, including the ±1 adjacent chunk reading rule and the chunk_ids parameter specification.",
+      "retrieval_score": 9
+    },
+    "papers": {
+      "response_basis": "Honestly acknowledges the lack of specific technical guidance without fabricating details, though it offers limited actionable value for the user's technical query.",
+      "response_score": 6,
+      "retrieval_basis": "Retrieved survey and benchmark papers focused on broad context engineering and citation networks rather than the specific mechanics of adjacent chunk retrieval.",
+      "retrieval_score": 3
+    },
+    "papers_semantic": {
+      "response_basis": "Effectively translates the retrieved A-RAG framework into a clear, step-by-step strategy for capturing full context around a claim, though it lacks deeper implementation details.",
+      "response_score": 8,
+      "retrieval_basis": "Retrieved the A-RAG paper which explicitly discusses hierarchical retrieval interfaces and the use of a chunk_read tool for adjacent segments.",
+      "retrieval_score": 7
+    }
+  },
+  "timestamp": "2026-04-25T19:13:21.299741+00:00",
+  "topk": 2
+}

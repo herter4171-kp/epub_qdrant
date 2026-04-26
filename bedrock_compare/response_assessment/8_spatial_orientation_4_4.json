@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "8_spatial_orientation_4_4.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.569,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T01:50:54.532043+00:00",
+  "proficiency": 4,
+  "prompt": "How do I step through sequential chunks from a starting point until the topic shifts entirely away from a given subject like embodied agents?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunks focus on reinforcement learning trajectory segments and policy resampling, which are entirely unrelated to the user's intent of detecting textual topic shifts.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The model correctly identified the retrieval mismatch, gracefully pivoted to general best practices, and provided a comprehensive, production-ready guide with code and methodology.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieval returned a benchmark title with a score of 0 and no relevant content for text topic shifting.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was completely empty, failing to address the prompt.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieval returned a single truncated chunk with a near-zero score and no relevant content for the query.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was completely empty, failing to address the prompt.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"RL Trajectory Chunking & Policy Resampling\",\n    \"source_file\": \"2601_20650.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T01:50:38.959440+00:00",
+      "elapsed_seconds": 17.919,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The search did not yield relevant results for detecting topic shifts while stepping through sequential text or data. The provided results focus exclusively on reinforcement learning trajectory chunking, curriculum learning, and policy resampling strategies for embodied agents [1][3]. Since the results do not address your question, I will outline a standard, production-ready approach for navigating sequential chunks and detecting when a topic completely shifts away from a target subject.\n\n**Note:** Everything below this point is based on general NLP/information retrieval best practices and is clearly separated from the provided results.\n\n---\n\n### 🔍 Step-by-Step Approach to Detecting Topic Shifts in Sequential Chunks\n\n#### 1. Chunking & Initialization\n- **Chunking Strategy:** Split your corpus into fixed-size or semantic segments (e.g., paragraphs, documents, or ~512–1024 token blocks). Use a small overlap (10–15%) near boundaries to avoid cutting contextual cues.\n- **Starting Point:** Identify an anchor chunk that definitively belongs to your target subject (e.g., a paragraph explicitly discussing \"embodied agents\").\n\n#### 2. Semantic Representation\nRaw text matching rarely catches topic shifts reliably. Convert each chunk into a dense embedding:\n- Use pre-trained sentence/document encoders (e.g., `sentence-transformers/all-MiniLM-L6-v2`, `bge-large`, or domain-finetuned models).\n- Compute the chunk embedding as the mean-pool of token embeddings or use the model’s `[CLS]`/pooler output.\n\n#### 3. Reference Target Embedding\nCreate a stable vector representing your target topic:\n- **Option A:** Average embeddings of 3–5 ground-truth chunks known to be on-topic.\n- **Option B:** Embed a representative query/prompt (e.g., `\"embodied agents: robotics, physical interaction, real-world control\"`).\n\n#### 4. Similarity Measurement & Shift Detection\nCompute cosine similarity between each chunk’s embedding and the reference target. Use one of these detection strategies:\n\n| Method | How It Works | Best For |\n|--------|--------------|----------|\n| **Fixed Threshold** | Flag chunks where `similarity < τ` (e.g., 0.65–0.75) | Fast, interpretable pipelines |\n| **Rolling Window Smoothing** | Average similarity over a 3–5 chunk window before thresholding | Reduces noise from transitional sentences |\n| **Change Point Detection** | Use algorithms like Bayesian Change Point Detection, ADWIN, or `ruptures` to find statistically significant drops in embedding distribution | Highly automated, adaptive thresholds |\n| **Divergence Tracking** | Compare KL/Wasserstein distance between a local window and a reference window | Captures gradual topic drift before hard breaks |\n\n#### 5. Traversal & Stop Logic\n```python\n# Pseudocode logic\ncurrent_idx = start_index\nconsecutive_off_topic = 0\nwhile current_idx < total_chunks:\n    sim = cosine_similarity(chunk_embeddings[current_idx], target_ref)\n    if sim < threshold:\n        consecutive_off_topic += 1\n        if consecutive_off_topic >= grace_period:  # e.g., 2-3 chunks\n            break  # Topic has fully shifted\n    else:\n        consecutive_off_topic = 0\n    process_chunk(chunk_embeddings[current_idx])\n    current_idx += 1\n```\n\n#### 6. Practical Considerations\n- **Dynamic Thresholds:** Calibrate `τ` on a validation set by plotting similarity distributions on-on-topic vs. off-topic chunks.\n- **Contextual Grace Periods:** Require 2–3 consecutive low-similarity chunks to avoid premature stops during transitional sentences.\n- **Fallback Checks:** If embeddings are too noisy or computationally heavy, combine with TF-IDF cosine similarity or lightweight topic modeling (BERTopic/LDA) for a secondary signal.\n- **Domain Tuning:** For specialized fields (e.g., robotics, biomedicine), use domain-adapted embeddings or fine-tune a cross-encoder on a small labeled set of \"on-topic\" vs. \"off-topic\" chunk pairs.\n\n---\n\n### 📌 Clarification on Provided Results\nThe provided results discuss \"chunks\" strictly in the context of **reinforcement learning trajectory segments** and **curriculum learning** (e.g., `Chunk-Level Initialized Resampling`, rollback strategies, and expert-like trajectory initialization) [1][3]. Those methods optimize policy updates across decision forks, not textual topic boundaries. If your actual goal is to navigate or optimize RL trajectories rather than parse text, I can pivot to explaining rollback, curriculum scheduling, or fork-aware sampling strategies instead.\n\nLet me know your exact data format (text, logs, trajectories, etc.) and technical stack, and I’ll tailor the implementation accordingly.",
+      "started_at": "2026-04-26T01:50:21.039687+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T01:49:52.054741+00:00",
+      "elapsed_seconds": 23.871,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T01:49:28.183655+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T01:50:21.039674+00:00",
+      "elapsed_seconds": 28.985,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T01:49:52.054747+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The model correctly identified the retrieval mismatch, gracefully pivoted to general best practices, and provided a comprehensive, production-ready guide with code and methodology.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks focus on reinforcement learning trajectory segments and policy resampling, which are entirely unrelated to the user's intent of detecting textual topic shifts.",
+      "retrieval_score": 1
+    },
+    "papers": {
+      "response_basis": "The response was completely empty, failing to address the prompt.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieval returned a benchmark title with a score of 0 and no relevant content for text topic shifting.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "The response was completely empty, failing to address the prompt.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieval returned a single truncated chunk with a near-zero score and no relevant content for the query.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:13:54.681650+00:00",
+  "topk": 4
+}

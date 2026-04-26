@@ -23,6 +23,7 @@ dependencies = [
     "tokenizers>=0.15.0",
     "numpy>=1.24.0",
     "beautifulsoup4>=4.12.0",
+    "colorama>=0.4.6",
 ]
 
 [project.scripts]

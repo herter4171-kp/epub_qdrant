@@ -1,0 +1,35 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "32_corpus_lineage_1_4.json",
+  "input_id": 32,
+  "proficiency": 1,
+  "prompt": "How do I filter my search results to only show chunks from a specific source file like 2010_03768.pdf?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:16:17.774330+00:00",
+      "elapsed_seconds": 21.467,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:15:56.307592+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:15:35.110208+00:00",
+      "elapsed_seconds": 24.97,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:15:10.140493+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:15:56.307585+00:00",
+      "elapsed_seconds": 21.197,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, there is no direct built-in search API or tool parameter mentioned for filtering by an exact filename like `2010_03768.pdf`. However, you can achieve this target using the following methods derived from the reference materials:\n\n**1. Pass an Explicit File List to Your Search Tool**\nSome semantic search utilities are designed to operate on explicit file lists rather than searching an entire corpus. By passing only `2010_03768.pdf` (or a directory containing it) as input to the search tool, you effectively restrict the retrieval scope to that specific document before any embedding or chunking occurs [2].\n\n**2. Enforce Filtering Through Agent Prompts**\nIf you are using an LLM agent to process search results, you can constrain the output at the prompt level. System prompts can be configured to require the agent to only cite or reference the exact target filename, and to disregard any chunks that do not match [2][6]. The agent will then structure its reasoning and output around that single source.\n\n**3. Post-Retrieval Metadata Filtering (Speculative/General Implementation)**\nWhile not explicitly detailed for filename filtering in the provided texts, standard document retrieval pipelines return metadata alongside each chunk (e.g., `source_file`, `chunk_index`, or `doc_type`). You can filter the raw search results in your application layer using standard scripting. This mirrors the file-filtering patterns shown in agent workflows, where lists are programmatically narrowed down:\n```python\n# Example of filtering retrieved chunks by source file metadata\nfiltered_results = [chunk for chunk in search_results if chunk.source_file == \"2010_03768.pdf\"]\n```\n*(Note: This code example adapts a list-comprehension filtering pattern observed in the reference materials [1] to your specific filename use case.)*\n\n**Sources:**\n[1] Minki Kang et al., *ACON: Optimizing Context Compression for Long-horizon LLM Agents* (arXiv:2510_00615)\n[2] Łukasz Borchmann et al., *Strategic Navigation or Stochastic Search? How Agents and Humans Reason Over Document Collections* (arXiv:2603_12180)\n[6] Yuxuan Cai et al., *Yunque DeepResearch Technical Report* (arXiv:2601_19578)",
+      "started_at": "2026-04-26T05:15:35.110215+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:12.452830+00:00",
+  "topk": 4
+}

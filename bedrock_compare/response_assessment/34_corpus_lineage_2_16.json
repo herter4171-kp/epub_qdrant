@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "34_corpus_lineage_2_16.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 17.314,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:28:32.299834+00:00",
+  "proficiency": 2,
+  "prompt": "How do I pull abstract chunks from all source files published in the year 2020 that discuss text alignment?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Retrieved chunks consisted of a bibliography dump of recent alignment papers, completely failing to surface any 2020 documents or system-level extraction tools.\",\n    \"response_score\": 9,\n    \"response_basis\": \"Gracefully acknowledged the retrieval gap and provided a comprehensive, production-ready Python script using arXiv and Semantic Scholar APIs to directly fulfill the user's extraction request.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Retrieved a single 2024 survey on LLM alignment, which is irrelevant to the specific 2020 publication date and 'text alignment' topic requested.\",\n    \"response_score\": 6,\n    \"response_basis\": \"Correctly identified the absence of matching files and suggested adjusting filters or querying external repositories, but offered no concrete implementation path.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Similar to papers, retrieved a 2024 survey with low relevance to the specific 2020 text alignment query, providing no actionable data.\",\n    \"response_score\": 6,\n    \"response_basis\": \"Acknowledged the retrieval failure and requested clarification, delivering a passable but passive response that deferred to the user for next steps.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"bedrock\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:28:14.982627+00:00",
+      "elapsed_seconds": 22.74,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results focus on recent alignment literature rather than API methodologies, so I’m drawing on standard academic data access practices to answer this. Below is a practical, production-ready approach to pull abstracts from papers published in 2020 that discuss \"text alignment\".\n\n### 🔧 Recommended Approach: Python + `arxiv` Package\nThe `arxiv` Python package is free, well-documented, and supports date-range filtering. It's ideal for CS/NLP literature where alignment research is heavily published.\n\n#### 1. Install Dependencies\n```bash\npip install arxiv pandas\n```\n\n#### 2. Python Script\n```python\nimport arxiv\nimport pandas as pd\nfrom datetime import datetime\n\ndef fetch_2020_abstracts(keyword=\"text alignment\", max_results=500):\n    # arXiv search syntax: all fields + exact year submission window\n    search_query = f'all:\"{keyword}\" AND submittedDate:[202001010000 TO 202012312359]'\n    \n    search = arxiv.Search(\n        query=search_query,\n        max_results=max_results,\n        sort_by=arxiv.SortCriterion.SubmittedDate\n    )\n    \n    records = []\n    for i, result in enumerate(search.results(), 1):\n        records.append({\n            \"title\": result.title,\n            \"authors\": \", \".join([a.name for a in result.authors]),\n            \"abstract\": result.summary,\n            \"year\": 2020,\n            \"arxiv_id\": result.arxiv_id,\n            \"published\": result.published.strftime(\"%Y-%m-%d\")\n        })\n        \n        # arXiv API caps at 3000 results per query; handle gracefully\n        if i >= max_results:\n            print(f\"⚠️ Reached max_results={max_results}. Consider paginating or narrowing the keyword.\")\n            break\n            \n    return pd.DataFrame(records)\n\nif __name__ == \"__main__\":\n    df = fetch_2020_abstracts(keyword=\"text alignment\", max_results=300)\n    print(f\"📄 Retrieved {len(df)} abstracts.\")\n    print(df.head())\n    df.to_csv(\"2020_text_alignment_abstracts.csv\", index=False)\n```\n\n### 🔍 Key Implementation Details\n- **Year Filtering**: `submittedDate:[202001010000 TO 202012312359]` restricts results to papers submitted in 2020 [1].\n- **Keyword Scope**: `all:\"text alignment\"` searches titles, abstracts, keywords, and comments. If you're specifically interested in *AI/model alignment* (as seen in recent literature [2][3]), swap the keyword to `\"alignment\"` or `\"AI alignment\"`.\n- **Extraction**: `result.summary` returns the full abstract text. The script structures it into a DataFrame for easy downstream use.\n\n### ⚠️ Important Considerations\n- **API Limits**: arXiv allows ~150 requests/minute. For >3000 results, implement pagination or split queries by arXiv categories (e.g., `cs.CL`, `cs.LG`) [4].\n- **Ambiguity in \"Text Alignment\"**: In NLP, this traditionally refers to sentence/word-level alignment (e.g., parallel corpora). If you meant *instruction/model alignment*, adjust the query accordingly.\n- **Rate Limiting & Caching**: Add `time.sleep(0.5)` between batches and cache results locally to avoid API throttling.\n\n### 🌐 Alternative: Semantic Scholar API\nIf you need broader coverage beyond arXiv (e.g., conference proceedings, journals), use the Semantic Scholar REST API:\n```python\nimport requests\n\ndef s2_fetch_2020(keyword=\"text alignment\"):\n    url = \"https://api.semanticscholar.org/graph/v1/paper/search\"\n    params = {\n        \"query\": keyword,\n        \"year\": \"2020\",\n        \"fields\": \"title,year,abstract,authors\",\n        \"limit\": 1000\n    }\n    response = requests.get(url, params=params)\n    return response.json()[\"data\"]\n```\nSemantic Scholar handles year filtering natively and returns structured JSON [5].\n\n### 📌 Next Steps\n- If you need to scale this to multiple databases (ACL Anthology, Crossref, IEEE), let me know your target scope and I can provide a unified pipeline.\n- For batch processing or scheduled runs, consider wrapping this in a `cron` job or using `Prefect`/`Airflow`.\n\nLet me know your preferred output format (JSON, CSV, SQL) or if you want to filter by venue/author, and I’ll adapt the script accordingly.\n\n---\n**References**  \n[1] arXiv Search Guide: https://arxiv.org/help/api/user_guide#search_queries  \n[2] See recent alignment literature in provided results: e.g., *LIMA: Less Is More for Alignment* (2023), *ALMA: Alignment with Minimal Annotation* (2024)  \n[3] *FLASK: Fine-grained LLM Evaluation* (ICLR 2024 Workshop)  \n[4] arXiv API Rate Limits: https://arxiv.org/help/api/user_guide#section_rate_limiting  \n[5] Semantic Scholar API Docs: https://api.semanticscholar.org/graph/v1/",
+      "started_at": "2026-04-26T05:27:52.242850+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:27:23.090655+00:00",
+      "elapsed_seconds": 17.827,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the current search results, **no source files published in 2020 discussing text alignment were retrieved**. The search returned documents ranging from 2023 to 2026, meaning the search itself did not surface any archives matching your specified year.\n\nTo pull abstract chunks from 2020 publications, you will likely need to:\n1. **Adjust your search filters** to explicitly target 2020 publication dates, as the current retrieval missed that timeframe.\n2. **Query specialized academic repositories** (e.g., ACL Anthology, arXiv with date bounds, or Crossref API) that may have indexed 2020 papers on text alignment more accurately.\n3. **Broaden or shift keywords**, as \"text alignment\" in 2020 may have been framed differently (e.g., \"cross-lingual alignment,\" \"text-to-table alignment,\" or \"document alignment\").\n\nIf you're open to it, I can extract and summarize abstract chunks from the available 2023–2026 sources covering LLM alignment mechanisms, AI-assisted scientific writing, or table-text claim verification. Just let me know your preference!",
+      "started_at": "2026-04-26T05:27:05.263715+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:27:52.242829+00:00",
+      "elapsed_seconds": 29.152,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, I couldn't find any source files published in the year 2020 that discuss text alignment. The search primarily returned documents from 2024 to 2026 covering related areas like scalable LLM alignment, retrieval-augmented generation (RAG), and AI-assisted scientific writing [1][3][10]. \n\nSince the search did not yield any matching publications for your specific year and topic criteria, I'm unable to extract or list the requested abstract chunks. If you intended to query a different publication year, a specific paper, or a different technical domain, please share those details and I'll gladly run a more targeted extraction for you!",
+      "started_at": "2026-04-26T05:27:23.090669+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "Gracefully acknowledged the retrieval gap and provided a comprehensive, production-ready Python script using arXiv and Semantic Scholar APIs to directly fulfill the user's extraction request.",
+      "response_score": 9,
+      "retrieval_basis": "Retrieved chunks consisted of a bibliography dump of recent alignment papers, completely failing to surface any 2020 documents or system-level extraction tools.",
+      "retrieval_score": 2
+    },
+    "papers": {
+      "response_basis": "Correctly identified the absence of matching files and suggested adjusting filters or querying external repositories, but offered no concrete implementation path.",
+      "response_score": 6,
+      "retrieval_basis": "Retrieved a single 2024 survey on LLM alignment, which is irrelevant to the specific 2020 publication date and 'text alignment' topic requested.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "Acknowledged the retrieval failure and requested clarification, delivering a passable but passive response that deferred to the user for next steps.",
+      "response_score": 6,
+      "retrieval_basis": "Similar to papers, retrieved a 2024 survey with low relevance to the specific 2020 text alignment query, providing no actionable data.",
+      "retrieval_score": 2
+    }
+  },
+  "timestamp": "2026-04-25T19:16:01.807294+00:00",
+  "topk": 16
+}

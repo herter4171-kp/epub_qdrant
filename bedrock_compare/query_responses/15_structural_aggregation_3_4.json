@@ -1,0 +1,35 @@
+{
+  "category": "structural_aggregation",
+  "input_file": "15_structural_aggregation_3_4.json",
+  "input_id": 15,
+  "proficiency": 3,
+  "prompt": "Given a paragraph chunk, how do I traverse the document structure upward to map its parent and grandparent headings?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T02:49:16.899470+00:00",
+      "elapsed_seconds": 17.458,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To map a paragraph chunk to its parent and grandparent headings, you need to work with a **structured document tree** rather than raw text. While your provided search results focus on hierarchical retrieval frameworks that build multi-level trees to preserve both granular details and thematic overviews [1][2], the actual upward traversal mechanism depends on how your document is parsed and indexed. Below is a practical breakdown, clearly separating results-derived concepts from standard engineering practices.\n\n### 🔹 Results-Derived Context\nYour search indicates that modern document processing often uses **hierarchical chunking** to group atomic units into larger structures based on semantic or structural dependence [2]. Frameworks like RAPTOR flatten multi-layered trees for vector search while preserving parent-child relationships, and agentic systems (e.g., LATTICE) actively navigate hierarchical structures using relevance scoring [1]. These approaches confirm that maintaining explicit `parent` references during ingestion is a standard pattern for upward traversal.\n\n---\n\n### 🔹 Standard Implementation Approaches\n\n#### 1. **Tree/Graph Structure with Parent Pointers (Recommended)**\nDuring document parsing, build a tree where each node (heading or chunk) stores a direct reference to its parent. This aligns with hierarchical indexing paradigms that explicitly track structural relationships [1][2].\n- **Parsing**: Use structure-aware splitters (e.g., `MarkdownHeaderTextSplitter`, `HTMLHeaderTextSplitter`, or `langchain`/`LlamaIndex` document loaders) that recognize heading levels.\n- **Tree Construction**: \n  ```json\n  {\n    \"id\": \"chunk_042\",\n    \"text\": \"Paragraph content...\",\n    \"parent_heading_id\": \"heading_h2_09\",\n    \"grandparent_heading_id\": \"heading_h1_02\",\n    \"heading_level\": 3\n  }\n  ```\n- **Upward Traversal**: Simply follow the stored pointers: `parent = data.parent_heading_id`, `grandparent = data.grandparent_heading_id`. No runtime traversal needed.\n\n#### 2. **Algorithmic Level Mapping**\nIf you prefer on-the-fly mapping without pre-storing IDs, use heading level rules:\n1. Track the most recent heading at each level (`H1`, `H2`, `H3`, etc.) as you parse.\n2. When a paragraph is created, assign it the current active heading.\n3. To find parents upward: locate the nearest preceding `H(n-1)` for parent, and `H(n-2)` for grandparent.\n⚠️ *Caveat*: This breaks if documents skip levels (e.g., `H1` → `H3`) or use inconsistent formatting. Structure-based segmentation frameworks avoid this by using explicit metadata or LLM-guided segmentation points [2].\n\n#### 3. **Precomputed Lookup Table (Production-Ready)**\nFor retrieval or RAG pipelines, cache the hierarchy during ingestion:\n```python\nhierarchy_map = {\n    \"para_chunk_1\": {\"parent\": \"sec_2_title\", \"grandparent\": \"ch_1_title\"},\n    \"para_chunk_2\": {\"parent\": \"sec_2_title\", \"grandparent\": \"ch_1_title\"}\n}\n```\nThis matches hierarchical retrieval best practices where indices are flattened or pre-linked for efficient, flexible granularity matching [1].\n\n---\n\n### 🔹 When Structure Is Missing or Ambiguous\nIf documents lack explicit heading tags:\n- **LLM-Assisted Inference**: Prompt an LLM to analyze the chunk's context and infer the most logical parent/grandparent sections [2].\n- **Embedding Similarity**: Match chunk embeddings to candidate heading embeddings and rank by similarity. Agentic retrieval systems use this exact approach to navigate hierarchical or graph-based structures [1].\n- **Boundary Detection**: Use paragraph spacing, indentation, or font size (in PDFs) to infer section breaks, then map to discovered headings.\n\n---\n\n### 🔹 Key Implementation Tips\n- **Normalize during chunking**: Compute parent/grandparent IDs at ingestion time. Runtime upward traversal adds unnecessary latency.\n- **Handle edge cases**: Orphaned paragraphs, merged cells, or poorly formatted PDFs often break hierarchy mapping. Add fallback logic (e.g., default to document root or nearest valid heading).\n- **Align with retrieval strategy**: If you're using hierarchical retrieval, ensure your traversal logic matches the tree flattening or agentic navigation pattern you've chosen [1][2].\n\nIf your specific pipeline or document format differs, share the ingestion method (e.g., PDF parsing, Markdown, HTML, custom splitter) and I can provide a targeted code snippet or architecture recommendation.",
+      "started_at": "2026-04-26T02:48:59.441547+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T02:48:32.217231+00:00",
+      "elapsed_seconds": 25.389,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T02:48:06.827352+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T02:48:59.441528+00:00",
+      "elapsed_seconds": 27.224,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T02:48:32.217336+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:00.109162+00:00",
+  "topk": 4
+}

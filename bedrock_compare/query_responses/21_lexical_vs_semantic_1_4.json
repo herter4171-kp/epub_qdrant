@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "21_lexical_vs_semantic_1_4.json",
+  "input_id": 21,
+  "proficiency": 1,
+  "prompt": "Is there a way to check if a document mentions a specific term like MinerU anywhere else in the text?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:38:53.124955+00:00",
+      "elapsed_seconds": 21.607,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T03:38:31.518114+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:38:11.021097+00:00",
+      "elapsed_seconds": 10.726,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Yes, the provided document explicitly mentions the term **\"MinerU\"** (specifically **MinerU2.5**) in multiple instances. Based on the text, it is referenced in the context of the `DocDancer` framework for agentic document-grounded information seeking. \n\nHere is how and where it appears:\n* **Layout Analysis & Extraction:** The framework leverages MinerU2.5 for high-precision layout analysis and content extraction. It defines 17 element types and enriches outline nodes with layout and semantic attributes while removing irrelevant elements like headers and footers [1].\n* **Outline Generation:** The document contrasts MinerU2.5 with other tools (like Adobe PDF Extract, DocXChain, and PyMuPDF), noting that MinerU2.5 is used to generate document outlines. By visually cropping and clustering title elements, it enables fine-grained section segmentation and reduces information loss in long documents [1].\n* **Performance Impact:** Ablation studies in the text confirm that MinerU2.5 consistently outperforms baseline tools, producing higher-quality document outlines that complement the system's simplified toolset (`Search` and `Read` tools) [1].\n\nIf you are looking to search for this term in your own documents, you can use standard text-search functions or, as demonstrated in the paper, integrate it as a specialized tool within an agentic pipeline for layout-aware document processing.\n\n**Source:**\n[1] Qintong Zhang et al., *DocDancer: Towards Agentic Document-Grounded Information Seeking*, arXiv:2601.05163.",
+      "started_at": "2026-04-26T03:38:00.294482+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:38:31.518104+00:00",
+      "elapsed_seconds": 20.497,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided research, yes, you can automate the process of checking for specific terms or technical vocabulary within documents using AI agents. \n\n**Checking for Specific Terms:**\n* **Automated Rule & Keyword Verification:** AI agent frameworks can be built to systematically review structured documents and explicitly check for the presence of specific technical words or required terms, ensuring they align with business logic or formatting rules [1].\n* **Excerpt Extraction:** Agents can also be prompted to scan a document and extract specific passages or excerpts that explicitly mention a target term, topic, or entity [4].\n\n**Context on MinerU:**\nIn the provided results, **MinerU** is specifically referenced as a document processing tool rather than a search target. It is used in collaborative human-agent workflows to ingest source PDFs and convert them into raw Markdown formats, which are then refined for further structural or narrative planning [3].\n\n*Note: The above points are derived directly from the provided research results. If you are looking for a practical implementation method outside of these papers (e.g., Python scripts, specific IDE features, or standard OS search functions), let me know and I can provide alternative approaches.*",
+      "started_at": "2026-04-26T03:38:11.021104+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:04.511774+00:00",
+  "topk": 4
+}

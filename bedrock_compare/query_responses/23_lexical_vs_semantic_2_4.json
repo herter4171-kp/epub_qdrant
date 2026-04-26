@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "23_lexical_vs_semantic_2_4.json",
+  "input_id": 23,
+  "proficiency": 2,
+  "prompt": "How do I search for the exact acronym RRF instead of getting documents generally about search algorithms?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:54:22.150396+00:00",
+      "elapsed_seconds": 13.004,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To get exact matches for the acronym **RRF** while filtering out results about search algorithms, you’ll need to combine **exact-match syntax** with **term exclusion**. Here’s how to do it across common platforms:\n\n### 🔹 Core Syntax\n- **Force exact match:** Wrap the acronym in double quotes → `\"RRF\"` or `\"rrf\"`\n- **Exclude unwanted topics:** Use the minus operator → `-\"search algorithm\" -search`\n- **Combined:** `\"RRF\" -\"search algorithm\" -\"search algorithms\"`\n\n### 🔍 Platform-Specific Tips\n| Platform | Recommended Query | Notes |\n|----------|------------------|-------|\n| **Google / Google Scholar** | `\"RRF\" -search -algorithm` | Google treats quoted terms as exact matches and ignores stop words like \"search\" when paired with exclusions. |\n| **arXiv** | `\"RRF\" AND NOT (\"search algorithm\" OR \"searching\")` | Use arXiv’s Advanced Search → `title/abstract/keywords` field. Quote marks work in arXiv's semantic parser. |\n| **GitHub / Code Repos** | `\"RRF\" -search -algorithm` | GitHub's search supports quotes and `-` exclusions. Add `language:python` or `topic:retrieval` if needed. |\n| **Elasticsearch / Custom RAG** | Use keyword field + `match_phrase` or BM25 instead of dense vectors | Embedding-based search often returns conceptually similar docs rather than exact token matches. Switch to lexical search for exact acronyms. |\n\n### 💡 Why You're Getting \"Search Algorithm\" Results\nIf your original query included the word *search* (e.g., \"how to search for RRF\"), most modern engines prioritize **semantic relevance** over exact tokens. Quoting `\"RRF\"` breaks that association, and `-search -algorithm` explicitly tells the engine to drop semantically related but topically mismatched results.\n\n> ⚠️ **Note on Context:** In retrieval and ranking literature, **RRF** most commonly refers to **Reciprocal Rank Fusion** (a standard ensemble ranking method for combining multiple retrieval signals). If that's what you're looking for, appending `reciprocal rank fusion` or `ranking ensemble` alongside `\"RRF\"` will further narrow results without triggering generic \"search algorithm\" matches.\n\nThe provided reference results focus on LLM search capability training and reinforcement learning rather than query syntax, so the guidance above relies on standard information retrieval practices. If you're using a specific tool, database, or custom interface (e.g., a vector DB, academic search API, or internal search portal), let me know and I'll give you the exact flags or UI steps for that environment.",
+      "started_at": "2026-04-26T03:54:09.146532+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:53:41.585519+00:00",
+      "elapsed_seconds": 11.929,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results focus on LLM-based academic paper discovery agents and their query-generation pipelines rather than general search query syntax [1][2][3]. Because those references don't cover how to constrain search results to exact acronyms, I'll outline the standard, cross-platform techniques below.\n\n### 🔍 How to Search for the Exact Acronym \"RRF\"\n**1. Use Double Quotes for Exact Match**\nEnclose the acronym in quotation marks: `\"RRF\"`\n- This forces the search engine to return only results containing that exact string, ignoring tokenization or stemming that might otherwise match related terms like \"rank fusion\" or \"reciprocal ranking.\"\n\n**2. Combine with Boolean/Exclusion Operators (Optional)**\nIf you're still seeing algorithm-focused results, narrow the scope further:\n- `\"RRF\" NOT (algorithm OR \"search algorithm\" OR optimization)`\n- `\"RRF\" AND (\"Reciprocal Rank Fusion\" OR ranking)`\n- `site:arxiv.org \"RRF\"` (to restrict to a specific domain or repository)\n\n**3. Platform-Specific Notes**\n- **Google / General Web:** `\"RRF\"` works as intended. Google Scholar sometimes treats quotes as \"soft\" exact matches; if results still drift, use the `Tools > Any time` or advanced search filters.\n- **Academic Databases (IEEE Xplore, ACM DL, PubMed):** Look for the `\"Exact Phrase\"` checkbox or switch to their Advanced Search interface. Many academic indexes also support field-specific syntax like `au:RRF` or `ti:\"RRF\"` (title-only).\n- **Code/Dev Repos (GitHub, Stack Overflow):** Quotes still work, but consider adding language-specific tags: `\"RRF\" AND (python OR java) AND (search OR ranking)`.\n\n### 📌 Why You're Getting Broad \"Search Algorithm\" Results\nWithout exact-match syntax, search engines tokenize your query and apply term-weighting algorithms (like BM25) that expand your intent to semantically related concepts. If `RRF` appears near terms like \"ranking,\" \"retrieval,\" or \"aggregation,\" the engine will surface general algorithm papers unless you explicitly constrain the match.\n\nLet me know which specific search engine or academic database you're using, and I can provide the exact UI steps or syntax for that platform.\n\n---\n*Note: The guidance above reflects standard search engine and academic database practices. The provided references focus on multi-agent LLM search systems and do not cover query syntax mechanics [1][2][3].*",
+      "started_at": "2026-04-26T03:53:29.656241+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:54:09.146494+00:00",
+      "elapsed_seconds": 27.561,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T03:53:41.585531+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:05.875764+00:00",
+  "topk": 4
+}

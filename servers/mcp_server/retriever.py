@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import numpy as np
-from qdrant_client.models import FieldCondition, MatchValue, SparseVector
+from qdrant_client.models import FieldCondition, MatchValue, SparseVector, Filter
 
 from servers.embedding_server.client import get_dense_vectors, get_sparse_vectors
 from src.storage import Storage
@@ -612,24 +612,28 @@ class Retriever:
         if not title:
             return None
         lower = title.strip().lower()
-        normalized = _NORMALIZED_TITLES.get(lower)
-        return normalized  # None means "skip exact match, use semantic"
+        if lower not in _NORMALIZED_TITLES:
+            return title  # unknown title → treat as valid, use as-is
+        normalized = _NORMALIZED_TITLES[lower]
+        return normalized  # None means known-bad sentinel → skip exact match, use semantic
 
     def _semantic_anchor(
         self,
         source_file: str,
         anchor_text: str,
         top_k: int = 30,
+        collection: Optional[str] = None,
     ) -> Optional[ChunkResult]:
         """Perform a vector search scoped to a single file to find the best-matching section.
 
         Returns the top ChunkResult whose source_file matches, or None if nothing found.
         """
+        col = collection or self._collection
         # Search using the anchor_text with a file filter
         if top_k > 50:
             top_k = 50
         raw_results = self._storage.search(
-            self._collection, anchor_text, top_k=top_k,
+            col, anchor_text, top_k=top_k,
         )
         for r in raw_results:
             if r.get("source_file") == source_file:
@@ -654,6 +658,7 @@ class Retriever:
         source_file: str,
         section_title: str,
         radius: int,
+        collection: Optional[str] = None,
     ) -> List[ChunkResult]:
         """Try exact match first; if it fails or is a known-bad title, fall back to semantic.
 
@@ -661,32 +666,46 @@ class Retriever:
         or an empty list if nothing is found.
         """
         normalized = self._normalize_title(section_title)
+        col = collection or self._collection
 
-        # Step 1: Exact match lookup
-        top_k = (radius * 2 + 1) * 5
-        raw_results = self._storage.search(
-            self._collection, section_title, top_k=top_k,
-        )
-
+        # Step 1: Exact match via payload filter scroll (not vector search)
         exact_matches = []
-        for r in raw_results:
-            if r.get("source_file") != source_file:
-                continue
-            st = r.get("section_title", "") or r.get("section", "")
-            if st == section_title:
+        try:
+            scroll_results, _ = self._client.scroll(
+                collection_name=col,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="source_file",
+                            match=MatchValue(value=source_file),
+                        ),
+                        FieldCondition(
+                            key="section_title",
+                            match=MatchValue(value=section_title),
+                        ),
+                    ]
+                ),
+                limit=100,
+                with_payload=True,
+            )
+            for point in scroll_results:
+                p = point.payload or {}
+                st = p.get("section_title", "") or p.get("section", "")
                 exact_matches.append(ChunkResult(
-                    score=r.get("score", 0),
-                    text=r.get("text", ""),
-                    source_file=r.get("source_file", ""),
-                    title=r.get("title", "") or r.get("book_title", ""),
-                    section=r.get("section", "") or st,
-                    doc_type=r.get("doc_type", ""),
-                    book_title=r.get("book_title", ""),
+                    score=1.0,
+                    text=p.get("text", ""),
+                    source_file=p.get("source_file", ""),
+                    title=p.get("title", "") or p.get("book_title", ""),
+                    section=p.get("section", "") or st,
+                    doc_type=p.get("doc_type", ""),
+                    book_title=p.get("book_title", ""),
                     section_title=st,
-                    chapter_index=r.get("chapter_index", 0),
-                    section_index=r.get("section_index", 0),
-                    chunk_index=r.get("chunk_index", 0),
+                    chapter_index=p.get("chapter_index", 0),
+                    section_index=p.get("section_index", 0),
+                    chunk_index=p.get("chunk_index", 0),
                 ))
+        except Exception as exc:
+            logger.debug("scroll exact-match failed for %s/%s: %s", col, source_file, exc)
 
         if exact_matches and normalized is not None:
             # We got exact matches and the title is not a known-bad sentinel
@@ -694,13 +713,13 @@ class Retriever:
             return exact_matches
 
         # Step 2: Semantic fallback — search within source_file for the best anchor
-        best = self._semantic_anchor(source_file, section_title, top_k=30)
+        best = self._semantic_anchor(source_file, section_title, top_k=30, collection=col)
         if best:
             sec_idx = best.section_index
             # Fetch all chunks from the same section (and nearby sections)
             context_top_k = (radius * 2 + 3) * 5
             ctx_results = self._storage.search(
-                self._collection, f"file:{source_file}", top_k=context_top_k,
+                col, f"file:{source_file}", top_k=context_top_k,
             )
             window = []
             for r in ctx_results:
@@ -770,11 +789,11 @@ class Retriever:
             )
 
         # Step 1: Try exact match + semantic fallback chain.
-        window = self._find_section_chunks(source_file, anchor, radius)
+        window = self._find_section_chunks(source_file, anchor, radius, collection=col)
 
         if not window:
             # Last-resort: use the query to find any relevant chunks in file.
-            fallback = self._semantic_anchor(source_file, anchor, top_k=radius * 4 + 1)
+            fallback = self._semantic_anchor(source_file, anchor, top_k=radius * 4 + 1, collection=col)
             if fallback:
                 window = [fallback]
             else:

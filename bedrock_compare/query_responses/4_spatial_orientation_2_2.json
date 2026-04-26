@@ -1,0 +1,35 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "4_spatial_orientation_2_2.json",
+  "input_id": 4,
+  "proficiency": 2,
+  "prompt": "Given a document chunk, how can I find out how long the full document is and read its final paragraph?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T01:13:47.738411+00:00",
+      "elapsed_seconds": 12.676,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided results, a single document chunk does not contain metadata about the full document’s length or its ending. Chunking is specifically designed to fragment text for efficient retrieval and to stay within LLM context window limits, which inherently breaks document-level boundaries [1][2]. Without an accompanying indexing system, a chunk alone cannot tell you how long the original document is or where it ends.\n\nTo achieve your goal, you need to leverage the **metadata and document mapping** that typically accompanies chunked data in modern RAG pipelines. Below is a structured approach using standard vector database and document-processing practices:\n\n### 🔍 Step 1: Extract the Document Identifier\nEvery chunk should be tagged with a `document_id` or `source_uri` during ingestion. Query your vector store or metadata database using this ID to retrieve the parent document’s metadata:\n```python\n# Pseudocode: Query metadata store\ndoc_metadata = db.metadata.get(document_id=chunk.document_id)\n# Expected fields: total_chars, word_count, file_path, page_count, etc.\n```\nIf you haven't stored this metadata yet, you'll need to backfill it during your ingestion pipeline.\n\n### 📄 Step 2: Retrieve the Full Document & Extract the Last Paragraph\nOnce you have the `document_id` or file path, fetch the raw document and parse it:\n```python\nimport fitz  # PyMuPDF\n# Or: from langchain.document_loaders import DocxReader, TextLoader\n\ndef get_last_paragraph(file_path):\n    if file_path.endswith('.txt'):\n        with open(file_path, 'r') as f:\n            text = f.read()\n    elif file_path.endswith('.pdf'):\n        doc = fitz.open(file_path)\n        text = \"\\n\".join([page.get_text() for page in doc])\n    else:\n        raise ValueError(\"Unsupported format\")\n        \n    # Split by double newline (common paragraph delimiter)\n    paragraphs = [p.strip() for p in text.split(\"\\n\\n\") if p.strip()]\n    return paragraphs[-1] if paragraphs else None\n```\nYou can now pair the document length (`len(text)` or metadata) with the final paragraph.\n\n### 🛠️ Architecture Recommendations\n- **Parent-Document Retrieval**: Instead of querying a raw chunk, use frameworks that fetch the surrounding context or full parent document before passing it to the LLM. This preserves structure while still managing token limits [2].\n- **Precomputed Metadata**: During ingestion, calculate and store `total_length`, `paragraph_count`, and `last_paragraph` in your metadata schema. This avoids runtime parsing and speeds up retrieval.\n- **Vector Database Schema**: Ensure your embedding store includes fields like `document_id`, `original_length`, and `chunk_index` so you can reconstruct document boundaries when needed.\n\n### ⚠️ Important Notes\n- If your system only returns raw text without metadata, you're working with a **stateless chunking pipeline**, which cannot answer document-level questions.\n- As noted in the reference material, context windows and token limits make it impractical to feed entire documents into LLMs directly, which is why chunking and hierarchical retrieval are standard [1][2]. Your solution should balance metadata preservation with efficient retrieval.\n\nIf you share the specific framework or vector database you're using (e.g., LangChain, LlamaIndex, Pinecone, Weaviate, FAISS), I can provide a precise code snippet tailored to your stack.",
+      "started_at": "2026-04-26T01:13:35.061576+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T01:13:19.706756+00:00",
+      "elapsed_seconds": 22.098,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T01:12:57.608847+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T01:13:35.061569+00:00",
+      "elapsed_seconds": 15.355,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To determine the full length of a document and read its final paragraph, you should use the **`chunk_read`** tool [1]. \n\nWhile retrieval tools like `keyword_search` and `semantic_search` help locate relevant sections, they typically only return abbreviated snippets marked with `\"...\"`, which are insufficient for analyzing complete document structure [1]. The `chunk_read` tool bypasses this limitation by fetching the full text of specified document chunks using their IDs [1].\n\n**How to use it effectively:**\n* **Retrieve Full Content:** Pass the relevant chunk IDs to `chunk_read` to get the untruncated text, allowing you to accurately count the total document length and locate the final paragraph [1].\n* **Strategy:** Always read the full text of promising chunks identified during your initial search phase. If information appears incomplete, read adjacent chunks (e.g., `+/- 1`) to ensure you have the complete context before formulating your answer [1].\n* **Iterative Workflow:** Follow a `search → read → evaluate → answer` loop. Ground your final response strictly in the full text retrieved by `chunk_read` and cite the specific chunk IDs that support your findings [1].\n\nThis approach ensures you work with the complete document context rather than relying on truncated search previews.\n\n**References:**\n[1] Mingxuan Du, Benfeng Xu, Chiwei Zhu, Shaohan Wang, Pengyu Wang, Xiaorui Wang, Zhendong Mao. *A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces*. arXiv:2602_03442.",
+      "started_at": "2026-04-26T01:13:19.706761+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:13:19.354354+00:00",
+  "topk": 2
+}

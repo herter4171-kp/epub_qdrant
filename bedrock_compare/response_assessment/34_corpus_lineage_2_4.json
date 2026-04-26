@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "34_corpus_lineage_2_4.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 14.063,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:34:50.093624+00:00",
+  "proficiency": 2,
+  "prompt": "How do I pull abstract chunks from all source files published in the year 2020 that discuss text alignment?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunks consist solely of a bibliography/reference list from a recent survey, containing no information on how to extract abstracts or filter by publication year.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The model correctly identifies the retrieval gap and provides a comprehensive, programmatic solution using standard APIs and libraries, while appropriately contextualizing the 'text alignment' topic.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieval output is truncated and only shows metadata for a 2024 survey paper, offering no guidance on abstract extraction or year filtering.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, failing to address the user's prompt or acknowledge the lack of retrieval context.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"Similar to the papers source, the retrieval is truncated and only displays metadata for a 2024 paper, providing no relevant extraction methodology.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, providing no answer or clarification despite the cold-start prompt.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"AI Alignment: A Comprehensive Survey\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:34:36.027435+00:00",
+      "elapsed_seconds": 21.781,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, there is no direct tool, dataset, or methodology documented for extracting 2020 abstracts on text alignment. The results focus on recent AI/LLM alignment research (2021–2025) and do not cover historical publication extraction or local file parsing workflows. Below is a reliable, programmatic approach using established academic APIs and standard file-parsing techniques.\n\n### 🔍 Part 1: Discover & Retrieve 2020 Publications\nIf you don't already have the files, use the Crossref REST API to fetch metadata filtered by year and topic:\n```python\nimport requests\nimport pandas as pd\n\nurl = \"https://api.crossref.org/works\"\nparams = {\n    \"query\": \"text alignment\",\n    \"from-pub-date\": \"2020-01-01\",\n    \"until-pub-date\": \"2020-12-31\",\n    \"select\": \"DOI,title,abstract\",\n    \"rows\": 100,\n    \"mailto\": \"your.email@example.com\"  # Required for rate-limit compliance\n}\n\nresponse = requests.get(url, params=params)\ndata = response.json()\n\nrecords = []\nfor item in data[\"message\"][\"items\"]:\n    abstract = item.get(\"abstract\", \"\").strip()\n    if abstract:\n        records.append({\n            \"DOI\": item.get(\"DOI\", \"\"),\n            \"Title\": item.get(\"title\", [\"\"])[0],\n            \"Abstract\": abstract\n        })\n\npd.DataFrame(records).to_csv(\"2020_text_alignment_abstracts.csv\", index=False)\n```\n*Pagination Note*: Crossref returns up to 1,000 results per request. For comprehensive coverage, implement cursor-based pagination using `cursor` and `cursor-max-size` parameters.\n\n### 📁 Part 2: Extract Abstracts from Local Source Files\nIf you already possess a directory of PDFs, LaTeX, or HTML files and need to pull abstract chunks directly:\n\n#### ✅ For PDFs\nUse `pdfplumber` with a regex-based section locator:\n```python\nimport pdfplumber\nimport re\n\ndef extract_abstract_pdf(filepath):\n    with pdfplumber.open(filepath) as pdf:\n        text = \"\\n\".join(page.extract_text() or \"\" for page in pdf.pages)\n        # Common abstract markers across venues\n        match = re.search(r\"(?:Abstract|Abstract:|Background|Purpose)\\s*:?\\s*(.+?)(?=\\n\\n[A-Z]|\\n\\n[A-Za-z]{2,3}:\\n)\", text, re.DOTALL)\n        return match.group(1).strip() if match else None\n```\n\n#### ✅ For LaTeX (`.tex`)\nParse between standard abstract environments:\n```python\ndef extract_abstract_latex(filepath):\n    with open(filepath, \"r\", encoding=\"utf-8\") as f:\n        content = f.read()\n    match = re.search(r\"\\\\begin\\{abstract\\}(.*?)\\\\end\\{abstract\\}\", content, re.DOTALL)\n    return match.group(1).strip() if match else None\n```\n\n#### ✅ For arXiv Batch Downloads\nUse the `arxiv` package to fetch metadata directly without manual API handling:\n```python\nimport arxiv\n\nresults = arxiv.search(query=\"ti:text alignment\", max_results=50)\nfor r in results:\n    print(f\"Title: {r.title}\\nAbstract: {r.summary}\\n\")\n```\n\n### ⚠️ Important Considerations\n- **Scope Clarification**: \"Text alignment\" in NLP typically refers to sentence/word alignment, discourse coherence, or multilingual alignment. If you're targeting LLM instruction alignment, note that systematic studies and standardized benchmarks emerged predominantly post-2022, which may yield limited 2020-era publications.\n- **Noise & Deduplication**: Abstracts vary in structure. Apply length filtering (e.g., 50–3000 tokens), remove duplicates by DOI/URL, and normalize whitespace before analysis.\n- **File Format Diversity**: If your \"source files\" include non-academic formats (e.g., internal reports, GitHub READMEs), structural heuristics will differ. Share your file types for a tailored parser.\n\n### References\n[1] Crossref REST API Documentation, https://docs.crossref.org/  \n[2] `pdfplumber` for structured PDF text extraction, https://github.com/jsvine/pdfplumber  \n[3] `arxiv` Python Package, https://github.com/lukasschw",
+      "started_at": "2026-04-26T05:34:14.245976+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:33:46.189281+00:00",
+      "elapsed_seconds": 24.153,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:33:22.036500+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:34:14.245967+00:00",
+      "elapsed_seconds": 28.057,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:33:46.189289+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The model correctly identifies the retrieval gap and provides a comprehensive, programmatic solution using standard APIs and libraries, while appropriately contextualizing the 'text alignment' topic.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks consist solely of a bibliography/reference list from a recent survey, containing no information on how to extract abstracts or filter by publication year.",
+      "retrieval_score": 1
+    },
+    "papers": {
+      "response_basis": "The response is completely empty, failing to address the user's prompt or acknowledge the lack of retrieval context.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieval output is truncated and only shows metadata for a 2024 survey paper, offering no guidance on abstract extraction or year filtering.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "The response is completely empty, providing no answer or clarification despite the cold-start prompt.",
+      "response_score": 1,
+      "retrieval_basis": "Similar to the papers source, the retrieval is truncated and only displays metadata for a 2024 paper, providing no relevant extraction methodology.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:14:13.949438+00:00",
+  "topk": 4
+}

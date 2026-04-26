@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "36_corpus_lineage_3_4.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 23.236,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:51:38.739232+00:00",
+  "proficiency": 3,
+  "prompt": "How do I use an arxiv ID to fetch all connected documents and trace how a specific mathematical proof evolved across papers?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 9,\n    \"retrieval_basis\": \"The retrieved chunks directly supplied the necessary technical components, including external citation APIs, document conversion utilities, and LLM agent commands, perfectly aligning with the user's intent to build a citation-aware pipeline.\",\n    \"response_score\": 10,\n    \"response_basis\": \"The response excellently synthesizes the retrieved tools into a structured, step-by-step workflow that comprehensively addresses citation resolution, text standardization, and evolutionary tracking without needing clarification.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The single retrieved chunk only briefly mentions an LLM agent framework without providing details on citation networks or proof tracing, leaving a significant gap in relevant information.\",\n    \"response_score\": 3,\n    \"response_basis\": \"The response is overly brief and fails to address the core request of tracing proof evolution or fetching connected documents, relying solely on a single command snippet.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunks had negligible relevance scores and focused on unrelated multi-agent conversation frameworks, providing no useful information for the query.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, failing to generate any output despite the retrieval attempt.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"DeepXiv-SDK\",\n    \"source_file\": \"bedrock_retrieval.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:51:15.501388+00:00",
+      "elapsed_seconds": 18.908,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Tracing how a specific mathematical proof evolves across papers requires building a **citation-aware pipeline** that combines bibliographic metadata, structured text extraction, reference validation, and semantic version tracking. Below is a reproducible workflow grounded in the provided research results, followed by analytical guidance for proof-level tracing.\n\n---\n### 🔹 Step 1: Build the Citation/Reference Network\narXiv is a preprint server and does not natively index citations. You must resolve the arXiv ID to its citation graph using external scholarly APIs.\n\n- **ADS Bibliographic Query**: Use the Harvard ADS API to pull forward/backward citations tied to the arXiv ID [1].  \n  ```bash\n  curl \"http://adsabs.harvard.edu/cgi-bin/bib_query?arXiv:{arxiv_id}\"\n  ```\n- **Semantic Scholar / Google Scholar**: Enrich the graph with citation counts, venue metadata, and related preprints [2]. These services also provide structured `references` and `citations` fields that map directly to arXiv IDs.\n- **Version History**: arXiv tracks revisions at `https://arxiv.org/abs/{id}v1`, `v2`, etc. Pull all versions to capture author-driven proof refinements.\n\n---\n### 🔹 Step 2: Retrieve & Standardize Full Texts\nRaw PDFs are inefficient for cross-paper proof comparison. Convert them into structured, searchable text:\n\n- **HTML → Markdown**: Prefer `ar5iv` or `alphaxiv` to fetch the rendered HTML and strip it to clean Markdown [3].\n- **PDF Fallback**: If HTML is unavailable, use `MinerU` to convert PDFs into a normalized text format [3].\n- **Structural Segmentation**: Detect headings and formatting cues to build an ordered section inventory and map text into a canonical JSON schema with explicit section hierarchies [3]. This enables deterministic addressing (e.g., `section:3.2` across papers).\n\n---\n### 🔹 Step 3: Extract & Validate Proof-Related Claims\nMathematical proofs are rarely labeled explicitly in titles. You must surface lemma/theorem/proof blocks and verify their provenance:\n\n- **Regex Extraction**: Scan for arXiv IDs, DOI patterns, and external links (e.g., GitHub, LaTeX repositories) using pattern matching [1].\n- **LLM Validation**: Feed candidate URLs and paper context to a lightweight instruction model to verify whether a linked resource actually supports the cited claim [2].\n- **Agent-Assisted Summarization**: Use LLM agent commands like `SUMMARY` and `FULL_TEXT` to extract lemma statements, proof strategies, and experimental results, ensuring one command per inference turn to avoid execution conflicts [4].\n\n---\n### 🔹 Step 4: Track Proof Evolution Across Versions & Papers\narXiv does not store a \"proof graph,\" so evolution must be inferred through semantic and structural comparison:\n\n1. **Cross-Version Diffing**: Compare `v1`, `v2`, `v3` of the same arXiv ID using tokenized section payloads and embedding similarity. Changes in theorem statements, proof steps, or notation shifts reveal author refinements.\n2. **Cross-Paper Semantic Matching**: For each citation in the network, compute section-level embeddings (e.g., `tiktoken`-aware chunking) to find where the same lemma or technique reappears [3].\n3. **Provenance Tracking**: Attach metadata fields like `source_type`, `extraction_time`, and `update_time` to every extracted claim, enabling traceable lineage in downstream pipelines [2].\n4. **LLM Lineage Reasoning**: Prompt a model to compare proof structures across papers (e.g., `\"Compare the proof strategy for Theorem 3.1 in Paper A vs. Paper B, noting dependencies and modifications\"`).\n\n---\n### 🔹 Step 5: Materialize & Consume\nOutput structured bundles that support deterministic analysis:\n- **Overview View**: For triage and routing (paper metadata, citation count, section map) [2]\n- **Section View**: For section-addressable navigation and proof block extraction [2][3]\n- **Evidence View**: Full-text payloads with provenance fields for verification [2]\n\nThese materialized views can feed into knowledge graphs, citation trackers, or custom NLP pipelines to visualize proof lineage as a directed acyclic graph (DAG) where nodes = lemmas/theorems and edges = dependency/evolution links.\n\n---\n### ⚠️ Key Limitations & Best Practices\n| Aspect | Note |\n|--------|------|\n| **Citation Incompleteness** | arXiv preprints often lack full reference lists. Cross-reference with arXiv's `crossref` or Semantic Scholar for completeness. |\n| **Semantic Drift** | \"Same proof\" may appear with different notation, lemmas, or proof techniques. Use embedding similarity + manual validation. |\n| **API Rate Limits** | ADS, Semantic Scholar, and ar5iv enforce quotas. Batch requests and cache canonical JSON outputs. |\n| **Reproducibility** | Always store extraction timestamps, model versions, and regex patterns used for claim extraction [2]. |\n\n---\n### 🔍 Sources Cited\n[1] ADS bibliographic query workflow extracts arXiv IDs via regex and constructs `http://adsabs.harvard.edu/cgi-bin/bib_query?arXiv:{id}` to fetch citation metadata.  \n[2] DeepXiv-SDK materializes overview/section/evidence views with provenance fields, links arXiv IDs to Semantic Scholar/Google Scholar, and uses LLMs to validate extracted resource links.  \n[3] ar5iv/alphaxiv extract HTML→Markdown; MinerU converts PDFs to normalized text; documents are structured into canonical JSON with section maps and token statistics.  \n[4] LLM agent workflows use `FULL_TEXT`, `SUMMARY`, and `ADD_PAPER` commands to extract and validate paper content in a turn-constrained inference loop.\n\nLet me know if you'd like concrete code snippets for any step (e.g., ADS API parsing, section-level embedding comparison, or LLM diff prompting), or if you're working with a specific proof domain (e.g., algebraic geometry, number theory, PDEs) so I can tailor the extraction heuristics.",
+      "started_at": "2026-04-26T05:50:56.593211+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:50:28.832209+00:00",
+      "elapsed_seconds": 23.971,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To fetch all connected documents and trace the evolution of a specific mathematical proof using an arXiv ID, you typically need to move beyond standard citation lists. Current research suggests using **LLM agents** for retrieval and **structured intellectual analysis** to map the lineage of the proof.\n\nHere is the methodology based on current agentic frameworks and reasoning datasets:\n\n### 1. Fetching the Document Content\nTo retrieve the full text of the paper associated with the arXiv ID, you can use specific commands available in LLM agent frameworks like **Agent Laboratory**. This allows you to access the content needed for analysis:\n\n```\nFULL_TEXT\n[arXiv ID]\n```\nOnce the full text is retrieved, the agent can process the paper to identify the specific mathematical proofs or theorems",
+      "started_at": "2026-04-26T05:50:04.860906+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:50:56.593191+00:00",
+      "elapsed_seconds": 27.761,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:50:28.832220+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response excellently synthesizes the retrieved tools into a structured, step-by-step workflow that comprehensively addresses citation resolution, text standardization, and evolutionary tracking without needing clarification.",
+      "response_score": 10,
+      "retrieval_basis": "The retrieved chunks directly supplied the necessary technical components, including external citation APIs, document conversion utilities, and LLM agent commands, perfectly aligning with the user's intent to build a citation-aware pipeline.",
+      "retrieval_score": 9
+    },
+    "papers": {
+      "response_basis": "The response is overly brief and fails to address the core request of tracing proof evolution or fetching connected documents, relying solely on a single command snippet.",
+      "response_score": 3,
+      "retrieval_basis": "The single retrieved chunk only briefly mentions an LLM agent framework without providing details on citation networks or proof tracing, leaving a significant gap in relevant information.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "The response is completely empty, failing to generate any output despite the retrieval attempt.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunks had negligible relevance scores and focused on unrelated multi-agent conversation frameworks, providing no useful information for the query.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:14:15.421186+00:00",
+  "topk": 4
+}

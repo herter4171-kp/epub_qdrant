@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "23_lexical_vs_semantic_2_16.json",
+  "input_id": 23,
+  "proficiency": 2,
+  "prompt": "How do I search for the exact acronym RRF instead of getting documents generally about search algorithms?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:50:00.065324+00:00",
+      "elapsed_seconds": 12.835,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results do not cover exact-match querying or Boolean search syntax, so I’m drawing on standard search engine best practices rather than the provided material. Here’s how to reliably find documents that specifically discuss the acronym **RRF** while filtering out unrelated content about \"search algorithms\" or similar terms:\n\n### 🔍 Core Technique: Exact Phrase + Exclusion\nWrap the acronym in double quotes to force an exact match, then use the minus sign (`-`) to exclude unwanted topics:\n```\n\"RRF\" -\"search algorithm\" -algorithm -\"search engine\" -\"search capability\"\n```\nThis tells the engine to only return pages where `RRF` appears exactly as written, while actively filtering out documents dominated by the terms you want to avoid.\n\n### 🌐 Platform-Specific Tips\n| Platform | Exact Match Syntax | Example |\n|----------|-------------------|---------|\n| **Google / General Web** | `\"RRF\" -algorithm -search` | `\"RRF\" -algorithm -search site:edu` |\n| **Academic Databases** (ACM, IEEE, Springer, etc.) | Use their **Advanced Search** → select `\"Exact phrase\"` for the term field. Most academic indexes treat `\"RRF\"` as a strict term match. | `term: \"RRF\" AND NOT (algorithm OR \"search engine\")` |\n| **GitHub** | `\"RRF\" in:name` or `\"RRF\" in:code` | `\"RRF\" in:name -algorithm` |\n| **Linux / CLI (`grep`)** | `grep -rw \"RRF\" .` (matches whole word, case-insensitive) | `grep -rw \"RRF\" ./papers/` |\n\n### 💡 Pro Tips for Better Precision\n1. **Pair with domain keywords**: `RRF` is ambiguous and can mean *Rank Reciprocal Fusion*, *Recursive Random Forest*, or domain-specific terms depending on the field. Add your actual context:\n   - `\"RRF\" \"reciprocal rank\"`\n   - `\"RRF\" \"random forest\"`\n   - `\"RRF\" information retrieval`\n2. **Use file type filters** if looking for papers or docs: `filetype:pdf \"RRF\" -algorithm`\n3. **Check acronym glossaries**: If `RRF` isn't widely defined, search `\"RRF\" acronym` or `\"RRF\" stands for` to verify what the literature actually uses.\n\nIf you share which search engine, database, or codebase you're using, I can give you the exact syntax or UI steps tailored to that environment.",
+      "started_at": "2026-04-26T03:49:47.230449+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:49:22.257961+00:00",
+      "elapsed_seconds": 15.92,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, which focus on LLM-based agentic search frameworks and deep research systems [1][2][5], there is no specific guidance on using traditional search engine operators for exact acronym matching. However, to isolate the exact acronym **RRF** and filter out documents generally about search algorithms, you can use standard search query syntax:\n\n1. **Use Quotation Marks for Exact Match**: Enclose the acronym in double quotes (e.g., `\"RRF\"`). This forces the search engine to return only results where those three letters appear together as a standalone term, ignoring longer words or partial matches.\n2. **Exclude Unwanted Topics**: Use the minus sign (`-`) to actively remove results related to the subjects you want to avoid. For example: `\"RRF\" -algorithms -\"search algorithms\" -ranking`.\n3. **Combine Operators**: You can combine these for highly specific results. For instance, `\"RRF\" -algorithms` will show you pages mentioning RRF while actively filtering out those focused on search algorithms.\n4. **Add Contextual Keywords**: Since RRF is a short acronym, it often appears as a substring in other words. Pairing it with a relevant industry term (e.g., `\"RRF\" finance`, `\"RRF\" manufacturing`, or `\"RRF\" policy`) will further narrow the results to the exact field you are interested in.\n\n*(Note: The provided sources did not cover general search query operators, so this advice relies on standard search engine conventions.)*",
+      "started_at": "2026-04-26T03:49:06.337561+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:49:47.230437+00:00",
+      "elapsed_seconds": 24.972,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To search for the exact acronym **RRF** and filter out general discussions about search algorithms, you should leverage **keyword-based exact text matching** rather than semantic or dense vector search. Based on retrieval system best practices, here is how to approach it:\n\n### 1. Use Literal Keyword Matching\nSwitch to or configure your search tool to use **exact keyword matching** (often called `keyword_search`). These tools perform case-insensitive, literal text matching and return snippets exactly where the terms appear [1]. \n* **Action**: Input only the acronym itself (`RRF`) as your query [1].\n\n### 2. Keep Queries Short & Specific\nExact-match retrieval systems are optimized for concise, specific terms rather than natural language descriptions. \n* **Rule of Thumb**: Use **1-3 word maximum** per keyword [1].\n* **Avoid**: Long phrases, questions, or conceptual descriptions (e.g., `\"how does RRF combine search results\"` or `\"algorithm for merging ranked lists\"`). These will either be ignored by the exact-match parser or trigger irrelevant broad results [1].\n\n### 3. Use Phrase Constraints (If Supported)\nIf your search interface or agent framework supports advanced query syntax, wrap the acronym in quotes to force a strict exact-string match: `\"RRF\"`. This prevents the system from matching \"RR\" and \"F\" separately or pulling in documents that only mention the letters incidentally.\n\n### 4. Contextual Clarification\nIn the context of AI agents and information retrieval, **RRF** specifically stands for **Reciprocal Rank Fusion** [7][9]. It is a widely used hybrid fusion strategy that merges ranked lists from different retrieval channels (like dense embeddings and sparse BM25 searches) by prioritizing candidates that consistently appear near the top of multiple lists, without requiring score normalization [7][9]. Knowing this acronym's specific technical definition helps ensure you're filtering for the right domain (retrieval orchestration vs. general search).\n\nBy strictly querying `RRF` using a literal keyword-matching tool and avoiding descriptive phrasing, you will bypass broad algorithmic overviews and land directly on technical discussions of the Reciprocal Rank Fusion methodology [1][7][9].",
+      "started_at": "2026-04-26T03:49:22.257968+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:15:46.723740+00:00",
+  "topk": 16
+}

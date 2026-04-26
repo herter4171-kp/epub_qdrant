@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "32_corpus_lineage_1_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 13.652,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:12:18.201815+00:00",
+  "proficiency": 1,
+  "prompt": "How do I filter my search results to only show chunks from a specific source file like 2010_03768.pdf?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 3,\n    \"retrieval_basis\": \"Retrieved chunks discuss system-level context window filtering and tool descriptions but do not contain instructions for filtering search results by a specific PDF filename.\",\n    \"response_score\": 8,\n    \"response_basis\": \"The response accurately identifies the lack of relevant information in the retrieval, correctly summarizes what was found, and clearly communicates the limitation without hallucinating.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Retrieved chunks discuss an LLM-based multi-agent system and guidelines, completely missing the topic of search filtering or source file constraints.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is entirely empty, failing to address the prompt or acknowledge the missing information.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Retrieved chunks focus on agent navigation and stochastic search reasoning, offering no guidance on filtering by source file.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is entirely empty, providing no answer or clarification.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"bedrock\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:12:04.546075+00:00",
+      "elapsed_seconds": 9.389,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, there is no information regarding how to filter search results to a specific source file such as `2010_03768.pdf`.\n\nThe results describe a workflow utilizing `semantic_search` and `chunk_read` tools [1]. They also mention system-level filtering processes for context windows (e.g., whitelisting source code for development tasks or plaintext files for tabular data) [2]. However, the search results do not provide the specific query syntax or method required to restrict a search to a specific PDF filename.",
+      "started_at": "2026-04-26T05:11:55.157038+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:11:29.976218+00:00",
+      "elapsed_seconds": 23.19,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:11:06.786476+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:11:55.157019+00:00",
+      "elapsed_seconds": 25.181,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:11:29.976225+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response accurately identifies the lack of relevant information in the retrieval, correctly summarizes what was found, and clearly communicates the limitation without hallucinating.",
+      "response_score": 8,
+      "retrieval_basis": "Retrieved chunks discuss system-level context window filtering and tool descriptions but do not contain instructions for filtering search results by a specific PDF filename.",
+      "retrieval_score": 3
+    },
+    "papers": {
+      "response_basis": "The response is entirely empty, failing to address the prompt or acknowledge the missing information.",
+      "response_score": 1,
+      "retrieval_basis": "Retrieved chunks discuss an LLM-based multi-agent system and guidelines, completely missing the topic of search filtering or source file constraints.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "The response is entirely empty, providing no answer or clarification.",
+      "response_score": 1,
+      "retrieval_basis": "Retrieved chunks focus on agent navigation and stochastic search reasoning, offering no guidance on filtering by source file.",
+      "retrieval_score": 2
+    }
+  },
+  "timestamp": "2026-04-25T19:13:36.747632+00:00",
+  "topk": 2
+}

@@ -26,6 +26,15 @@ class Settings:
     LITELLM_API_KEY: str = os.getenv("LITELLM_API_KEY", "")
     LITELLM_MODEL: str = os.getenv("LITELLM_MODEL", "qwen36")
 
+    # Context window size in tokens. Reasoning trace + prompt + reply
+    # must all fit within this budget. Default 128000 for Qwen3.6.
+    LITELLM_CONTEXT_WINDOW: int = int(os.getenv("LITELLM_CONTEXT_WINDOW", "128000"))
+
+    # Maximum tokens reserved for thinking/reasoning trace when the model
+    # operates in thinking mode. The reply budget = context_window -
+    # max_thinking_tokens - prompt_tokens. Default 8192.
+    LITELLM_MAX_THINKING_TOKENS: int = int(os.getenv("LITELLM_MAX_THINKING_TOKENS", "8192"))
+
     # ── MCP server ──────────────────────────────────────────────────
     MCP_PORT: int = int(os.getenv("MCP_PORT", "8090"))
     MCP_HOST: str = os.getenv("MCP_HOST", "0.0.0.0")

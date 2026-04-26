@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "21_lexical_vs_semantic_1_8.json",
+  "input_id": 21,
+  "proficiency": 1,
+  "prompt": "Is there a way to check if a document mentions a specific term like MinerU anywhere else in the text?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:40:05.319709+00:00",
+      "elapsed_seconds": 11.779,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Yes, there are a few ways to check if a document mentions a specific term like \"MinerU\" elsewhere in the text, depending on the tools available to you and the format of the document.\n\n### 1. Using `keyword_search`\nIf you are working within an environment that supports document tools, you can use a `keyword_search` function to find exact text matches for \"MinerU\" [2].\n*   **How it works:** This tool matches the query against sentences in the document via vector similarity or exact matching [2].\n*   **Next Steps:** The search results will typically provide abbreviated snippets [2]. To read the full context and ensure the term is mentioned correctly, you should use a `chunk_read` tool to retrieve the complete content of the relevant sections [2].\n\n### 2. Using the `grep` Command\nIf you have direct access to the document as a text file (e.g., a `.txt` or `.doc` file), you can use the command-line utility `grep` to search for the pattern \"MinerU\" [1].\n*   **Command:** You would use a command like `grep \"MinerU\" filename.txt` [1].\n*   **Output:** This will return the lines containing the term [1].\n\n### 3. Considerations for Non-Text Documents\nIf the document is an image (like a PDF scan or a screenshot), you must first extract the text.\n*   **OCR:** Use Optical Character Recognition (OCR) to convert the image text into a searchable format [3].\n*   **Thresholds:** Ensure the text extraction is accurate, as OCR quality can affect the search results [3].\n\nBy using these methods, you can identify if and where the term \"MinerU\" appears in the document.",
+      "started_at": "2026-04-26T03:39:53.540385+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:39:38.616593+00:00",
+      "elapsed_seconds": 26.541,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Yes, checking whether a document mentions a specific term like “MinerU” elsewhere in the text is a standard capability, and the provided results actually contain direct examples of how this is handled and where the term appears.\n\n**Results-Derived Findings (Where “MinerU” Appears in Your Provided Context)**\nBased on the supplied documents, the term **MinerU2.5** is explicitly referenced in multiple locations within the *DocDancer: Towards Agentic Document-Grounded Information Seeking* paper [1]:\n- **Layout Analysis & Extraction:** The authors state they “leverage MinerU2.5 (Niu et al., 2025) for high-precision layout analysis and extraction” to define element types and enrich outline nodes with layout and semantic attributes while removing structurally irrelevant elements [1].\n- **Outline Generation & Ablation Studies:** In their comparative analysis, they note that their “enhanced method employs MinerU2.5 (Niu et al., 2025) for outline generation,” confirming that it consistently outperforms baseline parsers and produces higher-quality document structures [1].\n\n**General Methods to Check for Specific Terms in Documents**\nDepending on your workflow, scale, and technical setup, you can implement term lookup using several approaches:\n- **Agentic/Tool-Based Search:** As demonstrated in the *DocDancer* framework, agents can use a dedicated `Search` tool that “conducts keyword-based full-text search over the given documents, returning the section IDs, page numbers, and surrounding text snippets for each match” [1]. This is ideal for RAG pipelines where you need structured, location-aware results.\n- **Programmatic Extraction & Matching:** For local files, Python libraries like `pypdf`, `pymupdf`, or `pdfplumber` can extract raw text. Once extracted, simple string or regex matching (`\"MinerU\" in text.lower()`) will return all occurrences along with their line/paragraph indices.\n- **Hybrid (Vector + Keyword) Search:** In production systems, documents are typically chunked, embedded, and indexed in a vector database. You can combine dense vector retrieval with sparse keyword matching (BM25) to fetch every chunk containing the exact term, paired with metadata (page numbers, section IDs) for precise navigation.\n- **Quick Manual/CLI Checks:** For immediate verification, editor search (`Ctrl+F`/`Cmd+F`) or terminal tools like `grep -i \"miner\" extracted_text.txt` (after converting PDFs to plain text) are highly effective.\n\nIf you’re working with a specific file format or need a ready-to-run Python script that extracts page/section numbers alongside each match, let me know your preferred environment and I’ll provide a tailored implementation.\n\n**References**\n[1] Qintong Zhang, Xinjie Lv, Jialong Wu, Baixuan Li, Zhengwei Tao, Guochen Yan, Huanyao Zhang, Bin Wang, Jiahao Xu, Haitao Mi, Wentao Zhang. *DocDancer: Towards Agentic Document-Grounded Information Seeking*. arXiv:2601.05163.",
+      "started_at": "2026-04-26T03:39:12.075145+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:39:53.540378+00:00",
+      "elapsed_seconds": 14.924,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, **MinerU** is explicitly mentioned in the text. It appears in the research paper titled *Human-Agent Collaborative Paper-to-Page Crafting for Under $0.1* [3].\n\nIn this context, **MinerU** is cited as a technical tool used for document parsing. Specifically, it is used in conjunction with a tool called \"Docling\" within a \"Paper Content Parser\" module. The process involves MinerU helping to convert source PDF documents into a raw Markdown format. This raw Markdown is then refined by a Large Language Model (LLM) into a structured, JSON-like asset library that maps section headings and text summaries for webpage generation [3].\n\nIf you are looking to check for specific terms like \"MinerU\" in other documents or large corpora, standard text search methods (such as lexical retrieval or semantic retrieval) are typically employed to locate exact keyword matches or conceptually similar terms [12]. However, within the provided results, MinerU is specifically identified as a PDF-to-Markdown conversion utility [3].\n\n**References:**\n[3] Qianli Ma, Siyu Wang, Yilin Chen, et al. *Human-Agent Collaborative Paper-to-Page Crafting for Under $0.1*.",
+      "started_at": "2026-04-26T03:39:38.616600+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:46.311011+00:00",
+  "topk": 8
+}

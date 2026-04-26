@@ -1,0 +1,35 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "31_corpus_lineage_1_2.json",
+  "input_id": 31,
+  "proficiency": 1,
+  "prompt": "Are there any other papers in the same category that talk about embodied environments?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:03:05.954187+00:00",
+      "elapsed_seconds": 11.828,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the search results provided, there are several recent papers that sit in the same emerging category: **large language models (LLMs) interacting with, reasoning about, or generating 3D embodied environments**. Here are the key works explicitly listed in the results:\n\n**Results-derived findings:**\n- **Holodeck** (Yang et al., 2024) explores language-guided generation of 3D environments specifically designed for embodied AI research [1].\n- **EnvGen** (Zala et al., 2024) investigates how LLMs can be used to generate and adapt environments for training embodied agents, rather than relying solely on handcrafted or static maps [2].\n- **Physical Common-Sense in 3D Environments** (Mecattaf et al., 2024) evaluates how well LLMs understand physical reasoning and spatial common-sense when placed in interactive 3D simulations, rather than in text-only benchmarks [3].\n- **Task Me Anything** (Zhang et al., 2024) focuses on enabling embodied agents to interpret and act on highly open-ended, user-defined instructions within simulated environments [4].\n\nThese papers share a common research thread: moving beyond static or purely textual evaluation of LLMs by placing them in dynamic, spatially aware simulations where they must reason about physics, navigation, object affordances, or environment structure.\n\n**Speculative/Clarification Note:**\nI'm assuming \"the same category\" refers to this LLM + embodied 3D simulation intersection. If you're referring to a different baseline paper, a specific subfield (e.g., sim-to-real transfer, active perception, robotic hardware integration, or neuro-symbolic embodied reasoning), please share the title or a brief description and I’ll tailor the search accordingly. The provided results don't include papers on those narrower subtopics.\n\n**References (from provided metadata):**\n[1] Yue Yang, Fan-Yun Sun, Luca Weihs, Eli VanderBilt, Alvaro Herrasti, Winson Han, Jiajun Wu, Nick Haber, Ranjay Krishna, Lingjie Liu, et al. *Holodeck: Language guided generation of 3d embodied ai environments.* In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 16227–16237, 2024. URL https://api.semanticscholar.org/CorpusID: 270560551.\n[2] Abhay Zala, Jaemin Cho, Han Lin, Jaehong Yoon, and Mohit Bansal. *Envgen: Generating and adapting environments via llms for training embodied agents.* In COLM, 2024.\n[3] M. G. Mecattaf, B. Slater, M. Tešić, J. Prunty, K. Voudouris, and L. G. Cheke, “A little less conversation, a little more action, please: Investigating the physical common-sense of llms in a 3d embodied environment,” arXiv preprint arXiv:2410.23242, 2024.\n[4] Jieyu Zhang, Weikai Huang, Zixian Ma, Oscar Michel, Dong He, Tanmay Gupta, Wei-Chiu Ma, Ali Farhadi, Aniruddha Kembhavi, and Ranjay Krishna. *Task me anything.* arXiv preprint arXiv:2406.11775, 2024.\n\nLet me know if you'd like a summary of the methodology or evaluation setups used in any of these, or if you're looking for papers focused on a different angle of embodied environments.",
+      "started_at": "2026-04-26T05:02:54.125445+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:02:36.155761+00:00",
+      "elapsed_seconds": 23.151,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:02:13.004606+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:02:54.125438+00:00",
+      "elapsed_seconds": 17.969,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Yes, the search results identify several papers in the same category that discuss embodied environments or related topics. Depending on the specific category (e.g., **application-papers** or **capability-papers**), the following papers are relevant:\n\n**Application-Papers**\n*   **ALFWorld: Aligning Text and Embodied Environments for Interactive Learning** [2]\n    *   **Topic:** This paper directly addresses \"embodied environments\" in its title, focusing on aligning text with these environments for interactive learning.\n*   **EnvGen: Generating and Adapting Environments via LLMs for Training Embodied Agents** [3]\n    *   **Topic:** This paper proposes a framework where Large Language Models (LLMs) adaptively generate training environments to train embodied reinforcement learning (RL) agents, specifically for long-horizon tasks.\n\n**Capability-Papers**\n*   **Exploring the Reasoning Abilities of Multimodal Large Language Models (MLLMs)** [1]\n    *   **Topic:** This survey includes a dedicated section on **Embodied AI** (Section 5.1), defining it as agents that learn to solve challenging tasks requiring interaction with an environment. It discusses how MLLMs assist in planning, complex reasoning, and control commands for these agents.\n*   **A Survey on Self-Evolution of Large Language Models** [4]\n    *   **Topic:** This survey includes a table of agents that incorporates **Embodied** agents (e.g., KnowAgent, RoboCat, ProAgent), discussing their role in the self-evolution of LLMs.\n\n**References**\n[1] Yiqi Wang et al., \"Exploring the Reasoning Abilities of Multimodal Large Language Models (MLLMs): A Comprehensive Survey on Emerging Trends in Multimodal Reasoning,\" arXiv:2401_06805.\n[2] Mohit Shridhar et al., \"ALFWorld: Aligning Text and Embodied Environments for Interactive Learning,\" arXiv:2010_03768.\n[3] Abhay Zala et al., \"EnvGen: Generating and Adapting Environments via LLMs for Training Embodied Agents,\" arXiv:2403_12014.\n[4] Zhengwei Tao et al., \"A Survey on Self-Evolution of Large Language Models,\" arXiv:2404_14387.",
+      "started_at": "2026-04-26T05:02:36.155768+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:13:36.150553+00:00",
+  "topk": 2
+}

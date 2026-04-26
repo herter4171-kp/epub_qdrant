@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "1_spatial_orientation_1_16.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 13.922,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T00:49:50.028073+00:00",
+  "proficiency": 1,
+  "prompt": "Can you show me the paragraph that comes right after this one in a document?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunks consist of unrelated AI agent prompts, legal templates, and UI interaction logs, bearing no relation to the user's request for a subsequent paragraph.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response correctly identifies the missing context, politely explains the limitation, and provides clear instructions on how the user can provide the necessary information to proceed.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunk is a truncated title and metadata for a document understanding paper, offering no textual content relevant to the prompt.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, failing to address the prompt or acknowledge the missing context.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunk is a truncated title and metadata for a computer use agent paper, providing no relevant text or context.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, offering no assistance or clarification regarding the missing document context.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Mixed AI Agent Prompts and Legal Templates\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:49:36.103849+00:00",
+      "elapsed_seconds": 10.56,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "I’d be happy to help, but the search results and available materials do not include the document or context you’re referencing. Without the source text, file, or the specific paragraph you mentioned, I can’t locate or display what comes next. If you can paste the current paragraph, share the document title/topic, or upload the relevant text, I’ll gladly help you identify or draft the following section.",
+      "started_at": "2026-04-26T00:49:25.543557+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:48:40.831894+00:00",
+      "elapsed_seconds": 38.119,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:48:02.713076+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:49:25.543539+00:00",
+      "elapsed_seconds": 44.711,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:48:40.831897+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response correctly identifies the missing context, politely explains the limitation, and provides clear instructions on how the user can provide the necessary information to proceed.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks consist of unrelated AI agent prompts, legal templates, and UI interaction logs, bearing no relation to the user's request for a subsequent paragraph.",
+      "retrieval_score": 1
+    },
+    "papers": {
+      "response_basis": "The response is completely empty, failing to address the prompt or acknowledge the missing context.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunk is a truncated title and metadata for a document understanding paper, offering no textual content relevant to the prompt.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "The response is completely empty, offering no assistance or clarification regarding the missing document context.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunk is a truncated title and metadata for a computer use agent paper, providing no relevant text or context.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:15:18.067829+00:00",
+  "topk": 16
+}

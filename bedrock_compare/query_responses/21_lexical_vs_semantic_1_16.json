@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "21_lexical_vs_semantic_1_16.json",
+  "input_id": 21,
+  "proficiency": 1,
+  "prompt": "Is there a way to check if a document mentions a specific term like MinerU anywhere else in the text?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:34:33.623846+00:00",
+      "elapsed_seconds": 9.957,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Yes, you can check if a document mentions a specific term like \"MinerU\" by using the **keyword_search** tool. This tool is designed for exact text matching [1].\n\nHere is the recommended approach:\n\n1.  **Perform the Search**: Use `keyword_search` with the query \"MinerU\". This will identify sentences in the document that contain that exact phrase.\n2.  **Retrieve Full Context**: The search results will provide abbreviated snippets. To see the complete context and verify the mention, use the **chunk_read** tool with the IDs of the chunks returned by the search. This allows you to read the full text of the relevant sections [1].\n\nIf you are looking for mentions of the concept but not necessarily the exact term \"MinerU,\" you could also try **semantic_search**, which finds relevant information based on similarity rather than exact wording [1].\n\n**References:**\n[1] Tool definitions for `keyword_search`, `semantic_search`, and `chunk_read` describing their functionality for document retrieval.",
+      "started_at": "2026-04-26T03:34:23.666739+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:33:41.513342+00:00",
+      "elapsed_seconds": 19.715,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Yes, the term **MinerU** (specifically **MinerU2.5**) is mentioned multiple times throughout the provided text. It appears primarily when the authors discuss their methodology for document processing, layout analysis, and outline generation [1]:\n\n1. **Layout Analysis & Extraction**: MinerU2.5 is leveraged for `\"high-precision layout analysis and extraction\"` to define element types and enrich document outline nodes with layout and semantic attributes.\n2. **Outline Generation**: In a comparative analysis of document processing tools, the text notes that while baseline methods rely on Adobe PDF Extract, DocXChain, or PyMuPDF, the enhanced approach employs MinerU2.5 to generate document outlines.\n3. **Performance Validation**: The authors explicitly state that using MinerU2.5 `\"produces higher-quality document outlines,\"` which consistently outperforms the baseline methods when combined with the same agentic tools.\n\nThese mentions are located within the methodology and ablation study sections of the provided document, specifically discussing the `DocDancer` framework's document processing pipeline. \n\n**Reference:**\n[1] Qintong Zhang et al., *DocDancer: Towards Agentic Document-Grounded Information Seeking*, arXiv:2601.05163.",
+      "started_at": "2026-04-26T03:33:21.798536+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:34:23.666726+00:00",
+      "elapsed_seconds": 42.153,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided research context, **MinerU** is a specialized AI document processing tool designed to convert heterogeneous PDF layouts into clean, structured Markdown/text representations [3][20][28]. While MinerU itself focuses on layout understanding and text extraction rather than document-wide searching, verifying whether a term appears elsewhere in any document is a standard task. Below are practical approaches, separated into results-derived context and general implementation methods:\n\n### 🔍 Results-Derived Context\n- **MinerU's Actual Role:** It is used to normalize PDF layouts into text-centric formats for downstream AI pipelines [3][20][28]. It does not function as a built-in term search engine, so standard search tools should be applied to its output or any other document type.\n- **Why Search Matters:** In AI agent and RAG workflows, retrieving precise term matches is often the first step in verifying claims or grounding LLM outputs [12].\n\n### 🛠️ General/Speculative Implementation Methods\nChoose the approach that best fits your technical environment and document format:\n\n**1. Quick & Built-In (Non-Technical)**\n- **Global Find:** `Ctrl + F` (Windows/Linux) or `Cmd + F` (Mac) works in nearly all PDF readers, word processors, and browsers.\n- **Advanced PDF Search:** Adobe Acrobat, SumatraPDF, or Foxit support case-sensitive, whole-word, or regex matching across multi-page documents.\n\n**2. Command Line (For Technical Users)**\n- **Plain text:** `grep -i \"MinerU\" document.txt`\n- **Multiple files/directories:** `rg \"MinerU\" ./docs/` (ripgrep) or `findstr /s /i \"MinerU\" *.txt` (Windows)\n- **PDFs:** `pdftotext file.pdf - | grep -i \"MinerU\"` (requires `poppler-utils` or `pdftotext`)\n\n**3. Programmatic / Python**\nIf you're automating this, extract the text first, then run a string or regex search:\n```python\nimport re\nwith open(\"document.txt\", \"r\", encoding=\"utf-8\") as f:\n    text = f.read()\n# \\b ensures whole-word matching, re.IGNORECASE handles capitalization variations\nmatches = re.findall(r\"\\bMinerU\\b\", text, re.IGNORECASE)\nprint(f\"Found {len(matches)} occurrences\")\n```\n*(Note: For PDFs, libraries like `pdfplumber`, `PyMuPDF`, or `pdfminer.six` are recommended for reliable text extraction before searching.)*\n\n**4. LLM / Retrieval-Assisted Search**\nFor highly unstructured or lengthy documents:\n- **LLM Prompting:** Paste the text and ask: `\"List every instance of 'MinerU' in this text and provide the surrounding sentence context.\"`\n- **RAG/Keyword Retrieval:** Use a BM25 or TF-IDF retriever to surface exact or semantic matches across large corpora, which is a standard pattern in deep research and enterprise document verification systems [12].\n\n### ✅ Recommendation\nIf you're working with MinerU's output or similar parsed documents, apply **regex or `grep`** for speed and accuracy. If you're building an automated pipeline, wrap the extraction + search logic in a simple Python script or use a lightweight vector/keyword search engine (e.g., Elasticsearch, Whoosh).\n\nLet me know your preferred environment (CLI, Python, GUI, or enterprise system), and I can provide a ready-to-run script or configuration tailored to your workflow.",
+      "started_at": "2026-04-26T03:33:41.513348+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:15:44.273781+00:00",
+  "topk": 16
+}

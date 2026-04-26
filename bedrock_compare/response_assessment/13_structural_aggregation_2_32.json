@@ -1,0 +1,59 @@
+{
+  "category": "structural_aggregation",
+  "input_file": "13_structural_aggregation_2_32.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 18.201,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T02:31:19.183009+00:00",
+  "proficiency": 2,
+  "prompt": "How do I retrieve all text under a specific heading level 1, such as a section titled ALFWORLD?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 9,\n    \"retrieval_basis\": \"The retrieved chunks contain highly relevant technical details on hierarchical retrieval, section reading, agentic parsing, and programmatic text extraction, directly aligning with the user's intent.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely missing, failing to address the user's prompt.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 8,\n    \"retrieval_basis\": \"The chunks provide solid technical references on hierarchical indexing, agentic section reading, and programmatic parsing strategies that directly support answering the question.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response effectively synthesizes the retrieval into a comprehensive, well-structured guide with practical code examples and clear implementation steps.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 3,\n    \"retrieval_basis\": \"The retrieved chunks focus on poster generation and visual asset parsing, offering little to no relevant information for general H1 heading text retrieval.\",\n    \"response_score\": 2,\n    \"response_basis\": \"The response misinterprets the prompt as asking for content within a specific document rather than a general method, hallucinates a document schema, and fails to provide a useful answer.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"WebThinker: Empowering Large Reasoning Models with Deep Research Capability\",\n    \"source_file\": \"2504_21776.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T02:31:00.978628+00:00",
+      "elapsed_seconds": 21.452,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T02:30:39.526584+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T02:30:15.876805+00:00",
+      "elapsed_seconds": 27.782,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To retrieve all text under a specific H1 heading (e.g., `ALFWORLD`), modern AI agents and document processing pipelines typically use a combination of **structural parsing**, **hierarchical indexing**, and **agentic retrieval**. Here is a breakdown of the most effective approaches based on current research:\n\n### 1. Structural Parsing & Hierarchical Indexing\nInstead of treating a document as a single block of text, advanced systems first parse its layout to identify explicit delimiters like section titles [9]. \n* **How it works:** The document is split into discrete content chunks (`s_1, s_2, ..., s_K`) based on heading hierarchy. Each chunk is then stored as a key-value pair where the **heading** (`h_k`) acts as a natural semantic keyword, and the **content** (`c_k`) is the raw text under that heading [9].\n* **Result:** You can directly query the index using the target heading (`ALFWORLD`) to instantly retrieve its exact associated text block without scanning the entire document [9].\n\n### 2. Agentic Search & Section Reading\nIf you are working with unstructured PDFs or web documents, agentic frameworks use a two-step `Search` and `Read` tool pipeline to isolate sections [3]:\n* **Step 1: Global Search.** A keyword search tool scans the document to locate the exact page numbers, section IDs, and surrounding snippets where `ALFWORLD` appears [3].\n* **Step 2: Fine-Grained Reading.** A `Read` tool is triggered with the target section IDs. It extracts all local textual information within that section, often using multimodal summarization to consolidate text alongside any embedded tables or layout cues [3].\n* **Boundary Detection:** To ensure you only get text *under* the H1 heading, agents use visual cropping and clustering to infer hierarchical levels, stopping the extraction when a new H1 or higher-priority heading is detected [3].\n\n### 3. Programmatic Chunking & Buffer Management\nFor LLM-based workflows, you can implement a custom chunking strategy that uses memory buffers to capture text between specific markers [4]:\n* **Strategy:** Scan the text sequentially. When the target heading (`## ALFWORLD` or `# ALFWORLD`) is encountered, activate a buffer. Append every subsequent line to this buffer until a new H1 heading or document end is hit.\n* **Regex/Pattern Matching:** Use regular expressions to define the capture group. For example, in Python:\n  ```python\n  import re\n  # Captures everything between \"# ALFWORLD\" and the next \"# \" heading or end of string\n  pattern = r\"(?<=^# ALFWORLD\\n)(.*?)(?=\\n# |\\Z)\"\n  matches = re.findall(pattern, full_text, re.DOTALL | re.MULTILINE)\n  ```\n* **Context Optimization:** This approach drastically reduces token load by allowing the model to focus only on the relevant chunk rather than processing the entire document context [9].\n\n### 4. Handling Complex Layouts (OCR & Multimodal Parsing)\nIf your documents are scanned PDFs or contain heavy formatting, standard text extraction often fails to preserve heading structure [14]. In these cases:\n* **Dual Extraction Pipeline:** Use Optical Character Recognition (OCR) for image-based pages alongside native PDF text extraction for digital pages [14].\n* **Visual Anchoring:** Modern document agents visually crop title elements to cluster them by size, font weight, and indentation, ensuring that `ALFWORLD` is correctly identified as a Level 1 header rather than body text or a subheading [3].\n\n### Recommended Implementation Workflow\n1. **Preprocess:** Parse the document using a library that preserves structural hierarchy (e.g., `PyPDF2` for native PDFs, `Unstructured` for complex layouts, or multimodal OCR for scanned docs) [14].\n2. **Index:** Map each H1 heading to its following text block until the next H1 is reached.\n3. **Retrieve:** Query the index for `ALFWORLD` and return the paired content block [9].\n4. **Verify:** If using an LM agent, have it validate the extraction by confirming the boundary matches the document's heading hierarchy [3].\n\nBy leveraging hierarchical indexing and agentic section-reading tools, you can reliably extract exact text blocks under any specific heading while minimizing context overflow and structural noise.",
+      "started_at": "2026-04-26T02:29:48.095047+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T02:30:39.526569+00:00",
+      "elapsed_seconds": 23.649,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided results, the text directly under the heading **ALFWORLD: ALIGNING TEXT AND EMBODIED ENVIRONMENTS FOR INTERACTIVE LEARNING** consists of a single URL:\n\n`ALFWorld.github.io` [28]\n\n### How Retrieval Works in This Schema\nTo answer your broader question about **how** this text is isolated in the provided data structure:\n* **Heading Identification:** Sections are marked by the `##` delimiter or the `section:` metadata tag. In this case, `## ALFWORLD: ALIGNING TEXT AND EMBODIED ENVIRONMENTS FOR INTERACTIVE LEARNING` acts as your Level 1 anchor.\n* **Content Boundaries:** The text under a heading begins immediately after the `##` line and ends when the next metadata block starts. In these results, content is consistently terminated by a `[type:paper ...]` tag or a new `[score:... ]` block.\n* **Extraction Logic:** By splitting the document at each `##` marker and capturing the text until the next `[type:paper` or `[score:` tag, you isolate the body content for that specific section.\n\n*(Note: This extraction is based strictly on the provided result snippets. In the original paper context, this section likely contains a link to the project's official website.)*",
+      "started_at": "2026-04-26T02:30:15.876809+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response is completely missing, failing to address the user's prompt.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunks contain highly relevant technical details on hierarchical retrieval, section reading, agentic parsing, and programmatic text extraction, directly aligning with the user's intent.",
+      "retrieval_score": 9
+    },
+    "papers": {
+      "response_basis": "The response effectively synthesizes the retrieval into a comprehensive, well-structured guide with practical code examples and clear implementation steps.",
+      "response_score": 9,
+      "retrieval_basis": "The chunks provide solid technical references on hierarchical indexing, agentic section reading, and programmatic parsing strategies that directly support answering the question.",
+      "retrieval_score": 8
+    },
+    "papers_semantic": {
+      "response_basis": "The response misinterprets the prompt as asking for content within a specific document rather than a general method, hallucinates a document schema, and fails to provide a useful answer.",
+      "response_score": 2,
+      "retrieval_basis": "The retrieved chunks focus on poster generation and visual asset parsing, offering little to no relevant information for general H1 heading text retrieval.",
+      "retrieval_score": 3
+    }
+  },
+  "timestamp": "2026-04-25T19:16:53.065582+00:00",
+  "topk": 32
+}

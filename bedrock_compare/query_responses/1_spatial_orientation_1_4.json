@@ -1,0 +1,35 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "1_spatial_orientation_1_4.json",
+  "input_id": 1,
+  "proficiency": 1,
+  "prompt": "Can you show me the paragraph that comes right after this one in a document?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:53:42.381749+00:00",
+      "elapsed_seconds": 9.418,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "I would be glad to assist you with this, but I need the source material to accurately identify the passage that follows yours. My search results did not retrieve any specific document or text matching your request, which means I do not currently have access to the reference you are working with.\n\nTo proceed efficiently, please provide one of the following:\n- The exact text of the paragraph you are currently referencing\n- The document, file, or a direct link where the text is hosted\n- The full title, author, and edition/publication year of the source\n\nOnce you supply these details, I will promptly locate and present the paragraph that immediately follows. If you are working within a specific course reader, textbook, or journal article, noting the chapter or page range will also help me verify the sequence accurately.",
+      "started_at": "2026-04-26T00:53:32.963119+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:53:05.212849+00:00",
+      "elapsed_seconds": 24.581,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:52:40.631775+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:53:32.963096+00:00",
+      "elapsed_seconds": 27.75,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:53:05.212855+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:13:49.563335+00:00",
+  "topk": 4
+}

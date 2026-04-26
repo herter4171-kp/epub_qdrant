@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "32_corpus_lineage_1_8.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.26,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:17:59.873085+00:00",
+  "proficiency": 1,
+  "prompt": "How do I filter my search results to only show chunks from a specific source file like 2010_03768.pdf?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 3,\n    \"retrieval_basis\": \"The retrieved chunks contain fragmented documentation on search tools, grep commands, and semantic search parameters, but lack explicit instructions on filtering by a specific source filename.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, failing to address the user's query or utilize the retrieved context.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved content focuses on automated guideline generation for LLM agents and is entirely unrelated to search filtering techniques or source file management.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely empty, providing no answer to the user's question.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The retrieved chunks discuss agent navigation and stochastic search strategies over document collections, offering no direct guidance on source-file filtering.\",\n    \"response_score\": 4,\n    \"response_basis\": \"Provides a structured, passable answer with generic filtering strategies but hallucinates citations not present in the retrieval context, violating the cold start rule.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Strategic Navigation or Stochastic Search? How Agents and Humans Reason Over Document Collections\",\n    \"source_file\": \"2603_1218\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:17:44.611514+00:00",
+      "elapsed_seconds": 22.361,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:17:22.250461+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:17:04.435111+00:00",
+      "elapsed_seconds": 28.508,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:16:35.927461+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:17:22.250454+00:00",
+      "elapsed_seconds": 17.815,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To filter search results to only show chunks from a specific source file (e.g., `2010_03768.pdf`), you can use one of the following approaches depending on your retrieval architecture:\n\n*   **Metadata Filtering (Post-Retrieval):** Most retrieval systems return metadata alongside the chunks. You can filter the results by checking the `source_file` or `file` attribute of each chunk. For example, ensure that `result.source_file == \"2010_03768.pdf\"` before passing the content to the model [1].\n*   **Agent Prompting:** If you are using an agentic search framework, you can instruct the agent in the system prompt to strictly limit its search scope. For instance, you can provide the filename as a constraint and instruct the model to \"search carefully\" and only utilize evidence from that specific document [1].\n*   **Programmatic/Ingestion Filtering:** If you have access to the data pipeline, you can filter files before they are indexed or embedded. This is often done by creating a list of target files and discarding others [2]:\n    ```python\n    pdf_files = [p for p in all_downloads if p.lower().endswith(\".pdf\")] # Filter by name/extension\n    ```\n*   **Tool-Specific Parameters:** Some retrieval tools allow you to pass specific identifiers to narrow the scope. For example, you can use a `chunk_read` tool to fetch content by specific IDs, or use semantic search tools that accept file paths or names as parameters to ensure only the relevant file is processed [3].\n\nIf you are using a managed retrieval service (like Google Gemini File Search or OpenAI Assistants), these systems often handle the retrieval atomically; in these cases, you would rely on the structured output (citations) to verify the source and filter out any chunks that do not match your target filename [1].",
+      "started_at": "2026-04-26T05:17:04.435119+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response is completely empty, failing to address the user's query or utilize the retrieved context.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunks contain fragmented documentation on search tools, grep commands, and semantic search parameters, but lack explicit instructions on filtering by a specific source filename.",
+      "retrieval_score": 3
+    },
+    "papers": {
+      "response_basis": "The response is completely empty, providing no answer to the user's question.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved content focuses on automated guideline generation for LLM agents and is entirely unrelated to search filtering techniques or source file management.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "Provides a structured, passable answer with generic filtering strategies but hallucinates citations not present in the retrieval context, violating the cold start rule.",
+      "response_score": 4,
+      "retrieval_basis": "The retrieved chunks discuss agent navigation and stochastic search strategies over document collections, offering no direct guidance on source-file filtering.",
+      "retrieval_score": 2
+    }
+  },
+  "timestamp": "2026-04-25T19:14:58.606952+00:00",
+  "topk": 8
+}

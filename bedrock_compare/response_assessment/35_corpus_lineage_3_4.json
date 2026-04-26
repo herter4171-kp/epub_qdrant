@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "35_corpus_lineage_3_4.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.145,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:43:21.870944+00:00",
+  "proficiency": 3,
+  "prompt": "How do I find other chunks written by a specific author like Mohit Shridhar and compare their methodologies to one presented here?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 8,\n    \"retrieval_basis\": \"The retrieved chunks contained direct citations of Mohit Shridhar’s papers and relevant methodological references, providing a solid foundation for the query.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response correctly identified the missing context, asked for clarification, and provided a comprehensive, actionable framework for finding the author’s work and comparing methodologies without fabricating premises.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The retrieved content was truncated and entirely unrelated to finding author-specific chunks or comparing methodologies.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was empty and failed to address the prompt.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 4,\n    \"retrieval_basis\": \"The retrieval loosely matched Shridhar’s project names but lacked direct guidance on author filtering or methodology comparison.\",\n    \"response_score\": 3,\n    \"response_basis\": \"The response hallucinated that a ReAct paper was presented in the context, violating the cold start rule and forcing an unsupported comparison.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Alfred: A benchmark for interpreting grounded instructions for everyday tasks\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:43:06.723811+00:00",
+      "elapsed_seconds": 16.564,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To give you a precise comparison, I’ll need a bit more context about **“the methodology presented here”** that you’re comparing against. That said, I can outline exactly how to locate Mohit Shridhar’s other work and provide a structured framework to compare methodologies. \n\n📄 **From your provided results:**\nThe references you shared explicitly list two publications by Mohit Shridhar:\n- **Alfred (2020a):** A benchmark for interpreting grounded instructions for everyday tasks, published at CVPR [2].\n- **Alfworld (2020b):** A framework aligning text and embodied environments for interactive learning, introduced as an arXiv preprint [2].\n\n💡 **General guidance & comparison framework:**\n\n**1. How to find other publications/chunks by Mohit Shridhar**\n- **Academic databases:** Search `\"Mohit Shridhar\"` on Google Scholar, Semantic Scholar, or arXiv. Filter by co-authors (e.g., Jesse Thomason, Luke Zettlemoyer, Yonatan Bisk) or institutions (Stanford, UC Berkeley, Microsoft Research) to surface his full publication list.\n- **Citation tracing:** Use the reference sections of Alfred/Alfworld to find foundational work he builds on, and check who cites his papers (e.g., via Semantic Scholar’s \"Cited By\" feature) to find follow-ups or extensions.\n- **If \"chunks\" refers to text segments in a RAG pipeline:** You can extract his authorship metadata from your vector database or citation parser, filter by `author == \"Mohit Shridhar\"`, and retrieve matching document chunks. Most embedding stores (Pinecone, Weaviate, Qdrant) support metadata filtering for this.\n\n**2. Structured methodology comparison framework**\nOnce you have both the target methodology and Shridhar’s work, map them across these dimensions:\n| Dimension | What to compare | Example from Shridhar’s work |\n|-----------|----------------|------------------------------|\n| **Task & Objective** | What problem is solved? (e.g., instruction grounding, interactive learning, retrieval-augmented generation) | Interpreting natural language instructions in embodied environments [2] |\n| **Data/Environment** | Datasets, simulators, or retrieval corpora used | Habitat simulator, 18k+ grounded task instructions [2] |\n| **Model/Architecture** | Core design choices (e.g., LLM prompting, contrastive learning, semantic chunking, multi-agent debate) | Policy networks conditioned on language + environment state |\n| **Reasoning/Planning** | How decisions are made (e.g., CoT, self-consistency, tree-of-thought, trajectory optimization) | Goal-directed planning with environment feedback loops |\n| **Evaluation** | Metrics & success criteria | Step accuracy, task completion rate, instruction adherence |\n| **Limitations/Assumptions** | Where each approach struggles | Sim-to-real gap, dependency on task-specific rewards, prompt sensitivity |\n\n**3. Practical next steps**\n1. Share the title, abstract, or core pipeline of the methodology you’re comparing against.\n2. Specify which aspect matters most: data handling, reasoning strategy, evaluation setup, or system architecture.\n3. I’ll generate a direct side-by-side analysis, highlight overlapping techniques, note divergences, and point you to papers that bridge any gaps.\n\nLet me know the missing piece, and I’ll tailor this to your exact use case.",
+      "started_at": "2026-04-26T05:42:50.159662+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:42:26.270037+00:00",
+      "elapsed_seconds": 24.118,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:42:02.151809+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:42:50.159644+00:00",
+      "elapsed_seconds": 23.889,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, you can find chunks by **Mohit Shridhar** by searching for his name or specific project names such as **ALFWorld**, **ALFRED**, and **BUTLER**.\n\nTo compare his methodologies to the one presented in the context (which appears to be the **ReAct** paper based on the search results), consider the following details regarding Shridhar's work:\n\n### Finding Chunks by Mohit Shridhar\nYou can identify his work by looking for papers that mention:\n*   **ALFWorld** (e.g., *ALFWorld: Aligning Text and Embodied Environments for Interactive Learning* [1])\n*   **ALFRED** (the embodied benchmark often cited alongside ALFWorld)\n*   **BUTLER** (an agent mentioned in the context)\n\n### Methodologies by Mohit Shridhar\nBased on the search results, Mohit Shridhar's work focuses on **embodied agents** and **imitation learning**:\n1.  **ALFWorld & ALFRED**: His methodology involves aligning text with embodied environments. Agents in ALFWorld achieve high-level goals (e.g., \"examine paper under desklamp\") by navigating simulated households and using **commonsense reasoning** to determine likely locations for objects [4].\n2.  **BUTLER**: This is described as an **imitation learning agent** trained on a large dataset of $10^5$ expert trajectories for each task type [4].\n\n### Comparison to the Context (ReAct)\nIf you are comparing Shridhar's work to the **ReAct** paper presented in the results:\n*   **Shridhar (BUTLER)** relies on **imitation learning** from expert trajectories to train agents.\n*   **ReAct** (Yao et al.) contrasts this by using **\"sparse thoughts\"** to **synergize reasoning and acting**, decomposing goals and tracking subgoals via LLM-generated reasoning rather than just following imitation learning patterns [4].",
+      "started_at": "2026-04-26T05:42:26.270044+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response correctly identified the missing context, asked for clarification, and provided a comprehensive, actionable framework for finding the author’s work and comparing methodologies without fabricating premises.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks contained direct citations of Mohit Shridhar’s papers and relevant methodological references, providing a solid foundation for the query.",
+      "retrieval_score": 8
+    },
+    "papers": {
+      "response_basis": "The response was empty and failed to address the prompt.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved content was truncated and entirely unrelated to finding author-specific chunks or comparing methodologies.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "The response hallucinated that a ReAct paper was presented in the context, violating the cold start rule and forcing an unsupported comparison.",
+      "response_score": 3,
+      "retrieval_basis": "The retrieval loosely matched Shridhar’s project names but lacked direct guidance on author filtering or methodology comparison.",
+      "retrieval_score": 4
+    }
+  },
+  "timestamp": "2026-04-25T19:14:14.753325+00:00",
+  "topk": 4
+}

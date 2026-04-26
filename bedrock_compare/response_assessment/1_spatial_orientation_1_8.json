@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "1_spatial_orientation_1_8.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.291,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T00:55:21.548653+00:00",
+  "proficiency": 1,
+  "prompt": "Can you show me the paragraph that comes right after this one in a document?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The retrieved chunks were a disjointed mix of prompt templates, legal drafts, and UI logs that contained no relevant document or paragraph context.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The model correctly identified the missing context, avoided hallucination, and politely requested the necessary information to proceed.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieval output consisted solely of a truncated search result JSON for an unrelated academic paper, providing no usable content.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was completely empty, failing to address the prompt or acknowledge the lack of context.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"Similar to the papers source, it only returned a truncated search result JSON for an unrelated paper with no usable content.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was entirely empty, providing no assistance or clarification.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"bedrock\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:55:06.256351+00:00",
+      "elapsed_seconds": 8.847,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "I’d be glad to help, but I’ll need a bit more context to locate the paragraph you’re referring to. The prompt you provided doesn’t include the original paragraph, the document title, or any surrounding text, so I can’t identify which section you’re referencing or what follows it.\n\nBased on the reference materials provided, there is no specific document or text excerpt included that I can cross-reference [1][7]. To retrieve the exact next paragraph, please share one of the following:\n- The full text of the paragraph you’re currently on\n- The document title, file name, or a brief description of its source\n- A few sentences of surrounding context (the paragraph before and after)\n\nOnce you provide that, I’ll quickly extract the following paragraph and format it exactly as it appears in the source. If you’d also like analysis, editing, or citation formatting applied, just let me know.",
+      "started_at": "2026-04-26T00:54:57.409131+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:54:24.167365+00:00",
+      "elapsed_seconds": 29.33,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:53:54.836877+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:54:57.409108+00:00",
+      "elapsed_seconds": 33.242,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:54:24.167374+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The model correctly identified the missing context, avoided hallucination, and politely requested the necessary information to proceed.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks were a disjointed mix of prompt templates, legal drafts, and UI logs that contained no relevant document or paragraph context.",
+      "retrieval_score": 2
+    },
+    "papers": {
+      "response_basis": "The response was completely empty, failing to address the prompt or acknowledge the lack of context.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieval output consisted solely of a truncated search result JSON for an unrelated academic paper, providing no usable content.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "The response was entirely empty, providing no assistance or clarification.",
+      "response_score": 1,
+      "retrieval_basis": "Similar to the papers source, it only returned a truncated search result JSON for an unrelated paper with no usable content.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:14:26.522974+00:00",
+  "topk": 8
+}

@@ -1,0 +1,35 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "1_spatial_orientation_1_32.json",
+  "input_id": 1,
+  "proficiency": 1,
+  "prompt": "Can you show me the paragraph that comes right after this one in a document?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:52:18.824783+00:00",
+      "elapsed_seconds": 22.735,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "I’d be happy to help, but the search didn’t retrieve the specific document or text you’re referencing. The provided results focus on prompt engineering templates, legal drafting workflows, and system automation logs rather than a continuous narrative document with sequential paragraphs [1]. Without the exact text of the paragraph you’re looking at, or the document title/source, I can’t reliably identify what comes next.\n\nIf you paste the paragraph you’re currently viewing (along with the document name or source link), I’ll gladly extract and share the exact following paragraph for you.",
+      "started_at": "2026-04-26T00:51:56.089713+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:51:19.627250+00:00",
+      "elapsed_seconds": 17.625,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Please share the paragraph you're referring to, or upload the document you're working with! Once you provide the text or file, I'll gladly identify and display the paragraph that immediately follows it.",
+      "started_at": "2026-04-26T00:51:02.002055+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:51:56.089699+00:00",
+      "elapsed_seconds": 36.462,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "I can't show you the next paragraph because you haven't included the paragraph or the document text itself in your message. Please paste the specific paragraph or the section of the document you're referring to, and I'll gladly identify and display the one that comes immediately after it.\n\n*(Note: This exact phrasing is used as a benchmark query for computer-use agents, such as in the Agent S2 framework [1], to evaluate how AI systems navigate and manipulate document interfaces. If you're referencing a specific test case, paper, or workflow and need help locating the subsequent text, just share the source material and I'll assist you right away!)*\n\n**References:**\n[1] Saaket Agashe, Kyle Wong, Vincent Tu, Jiachen Yang, Ang Li, Xin Eric Wang. *Agent S2: A Compositional Generalist-Specialist Framework for Computer Use Agents*. arXiv:2504_00906.",
+      "started_at": "2026-04-26T00:51:19.627256+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:16:26.261657+00:00",
+  "topk": 32
+}

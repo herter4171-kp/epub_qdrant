@@ -1,0 +1,59 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "30_lexical_vs_semantic_5_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 22.737,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T04:54:38.115749+00:00",
+  "proficiency": 5,
+  "prompt": "How do I evaluate the discrepancy between dense and sparse retrieval ranks for a query to determine whether the terminology has semantic overlap?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 6,\n    \"retrieval_basis\": \"Retrieved snippets touched on combining sparse/dense retrieval and soft overlap diagnostics, offering partial but usable grounding for the response.\",\n    \"response_score\": 9,\n    \"response_basis\": \"Superb structured framework that correctly applies standard IR metrics, gracefully adapts retrieved concepts, and clearly delineates established methods from speculative extensions.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 3,\n    \"retrieval_basis\": \"Retrieved chunks focused on conversational product search and AI search paradigms rather than dense/sparse rank evaluation, providing weak grounding.\",\n    \"response_score\": 5,\n    \"response_basis\": \"Passable explanation of rank discrepancy and semantic overlap, but relies heavily on general IR knowledge with weakly connected citations.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 8,\n    \"retrieval_basis\": \"Retrieved chunks directly address the lexical gap and retrieval taxonomy, highly relevant to the query's core concepts.\",\n    \"response_score\": 1,\n    \"response_basis\": \"Completely empty, failing to utilize the highly relevant retrieved context.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Taxonomy of the Retrieval System Framework: Pitfalls and Paradigms\",\n    \"source_file\": \"2601_20131.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T04:54:15.374866+00:00",
+      "elapsed_seconds": 15.907,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Evaluating the rank discrepancy between dense and sparse retrieval is a practical way to diagnose how much **semantic overlap** exists in your terminology. Sparse retrievers (e.g., BM25) rely on exact lexical matches, while dense retrievers (e.g., DPR, ANCE, or embedding-based models) capture conceptual similarity. When terminology exhibits strong semantic overlap (synonyms, hyponyms, or related concepts), their ranked results will naturally diverge. Below is a structured approach to quantify and interpret this discrepancy.\n\n### 🔍 Step-by-Step Evaluation Framework\n1. **Align Retrieval Outputs**\n   - Run both retrievers on the same query against the same document corpus.\n   - Extract the top-K ranks from each system (common choices: K=10, 50, 100).\n   - Map documents to shared IDs. For documents not returned by a retriever, assign a rank > K (e.g., K+1 or |Corpus|+1) to maintain consistency in correlation calculations.\n\n2. **Quantify Rank Discrepancy**\n   Use established rank correlation and positional metrics to measure divergence:\n   - **Spearman’s ρ** or **Kendall’s τ**: Measure monotonic agreement between the two rank lists. Values near 1 indicate strong alignment; values near 0 indicate high discrepancy.\n   - **Mean Absolute Rank Difference (MARD)**: `MARD = (1/N) Σ |rank_sparse(d) - rank_dense(d)|` for the union of top-K results.\n   - **Positional Overlap**: Precision@K, Recall@K, or nDCG computed only on the intersection of both rank lists. Low overlap suggests divergent retrieval signals.\n\n3. **Visualize & Stratify**\n   - Plot dense rank vs. sparse rank for each document. Clusters along the diagonal indicate low discrepancy; inverse or scattered patterns indicate high divergence.\n   - Group documents by lexical/semantic properties (e.g., exact-match vs. synonym-containing queries) to see if discrepancy correlates with terminology type.\n\n### 📊 Interpreting the Discrepancy\n| Discrepancy Level | Typical Interpretation | Terminology Signal |\n|-------------------|------------------------|---------------------|\n| **Low (high ρ/τ, high overlap)** | Both systems retrieve similar documents | Strict lexical matching; low semantic flexibility |\n| **Moderate** | Partial divergence | Mix of exact terms and conceptually related phrasing |\n| **High (low ρ/τ, low overlap)** | Systems surface different documents | Strong semantic overlap; synonyms, paraphrasing, or domain-specific jargon |\n\n> ⚠️ **Note on Interpretation**: High discrepancy doesn't automatically mean better or worse retrieval. It indicates that lexical and semantic signals are capturing different aspects of the query-document relationship. Ground truth relevance judgments (e.g., from a held-out evaluation set) are needed to determine which system aligns better with user intent.\n\n### 🛠 Validating Semantic Overlap\nWhile standard IR practice relies on rank correlation and positional metrics, the provided results highlight that **soft semantic overlap diagnostics** (e.g., NSR/NSP) can quantify label collection overlap, though they're designed for taxonomy structures rather than rank lists [1]. To adapt this concept to your use case:\n- Compute pairwise embedding similarity across the top-K documents from both lists. Compare it to lexical similarity (e.g., Jaccard on token sets).\n- If embedding similarity >> lexical similarity, terminology likely has high semantic overlap that sparse retrieval undercaptures.\n- The results also note that combining sparse and dense retrieval effectively balances local lexical focus with global semantic features, improving precision for targeted retrieval [2].\n\n### 📝 Factual vs. Speculative Delineation\n- **Factual/Established**: Spearman/Kendall correlation, MARD, Precision@K, nDCG, and rank visualization are standard information retrieval diagnostics. Assigning ranks > K to missing documents is standard practice for partial list comparison.\n- **Adapted/Speculative**: Mapping NSR/NSP-style soft overlap diagnostics directly to dense/sparse rank comparison is an extrapolation beyond the provided results. The bridging suggestion (comparing embedding vs. lexical similarity of retrieved documents) is a practical extension of that concept and should be validated against your specific corpus.\n\n### 🔖 References\n[1] Taxonomy hierarchy evaluation context; discusses NSR/NSP as soft semantic overlap diagnostics and their limitations for structural metrics.  \n[2] Dense-sparse retrieval combination literature; notes that blending sparse lexical indexing with dense vector indexing improves semantic precision and query-document alignment.  \n\nIf your evaluation requires domain-specific thresholds or automated thresholding for semantic overlap, share your corpus size, K values, or relevance judgment setup, and I can tailor the metric selection accordingly.",
+      "started_at": "2026-04-26T04:53:59.467388+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T04:53:35.207739+00:00",
+      "elapsed_seconds": 16.777,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To evaluate the discrepancy between dense and sparse retrieval ranks, you compare the ranked lists of results returned by each method to identify documents that are retrieved well by one system but not the other. This discrepancy indicates whether the query terms have semantic overlap with the documents, even if they lack exact keyword matches.\n\nBased on the provided research, here is how to interpret and evaluate this discrepancy:\n\n### 1. Understanding the Retrieval Mechanisms\nTo evaluate the discrepancy, you must understand why the ranks differ:\n*   **Sparse Retrievers (e.g., BM25):** These rely on **exact term matching** (lexical overlap). They represent documents as bags of words and struggle with \"semantic mismatches and vocabulary variation,\" such as synonyms [2].\n*   **Dense Retrievers (e.g., GTE, CoROM):** These utilize **semantic matching** (embeddings). They are designed to \"capture complex semantics\" and understand intent beyond the literal words used [1].\n\n### 2. Evaluating the Discrepancy\nYou can determine semantic overlap by analyzing the rank differences for specific documents:\n\n*   **High Semantic Overlap (Dense Rank $\\gg$ Sparse Rank):**\n    If a document is ranked highly by a dense retriever but poorly by a sparse retriever, this indicates that the terminology has **semantic overlap** without lexical overlap.\n    *   *Example:* A query for \"my back hurts\" and a document containing \"lumbar pain.\" The sparse retriever misses the match because there are no shared terms, while the dense retriever identifies the semantic connection [2].\n*   **Lexical Match (Dense Rank $\\approx$ Sparse Rank):**\n    If both retrievers rank a document similarly high, the match is likely driven by exact keyword matching (which is a subset of semantic matching).\n\n### 3. Metrics for Evaluation\nTo quantify this discrepancy and the effectiveness of the retrieval, you can use the following metrics mentioned in the literature:\n*   **Mean Reciprocal Rank (MRR):** This metric evaluates the rank of the first relevant document. Research shows that dense retrievers significantly boost MRR scores compared to BM25 (e.g., by ~26%) because they successfully retrieve semantically relevant documents that sparse methods miss [1].\n*   **Rank Correlation:** While not explicitly named in the text, calculating the correlation (e.g., Kendall's Tau) between the two lists is a standard way to measure the \"discrepancy\" described above.\n\n### Summary\nIf a query fails to retrieve a relevant document using a sparse method (BM25) due to vocabulary variation, but succeeds using a dense method, the discrepancy in ranks confirms the presence of **semantic overlap** in the terminology [1][2]. To maximize performance despite these discrepancies, systems often use **reranking**, which can further improve MRR scores by resolving differences between retrievers [1].\n\n**Sources:**\n[1] ProductAgent: Benchmarking Conversational Product Search Agent with Asking Clarification Questions (Jingheng Ye et al., arXiv:2407.00942)\n[2] Towards AI Search Paradigm (Yuchen Li et al., arXiv:2506.17188)",
+      "started_at": "2026-04-26T04:53:18.430787+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T04:53:59.467381+00:00",
+      "elapsed_seconds": 24.26,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T04:53:35.207754+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "Superb structured framework that correctly applies standard IR metrics, gracefully adapts retrieved concepts, and clearly delineates established methods from speculative extensions.",
+      "response_score": 9,
+      "retrieval_basis": "Retrieved snippets touched on combining sparse/dense retrieval and soft overlap diagnostics, offering partial but usable grounding for the response.",
+      "retrieval_score": 6
+    },
+    "papers": {
+      "response_basis": "Passable explanation of rank discrepancy and semantic overlap, but relies heavily on general IR knowledge with weakly connected citations.",
+      "response_score": 5,
+      "retrieval_basis": "Retrieved chunks focused on conversational product search and AI search paradigms rather than dense/sparse rank evaluation, providing weak grounding.",
+      "retrieval_score": 3
+    },
+    "papers_semantic": {
+      "response_basis": "Completely empty, failing to utilize the highly relevant retrieved context.",
+      "response_score": 1,
+      "retrieval_basis": "Retrieved chunks directly address the lexical gap and retrieval taxonomy, highly relevant to the query's core concepts.",
+      "retrieval_score": 8
+    }
+  },
+  "timestamp": "2026-04-25T19:13:35.532619+00:00",
+  "topk": 2
+}

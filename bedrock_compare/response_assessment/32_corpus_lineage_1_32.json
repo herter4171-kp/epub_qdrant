@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "32_corpus_lineage_1_32.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 23.901,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:15:10.138212+00:00",
+  "proficiency": 1,
+  "prompt": "How do I filter my search results to only show chunks from a specific source file like 2010_03768.pdf?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 7,\n    \"retrieval_basis\": \"The retrieved chunks contain highly relevant technical details about indexing documents by source filename, supporting boolean queries and wildcard patterns, and defining search tools that explicitly filter by file summaries.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is completely missing, failing to utilize the retrieved information or address the user's prompt.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The retrieved chunks consist almost entirely of paper titles and group labels, offering virtually no technical guidance or syntax for filtering search results by source file.\",\n    \"response_score\": 7,\n    \"response_basis\": \"The response provides a well-structured, generic guide on metadata filtering across common RAG frameworks, effectively compensating for the poor retrieval by relying on general knowledge while acknowledging the need for platform specifics.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Similar to the papers source, the retrieval results are limited to paper titles and isolated metadata snippets, lacking actionable instructions for filtering by source file.\",\n    \"response_score\": 7,\n    \"response_basis\": \"The response delivers a clear, categorized breakdown of filtering strategies (native metadata, CLI, programmatic) that directly answers the user's intent despite the irrelevant retrieval.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"RAG System & Retrieval Tool Documentation\",\n    \"source_file\": \"bedrock_retrieval.json\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:14:46.233781+00:00",
+      "elapsed_seconds": 48.078,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:13:58.155256+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:12:55.994687+00:00",
+      "elapsed_seconds": 37.789,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided results, the search returned broader information on LLM agent browsing, RAG pipeline architecture, and heuristic filtering, but **did not include the specific interface documentation or exact syntax for your particular retrieval platform**. Because filtering by a specific source file depends heavily on the underlying vector database or search engine you are using, the guidance below outlines the standard technical approaches across common frameworks.\n\n### 🔍 How to Filter by Source File (`2010_03768.pdf`)\n\nIn most Retrieval-Augmented Generation (RAG) and semantic search systems, the source filename is stored as **metadata** alongside each text chunk. You filter it by applying a metadata constraint during the retrieval step.\n\n#### 1. Vector Database / RAG Frameworks (LangChain, LlamaIndex, Haystack)\nIf you are using a framework that abstracts vector stores, filtering is typically passed as a dictionary or JSON object to the retriever:\n```python\n# Example: LangChain / LlamaIndex style metadata filtering\nretriever = vectorstore.as_retriever(\n    search_type=\"similarity\",\n    search_kwargs={\n        \"filter\": {\"source_file\": \"2010_03768.pdf\"} \n        # or \"filename\": {\"$eq\": \"2010_03768.pdf\"} depending on the DB\n    }\n)\n```\n*Most modern RAG pipelines segment documents into chunks and rely on metadata filters to route queries to the correct file, reducing noise and improving retrieval accuracy [8, 13].*\n\n#### 2. Search Engine Syntax (Elasticsearch, BM25, Lucene)\nIf your system uses keyword/semantic hybrid search, you typically append a field query to your search string:\n* **Exact match:** `source_file:\"2010_03768.pdf\"` or `source_file:2010_03768.pdf`\n* **Wildcard/Path:** `source_file:\"*2010_03768*\"` (useful if the path includes directories)\nSome specialized academic or agent search tools use bracket syntax for field-specific filtering, similar to `field_name:value` [21].\n\n#### 3. Agent / CLI Tools & File Browsers\nIf you are interacting with an AI agent that navigates local or cloud file systems, filtering is often done via path traversal or wildcard search commands before the LLM processes the text:\n* **Wildcard search:** `*.pdf` or `2010_03768.*` can be used to isolate files before ingestion or retrieval [3].\n* **Path context:** Agents often use explicit file paths or directory structures to narrow context, especially when handling multiple documents in a data lake [11, 20].\n\n### 🛠️ Next Steps to Get the Exact Syntax\nSince your system's filtering layer isn't specified, you can quickly pinpoint the right command by:\n1. **Checking your retriever's documentation:** Look for `filter`, `metadata_filter`, or `query_string` parameters.\n2. **Inspecting your chunk metadata:** Verify that the key storing the filename is actually named `source_file`, `filename`, `doc_id`, or similar.\n3. **Testing a dummy query:** Run a query with a known filename attached to the filter parameter and check if the returned chunk count changes.\n\nIf you share the specific platform, framework, or UI you're using (e.g., LangChain, Weaviate, a custom dashboard, or an agent tool), I can provide the exact code or query syntax.",
+      "started_at": "2026-04-26T05:12:18.205804+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:13:58.155244+00:00",
+      "elapsed_seconds": 62.16,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To filter search results to chunks from a specific source file like `2010_03768.pdf`, the exact implementation depends on your underlying search architecture (vector database, agentic tool, or CLI). Below are the most effective approaches, clearly separated by their origin.\n\n### 🔍 Native Metadata/Vector Filtering *(Speculative / Standard Industry Practice)*\nIf you are using a vector database or a managed RAG service (e.g., Pinecone, Weaviate, Chroma, Google Vertex AI), the most performant method is to apply a metadata filter **at query time**. This prevents irrelevant chunks from being retrieved or embedded in the context window.\n```python\n# Pseudocode for common vector retrieval pipelines\nresults = vector_db.query(\n    query=\"your search text here\",\n    filter={\"source_file\": \"2010_03768.pdf\"}\n)\n```\n*(This approach is standard across modern retrieval frameworks to optimize token usage and latency.)*\n\n### 🛠️ Tool-Specific Parameter Filtering *(Results-Derived)*\nMany agent frameworks and CLI utilities allow you to restrict the search scope directly through path arguments or dedicated file parameters:\n* **CLI / Bash Tools:** Semantic search CLIs often accept target files as explicit arguments, bypassing corpus-wide indexing [10].\n  ```bash\n  search \"your query\" 2010_03768.pdf\n  ```\n* **Agent Tools:** Frameworks like OpenHands provide file-scoped search functions that limit retrieval to a single document path [25].\n  ```python\n  search_file(search_term=\"your query\", file_path=\"2010_03768.pdf\")\n  ```\n\n### 📦 Programmatic & Post-Processing Filtering *(Results-Derived & General)*\nIf your search tool lacks pre-filtering capabilities, you can isolate the target file programmatically before or after retrieval:\n* **Pre-Ingestion Filtering:** If you manage the data pipeline, isolate the specific PDF before chunking. For example, using a list comprehension ensures only the desired file enters the vector store [2].\n  ```python\n  target_chunks = [f for f in all_files if f.endswith(\"2010_03768.pdf\")]\n  ```\n* **Post-Retrieval Filtering:** Agentic retrieval systems (e.g., A-RAG) typically return abbreviated snippets alongside chunk IDs and source metadata. After a `keyword_search` or `semantic_search`, filter the returned array to retain only chunks where `source_file == \"2010_03768.pdf\"` before feeding them to read tools like `chunk_read` [3].\n\n### 💡 Recommendation\nFor production systems, **native metadata filtering** is highly recommended as it operates at the indexing layer, saving significant compute and token costs. If you share the specific RAG framework, vector store, or agent platform you're using (e.g., LangChain, LlamaIndex, a custom Python script, or a specific API), I can provide the exact syntax for your stack.",
+      "started_at": "2026-04-26T05:12:55.994690+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response is completely missing, failing to utilize the retrieved information or address the user's prompt.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunks contain highly relevant technical details about indexing documents by source filename, supporting boolean queries and wildcard patterns, and defining search tools that explicitly filter by file summaries.",
+      "retrieval_score": 7
+    },
+    "papers": {
+      "response_basis": "The response provides a well-structured, generic guide on metadata filtering across common RAG frameworks, effectively compensating for the poor retrieval by relying on general knowledge while acknowledging the need for platform specifics.",
+      "response_score": 7,
+      "retrieval_basis": "The retrieved chunks consist almost entirely of paper titles and group labels, offering virtually no technical guidance or syntax for filtering search results by source file.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "The response delivers a clear, categorized breakdown of filtering strategies (native metadata, CLI, programmatic) that directly answers the user's intent despite the irrelevant retrieval.",
+      "response_score": 7,
+      "retrieval_basis": "Similar to the papers source, the retrieval results are limited to paper titles and isolated metadata snippets, lacking actionable instructions for filtering by source file.",
+      "retrieval_score": 2
+    }
+  },
+  "timestamp": "2026-04-25T19:17:36.159917+00:00",
+  "topk": 32
+}

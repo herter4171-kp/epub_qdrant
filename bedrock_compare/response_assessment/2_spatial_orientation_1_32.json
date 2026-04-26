@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "2_spatial_orientation_1_32.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 19.41,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T00:59:54.013126+00:00",
+  "proficiency": 1,
+  "prompt": "If a text passage seems cut off, how do I get the very next chunk from the same document?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 9,\n    \"retrieval_basis\": \"The retrieved chunks explicitly instruct agents to read adjacent chunks (+/- 1) when information appears truncated and describe using a chunk_read tool to fetch full context, directly addressing the user's intent.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response accurately leverages the retrieval to explain how to fetch adjacent chunks, provides clear implementation steps, and appropriately notes framework-specific variations.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieval output consists only of a truncated title and group key with no substantive content related to chunk retrieval mechanics.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The model returned an empty response, failing to address the prompt entirely.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The provided retrieval snippet is heavily truncated and only shows metadata for a high-level agentic RAG paper, offering no direct guidance on sequential chunk retrieval.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The model gracefully acknowledges the retrieval gap, then delivers a comprehensive, well-structured guide on standard industry practices for tracking and fetching sequential chunks, including metadata filtering and framework tips.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Bedrock Retrieved Chunks\",\n    \"source_file\": \"N/A\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:59:34.601027+00:00",
+      "elapsed_seconds": 13.358,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "If a retrieved passage appears cut off or truncated, you can recover the missing context by explicitly requesting **adjacent chunks** (typically the next one in the sequence, often referenced as `current_chunk_id + 1`).\n\nBased on established chunk-based retrieval practices, when information seems incomplete or truncated, you should actively read the surrounding chunks (±1) to ensure you capture the full context and avoid losing data split across boundaries [2][25]. \n\n### How to implement this:\n- **If using an agent/tool interface:** Look for a `chunk_read` or equivalent function. Pass the ID of the truncated chunk alongside the next chunk's ID (e.g., `[3, 4]`) to fetch the complete text.\n- **Why this works:** Search or retrieval tools often return abbreviated snippets for efficiency. Reading adjacent chunks guarantees that sentences, facts, or structural breaks split across chunk boundaries are fully captured, which is essential for accurate answering or processing [2][25].\n- **Tip:** If your system supports it, fetch both the preceding and following chunks (`-1` and `+1`) to maintain full contextual continuity, especially for complex or densely packed documents.\n\n*Note: Exact parameter names or API calls will depend on your specific framework (e.g., LangChain, LlamaIndex, or a custom RAG pipeline), but the core strategy remains consistent across chunked retrieval architectures.*",
+      "started_at": "2026-04-26T00:59:21.242499+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:58:51.342338+00:00",
+      "elapsed_seconds": 46.891,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:58:04.451013+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:59:21.242478+00:00",
+      "elapsed_seconds": 29.9,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results focus on high-level retrieval architectures, agentic workflows, and memory systems [1][2], rather than low-level chunk indexing mechanics. Since the results don't cover sequential chunk retrieval, I'll outline the standard industry approaches used in production RAG and document-processing pipelines to handle cut-off text and fetch the exact next chunk.\n\n### 🔹 Core Principle: Track Chunk Position & Document ID\nThe most reliable method is to **metadata-filter** by the cut-off chunk's position rather than relying on semantic similarity alone. When you chunk a document, store:\n- `doc_id` or `file_path`\n- `chunk_index` (or `sequence_number`)\n- `start_offset` / `end_offset` (byte or character position)\n- `total_chunks` (optional)\n\nWhen a response is truncated, query for:\n```json\n{\n  \"filter\": {\n    \"doc_id\": \"same_document_id\",\n    \"chunk_index\": current_chunk_index + 1\n  }\n}\n```\n\n### 🔹 Practical Implementation Strategies\n\n| Approach | When to Use | How It Works |\n|----------|-------------|--------------|\n| **1. Sequential Metadata Query** | You control the chunking/indexing pipeline | Store `chunk_index` as an integer. Query `chunk_index + 1` with the same `doc_id`. Most vector stores (Pinecone, Weaviate, Chroma, Qdrant) support exact-match metadata filters. |\n| **2. Offset/Range Filtering** | Using SQL/relational DBs or JSONB indexes | If chunks store byte/char offsets, query: `WHERE doc_id = X AND start_offset > current_end_offset LIMIT 1`. |\n| **3. Semantic Continuation Search** | Metadata isn't available or chunks lack IDs | Embed the last 1–2 sentences of the cut-off chunk. Use a hybrid search where you prioritize vectors that semantically match the trailing context. |\n| **4. Overlap/Sliding Window Retrieval** | Preprocessing stage | Chunk with 10–20% overlap. If text cuts off, the overlap region usually contains the continuation. Retrieve neighboring chunks by index or position. |\n\n### 🔹 Agentic & LLM Workflow Integration\nIf you're building an agent or RAG pipeline, you can automate continuation fetching:\n1. **Detect Truncation**: Use a post-processor to check if the last token ends mid-sentence (e.g., missing punctuation, abrupt cut).\n2. **Auto-Fetch Next Chunk**: Trigger a retrieval call with `doc_id` + `chunk_index + 1`.\n3. **Concatenate & Re-generate**: Merge the fetched continuation with the LLM prompt or pass it as additional context for a refined response.\n4. **Guard Against Over-Retrieval**: Add a maximum continuation limit (e.g., 2–3 chunks) to prevent infinite loops or context bloat.\n\n### 🔹 Framework-Specific Tips\n- **LangChain/LlamaIndex**: Use `Document.metadata[\"chunk_id\"]` and filter via `VectorStore retriever.with_metadata_filter()`.\n- **Pinecone**: Use `filter={\"doc_id\": {\"$eq\": \"X\"}, \"chunk_index\": {\"$gte\": 3}}`\n- **PostgreSQL/Supabase**: Leverage `jsonb` metadata with `->>` extraction and `ORDER BY chunk_index LIMIT 1`.\n- **FAISS/Local**: Maintain a parallel index or list mapping `(doc_id, chunk_index) -> embedding`.\n\n### 🔹 Caveats & Best Practices\n- ✅ **Always store `doc_id` and `chunk_index`** at indexing time. Without them, you're guessing.\n- ⚠️ **Vector similarity is not sequential**: Nearby vectors in embedding space often mean semantically similar, not textually contiguous.\n- 🔍 **Hybrid retrieval works best**: Combine keyword matching on the trailing text with metadata filtering for the next chunk.\n- 📏 **Handle multi-document cuts**: If the cut crosses document boundaries, implement a fallback that returns a polite truncation message rather than bleeding into unrelated docs.\n\nIf you share your stack (vector store, chunking strategy, or framework), I can provide exact filter syntax or code snippets tailored to your setup.",
+      "started_at": "2026-04-26T00:58:51.342347+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response accurately leverages the retrieval to explain how to fetch adjacent chunks, provides clear implementation steps, and appropriately notes framework-specific variations.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks explicitly instruct agents to read adjacent chunks (+/- 1) when information appears truncated and describe using a chunk_read tool to fetch full context, directly addressing the user's intent.",
+      "retrieval_score": 9
+    },
+    "papers": {
+      "response_basis": "The model returned an empty response, failing to address the prompt entirely.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieval output consists only of a truncated title and group key with no substantive content related to chunk retrieval mechanics.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "The model gracefully acknowledges the retrieval gap, then delivers a comprehensive, well-structured guide on standard industry practices for tracking and fetching sequential chunks, including metadata filtering and framework tips.",
+      "response_score": 9,
+      "retrieval_basis": "The provided retrieval snippet is heavily truncated and only shows metadata for a high-level agentic RAG paper, offering no direct guidance on sequential chunk retrieval.",
+      "retrieval_score": 2
+    }
+  },
+  "timestamp": "2026-04-25T19:16:28.247109+00:00",
+  "topk": 32
+}

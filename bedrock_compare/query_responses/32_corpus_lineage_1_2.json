@@ -1,0 +1,35 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "32_corpus_lineage_1_2.json",
+  "input_id": 32,
+  "proficiency": 1,
+  "prompt": "How do I filter my search results to only show chunks from a specific source file like 2010_03768.pdf?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:12:04.546075+00:00",
+      "elapsed_seconds": 9.389,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, there is no information regarding how to filter search results to a specific source file such as `2010_03768.pdf`.\n\nThe results describe a workflow utilizing `semantic_search` and `chunk_read` tools [1]. They also mention system-level filtering processes for context windows (e.g., whitelisting source code for development tasks or plaintext files for tabular data) [2]. However, the search results do not provide the specific query syntax or method required to restrict a search to a specific PDF filename.",
+      "started_at": "2026-04-26T05:11:55.157038+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:11:29.976218+00:00",
+      "elapsed_seconds": 23.19,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:11:06.786476+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:11:55.157019+00:00",
+      "elapsed_seconds": 25.181,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:11:29.976225+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:13:36.747632+00:00",
+  "topk": 2
+}

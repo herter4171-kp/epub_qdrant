@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "26_lexical_vs_semantic_3_16.json",
+  "input_id": 26,
+  "proficiency": 3,
+  "prompt": "How do I search for text related to memory architectures while filtering out any results that do not contain the specific word agentic?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T04:15:27.776775+00:00",
+      "elapsed_seconds": 12.189,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To achieve this, you don't actually need an exclusion filter. Logically, \"filtering out any results that do not contain the word *agentic*\" is equivalent to **requiring the word to be present**. You simply add it to your query using standard Boolean or search engine syntax.\n\nHere’s how to construct the query depending on your platform:\n\n### 🔍 General Web Search (Google, Bing, etc.)\n```text\n\"memory architectures\" agentic\n```\n*(A space between terms acts as an implicit `AND`. The quotation marks keep the phrase together.)*\n\n### 🎓 Academic Databases & Advanced Search\n```text\n\"memory architectures\" AND agentic\n```\n*(Explicit `AND` ensures strict matching across systems like PubMed, IEEE Xplore, or Scopus.)*\n\n### ⚙️ Why This Works\n- Search engines evaluate queries as logical intersections. By including `agentic`, the engine automatically discards any result lacking that term.\n- Negative operators (e.g., `-agentic` or `NOT agentic`) do the exact opposite: they remove results that *do* contain the word, which isn't what you want.\n\n### 💡 Pro Tips\n- **Exact vs. Fuzzy Matching:** If your platform supports it, wrap `agentic` in quotes (`\"agentic\"`) to force exact word matching and avoid morphological variants like *agent* or *agenticity* unless you want them.\n- **File Type/Domain Filters:** Add `filetype:pdf` or `site:arxiv.org` to narrow to specific sources:\n  ```text\n  \"memory architectures\" agentic filetype:pdf\n  ```\n- **Programmatic/API Use:** If querying via an API (e.g., Google Custom Search, DuckDuckGo), URL-encode spaces as `+`:\n  ```\n  q=\"memory+architectures+agentic\"\n  ```\n\nLet me know which search engine, database, or API you're using, and I'll give you the exact syntax tailored to that system.",
+      "started_at": "2026-04-26T04:15:15.587621+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T04:14:37.475784+00:00",
+      "elapsed_seconds": 25.62,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To restrict your search results to only those containing the exact word **`agentic`** while focusing on **memory architectures**, you need to use **Boolean operators** and **exact-match filters**. The exact syntax depends on your platform, but here are the most reliable approaches across different environments:\n\n### 🔹 1. General Search Engines & Academic Databases\n*(Google, Google Scholar, arXiv, Scopus, IEEE Xplore, Semantic Scholar)*\n```\n\"memory architectures\" AND \"agentic\"\n```\n- `\" \"` enforces exact phrase matching (optional for `agentic`, but recommended if you want to avoid morphological variants like `agent` or `agenticity`).\n- `AND` explicitly requires both terms to appear in the indexed text. Most academic engines default to `OR` for multiple keywords, so explicit `AND` is critical.\n- *Platform Note:* arXiv and Google Scholar parse this natively. Some legacy databases may require `+agentic` or case-sensitive quoting.\n\n### 🔹 2. Programmatic / Vector Database Queries\n*(Elasticsearch, Solr, pgvector, Milvus, Pinecone)*\nIf you're querying a structured index or application backend, use a **boolean/must** filter:\n```json\n{\n  \"query\": {\n    \"bool\": {\n      \"must\": [\n        { \"match\": { \"content\": \"memory architecture\" } },\n        { \"term\": { \"content\": \"agentic\" } }   // exact token match (case-sensitive)\n      ]\n    }\n  }\n}\n```\n- `term` or `match_phrase` ensures the exact token `agentic` exists.\n- For hybrid systems (BM25 + dense embeddings), this lexical filter runs alongside your vector similarity score to prevent noisy semantic matches.\n\n### 🔹 3. Command Line / Local Text Processing\n*(grep, awk, PowerShell)*\n```bash\ngrep -iE \"agentic\" file.txt | grep -iE \"memory.*(arch|architecture)\"\n```\n- The first pipe filters for the exact word; the second narrows to architecture-related context. Add `-w` (`grep -wi \"agentic\"`) to enforce whole-word matching if your version supports it.\n\n---\n\n### ⚠️ Important Considerations\n- **Case Sensitivity:** Most search engines and DBs are case-insensitive by default. If you need strict case matching, ensure your index uses a case-sensitive collation or query analyzer.\n- **Morphological Filtering:** If you want to exclude `agents`, `agent`, or `agenticity`, use exact token matching (`term`/`phrase`) rather than keyword search.\n- **Hybrid/RAG Contexts:** As noted in recent literature on agent memory systems, pure vector similarity often retrieves semantically related but lexically mismatched spans. Adding a strict lexical filter for `agentic` before or during retrieval prevents \"semantic drift\" in long-horizon or multi-session memory systems [4][9].\n\n*Note: The syntax above follows standard information retrieval conventions. The provided search results focus on the design of agentic memory architectures themselves rather than query syntax, so these techniques are drawn from established search platform documentation and retrieval engineering practices.*\n\nWould you like a ready-to-use query tailored to a specific platform (e.g., PubMed, a specific vector DB, or a local codebase)?",
+      "started_at": "2026-04-26T04:14:11.854834+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T04:15:15.587603+00:00",
+      "elapsed_seconds": 38.112,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To search for text related to \"memory architectures\" while ensuring the results contain the specific word \"agentic,\" you should use a **Boolean search query** with the `AND` operator.\n\n**Recommended Search Query:**\n```text\nagentic AND \"memory architectures\"\n```\n\n**Explanation:**\n*   **`agentic`**: Specifies that the word \"agentic\" must appear in the results.\n*   **`AND`**: This operator filters the results to only include items that contain both terms [8][13][17][28]. Using this operator ensures you filter out any results that do not contain \"agentic\" [13].\n*   **`\"memory architectures\"`**: Placing the phrase in quotation marks tells the search engine to look for this specific phrase. If you want to include results where the words appear separately (e.g., \"architectures for memory\"), you can remove the quotes: `agentic AND memory architectures` [28].\n\n**Additional Search Strategies:**\n*   **Boolean Com",
+      "started_at": "2026-04-26T04:14:37.475797+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:15:50.936840+00:00",
+  "topk": 16
+}

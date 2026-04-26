@@ -1,0 +1,59 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "34_corpus_lineage_2_8.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 17.724,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T05:36:19.777754+00:00",
+  "proficiency": 2,
+  "prompt": "How do I pull abstract chunks from all source files published in the year 2020 that discuss text alignment?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 3,\n    \"retrieval_basis\": \"Retrieved chunks consist of a reference list spanning 2017-2025, failing to isolate 2020 publications or provide direct extraction methods.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The model correctly identified the retrieval gap, pivoted to providing a robust Python script using the Semantic Scholar API, and clarified terminology shifts to fully satisfy the user's intent.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Retrieved results exclusively featured a 2024 survey on LLM alignment, completely missing the 2020 publication year constraint.\",\n    \"response_score\": 6,\n    \"response_basis\": \"The response accurately identified the temporal mismatch in the retrieved data and politely declined, though it missed the opportunity to suggest alternative retrieval strategies or external APIs.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"Retrieved results were truncated but clearly pointed to the same 2024 survey, offering no relevant 2020 content or extraction guidance.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The model generated an empty response, failing to address the prompt or acknowledge the retrieval limitations.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"AI Alignment: A Comprehensive Survey\",\n    \"source_file\": \"Various arXiv/ACL References\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:36:02.051701+00:00",
+      "elapsed_seconds": 28.892,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results focus on AI alignment research published between 2023 and 2025 [1][2][3][4][5][6][7][8] and do not contain 2020 literature. As a result, the extraction workflow below relies on direct database querying rather than the provided sources.\n\nTo reliably pull abstracts for papers published in **2020** that discuss **\"text alignment\"**, the most efficient approach is to query the **Semantic Scholar Graph API**. It natively supports year filtering, keyword search, and returns structured JSON with abstracts.\n\n### Python Extraction Script\n```python\nimport requests\nimport json\nimport time\n\nBASE_URL = \"https://api.semanticscholar.org/graph/v1/paper/search\"\n\ndef fetch_2020_abstracts(query=\"text alignment\", limit=100, max_pages=10):\n    params = {\n        \"query\": query,\n        \"year\": \"2020\",\n        \"limit\": limit,\n        \"fields\": \"title,abstract,year,authors,venue\"\n    }\n    \n    all_abstracts = []\n    offset = 0\n    pages_fetched = 0\n    \n    while pages_fetched < max_pages:\n        params[\"offset\"] = offset\n        response = requests.get(BASE_URL, params=params)\n        \n        if response.status_code != 200:\n            print(f\"API Error: {response.status_code} - {response.text}\")\n            break\n            \n        data = response.json()\n        papers = data.get(\"data\", [])\n        \n        if not papers:\n            break\n            \n        for paper in papers:\n            if paper.get(\"abstract\"):\n                all_abstracts.append({\n                    \"title\": paper.get(\"title\"),\n                    \"year\": paper.get(\"year\"),\n                    \"abstract\": paper.get(\"abstract\"),\n                    \"url\": f\"https://www.semanticscholar.org/paper/{paper.get('paperId')}\"\n                })\n                \n        offset += limit\n        pages_fetched += 1\n        \n        # Check if more results exist\n        if not data.get(\"nextOffset\"):\n            break\n            \n        time.sleep(0.1) # Respect rate limits (~100 req/min without key)\n        \n    return all_abstracts\n\n# Run extraction\nif __name__ == \"__main__\":\n    results = fetch_2020_abstracts(limit=100)\n    print(f\"Extracted {len(results)} abstracts.\")\n    print(json.dumps(results[:3], indent=2)) # Preview first 3\n```\n\n### 🔍 Key Implementation Details\n| Parameter | Purpose |\n|-----------|---------|\n| `year=\"2020\"` | Strictly filters publications to the calendar year 2020. Semantic Scholar also supports ranges (e.g., `\"2020-2020\"`). |\n| `limit` | Number of results per page. Default max is 100. |\n| `fields` | Explicitly requests the `abstract` string. Prevents fetching unnecessary metadata. |\n| `offset` + `nextOffset` | Handles pagination. The loop continues until no `nextOffset` is returned or `max_pages` is reached. |\n| `time.sleep(0.1)` | Prevents hitting Semantic Scholar's free tier rate limit (~100 requests/minute). |\n\n### 📝 Important Context on Terminology\nThe phrase `\"text alignment\"` has shifted meaning across NLP subfields:\n- **2020 Literature:** Typically refers to *sequence alignment*, *machine translation alignment*, or *style/domain adaptation*. The query above will capture these.\n- **Recent Literature (2023–2025):** Focuses heavily on *AI safety alignment*, *value alignment*, and *RLHF* [1][2][3][4][5][6]. If your goal is specifically AI safety alignment from 2020, adjust the query to: `\"AI alignment\" OR \"value alignment\" OR \"preference",
+      "started_at": "2026-04-26T05:35:33.159174+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:34:58.043904+00:00",
+      "elapsed_seconds": 7.948,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, I am unable to pull abstract chunks from source files published in 2020. The search results only contain papers published in **2024 and 2025**, focusing on topics like scalable automated alignment, LLM-based scientific writing, and table-text alignment verification [1][2][3][4][5][6][7][8]. \n\nBecause the search did not return any materials from the year 2020 that discuss text alignment, I lack the necessary data to fulfill your specific request. If you have a different query, a specific dataset of 2020 papers, or additional context, please share it and I will gladly assist you.",
+      "started_at": "2026-04-26T05:34:50.096152+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:35:33.159166+00:00",
+      "elapsed_seconds": 35.115,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:34:58.043913+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The model correctly identified the retrieval gap, pivoted to providing a robust Python script using the Semantic Scholar API, and clarified terminology shifts to fully satisfy the user's intent.",
+      "response_score": 9,
+      "retrieval_basis": "Retrieved chunks consist of a reference list spanning 2017-2025, failing to isolate 2020 publications or provide direct extraction methods.",
+      "retrieval_score": 3
+    },
+    "papers": {
+      "response_basis": "The response accurately identified the temporal mismatch in the retrieved data and politely declined, though it missed the opportunity to suggest alternative retrieval strategies or external APIs.",
+      "response_score": 6,
+      "retrieval_basis": "Retrieved results exclusively featured a 2024 survey on LLM alignment, completely missing the 2020 publication year constraint.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "The model generated an empty response, failing to address the prompt or acknowledge the retrieval limitations.",
+      "response_score": 1,
+      "retrieval_basis": "Retrieved results were truncated but clearly pointed to the same 2024 survey, offering no relevant 2020 content or extraction guidance.",
+      "retrieval_score": 2
+    }
+  },
+  "timestamp": "2026-04-25T19:15:00.377779+00:00",
+  "topk": 8
+}

@@ -1,0 +1,59 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "23_lexical_vs_semantic_2_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 14.717,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T03:51:37.699112+00:00",
+  "proficiency": 2,
+  "prompt": "How do I search for the exact acronym RRF instead of getting documents generally about search algorithms?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The retrieved chunks consist of a disjointed list of academic references and URLs that do not contain search syntax guidance or tool-specific instructions.\",\n    \"response_score\": 6,\n    \"response_basis\": \"Provides standard web and database search operators but fails to leverage the retrieved references, offering generic advice that may not align with the user's specific search interface.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The single retrieved chunk discusses an LLM agent for academic paper search and is completely irrelevant to exact-match query syntax.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response is entirely empty, failing to address the prompt or utilize the retrieved context.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 6,\n    \"retrieval_basis\": \"The retrieved chunks reference semantic search tools and their limitations, which loosely align with the user's problem of retrieving conceptually related documents instead of exact terms.\",\n    \"response_score\": 8,\n    \"response_basis\": \"Accurately diagnoses the likely tooling issue (semantic vs. keyword search), provides clear actionable steps, and effectively leverages the retrieved context to explain why the user is experiencing the described behavior.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"MirrorMind: Empowering OmniScientist with the Expert Perspectives and Collective Knowledge of Human Scientists\",\n    \"source_file\": \"2511_16997.pdf\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:51:22.979584+00:00",
+      "elapsed_seconds": 14.438,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To force a search for the exact acronym **RRF**, you need to use query operators that explicitly tell the search engine to treat it as a literal string rather than a set of keywords or related topics. The provided search results did not contain specific syntax guidance for exact-match queries, so the following covers standard operators across common platforms.\n\n### 🔍 Primary Method: Quotation Marks\nWrap the acronym in double quotes: `\"RRF\"`\nThis is the most universally supported method. It tells nearly all search engines and databases to only return results containing that exact character sequence in that exact order, ignoring stemming, synonyms, or nearby related terms.\n\n### 🌐 Platform-Specific Operators\n| Platform / Tool | Exact-Match Syntax |\n|----------------|-------------------|\n| **General Web (Google, Bing, DuckDuckGo)** | `\"RRF\"` |\n| **Academic Databases (Scopus, Web of Science, IEEE Xplore, ACM DL)** | `\"RRF\"` (often under \"Exact Phrase\" dropdown) |\n| **GitHub / Code Repos** | `\"RRF\" in:code` or `\"RRF\" in:file` |\n| **Linux / Terminal (`grep`)** | `grep -w \"RRF\"` or `grep -E '\\bRRF\\b'` |\n| **Python `re` module** | `re.search(r'\\bRRF\\b', text)` |\n\n### 📌 Why You're Getting Search Algorithm Results\nIn technical and research contexts, **RRF** most commonly stands for **Reciprocal Rank Fusion**, a method used to combine and rank results from multiple retrieval models or search algorithms. If your query is returning papers on ranking, relevance scoring, or ensemble retrieval, you are likely seeing this established term. If you specifically need the acronym used for a different project, organization, or proprietary system, narrow it with a domain qualifier:\n- `\"RRF\" site:arxiv.org`\n- `\"RRF\" AND (biology OR chemistry OR \"supply chain\")`\n\n### ✅ Pro Tips for Precision\n1. **Add word boundaries** if the platform supports Boolean operators: `+\"RRF\"` or `\"RRF\" NOT (fusion OR ranking)`\n2. **Use site filters** to restrict scope: `\"RRF\" site:github.com` or `\"RRF\" site:nih.gov`\n3. **Combine with filetype** if looking for documents: `\"RRF\" filetype:pdf`\n\nIf you specify which search interface or database you're using, I can provide the exact syntax and UI steps for that system.",
+      "started_at": "2026-04-26T03:51:08.540921+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:50:44.429334+00:00",
+      "elapsed_seconds": 22.368,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T03:50:22.061324+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:51:08.540914+00:00",
+      "elapsed_seconds": 24.111,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To find the exact acronym **RRF** (Reciprocal Rank Fusion) and avoid general documents about search algorithms, you should use the **`keyword_search`** tool rather than the **`semantic_search`** tool.\n\n**1. Use `keyword_search` for Exact Matches**\nThe **`keyword_search`** tool performs exact text matching (case-insensitive) and is designed specifically for finding specific terms like acronyms, entity names, and technical jargon [3].\n*   **How to use it:** Enter the specific term \"RRF\" directly.\n*   **Why it works:** Unlike semantic search, this method does not try to interpret the *meaning* of your query; it looks for the exact characters you provide in the document text [3].\n\n**2. Avoid `semantic_search` for Specific Terms**\nThe **`semantic_search`** tool uses vector embeddings to match the conceptual meaning of a query [4].\n*   **Why it is failing here:** Semantic search often retrieves documents based on general topics. If you search for \"RRF\" or \"search,\" the system may interpret it as a request for information about search algorithms or retrieval methods in general [4].\n*   **Acronym Limitations:** Dense retrieval (semantic search) often fails to locate domain-specific keywords and acronyms because they may not carry the same semantic weight as general words [1]. To guarantee that exact-match terminology is found, you must rely on the keyword index [1].\n\n**3. Best Practices for Search Queries**\n*   **Be Specific:** When using `keyword_search`, use short, specific terms (1-3 words maximum) rather than long phrases or descriptions [3].\n*   **Avoid General Descriptions:** Instead of searching for \"the acronym used for rank fusion,\" simply search for \"RRF\" to ensure you get the exact matches you are looking for [3].\n\n**References**\n[1] Qingbin Zeng et al., \"MirrorMind: Empowering OmniScientist with the Expert Perspectives and Collective Knowledge of Human Scientists\" (arXiv:2511_16997).\n[3] Mingxuan Du et al., \"A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces\" (arXiv:2602_03442).\n[4] Mingxuan Du et al., \"A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces\" (arXiv:2602_03442).",
+      "started_at": "2026-04-26T03:50:44.429341+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "Provides standard web and database search operators but fails to leverage the retrieved references, offering generic advice that may not align with the user's specific search interface.",
+      "response_score": 6,
+      "retrieval_basis": "The retrieved chunks consist of a disjointed list of academic references and URLs that do not contain search syntax guidance or tool-specific instructions.",
+      "retrieval_score": 2
+    },
+    "papers": {
+      "response_basis": "The response is entirely empty, failing to address the prompt or utilize the retrieved context.",
+      "response_score": 1,
+      "retrieval_basis": "The single retrieved chunk discusses an LLM agent for academic paper search and is completely irrelevant to exact-match query syntax.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "Accurately diagnoses the likely tooling issue (semantic vs. keyword search), provides clear actionable steps, and effectively leverages the retrieved context to explain why the user is experiencing the described behavior.",
+      "response_score": 8,
+      "retrieval_basis": "The retrieved chunks reference semantic search tools and their limitations, which loosely align with the user's problem of retrieving conceptually related documents instead of exact terms.",
+      "retrieval_score": 6
+    }
+  },
+  "timestamp": "2026-04-25T19:13:30.824181+00:00",
+  "topk": 2
+}

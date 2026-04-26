@@ -1,0 +1,35 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "1_spatial_orientation_1_2.json",
+  "input_id": 1,
+  "proficiency": 1,
+  "prompt": "Can you show me the paragraph that comes right after this one in a document?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:50:46.800961+00:00",
+      "elapsed_seconds": 9.457,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "I appreciate your request, but the search did not retrieve the document or the specific passage you are referring to [1]. Without the source material or a clear identifier for the file you are working with, I am unable to locate the subsequent paragraph.\n\n**Results-derived information:** The retrieved sources only contained structural prompts for academic instructional writing and bilingual templates for legal defense drafting, with no actual document text, page numbers, or sequential paragraph data provided [2].\n\n**Next steps:** To ensure accuracy, please share the document itself, paste the paragraph you mentioned, or provide the title, author, and section you are referencing. Once I have that context, I will gladly analyze the text and identify the following passage for you.\n\n*(Note: Any further analysis or identification of the subsequent paragraph will remain speculative until you provide the source material.)*",
+      "started_at": "2026-04-26T00:50:37.343700+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:50:12.722912+00:00",
+      "elapsed_seconds": 22.693,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:49:50.029851+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:50:37.343691+00:00",
+      "elapsed_seconds": 24.621,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:50:12.722918+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:13:17.502358+00:00",
+  "topk": 2
+}

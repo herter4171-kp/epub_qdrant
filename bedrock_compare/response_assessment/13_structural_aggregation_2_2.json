@@ -1,0 +1,59 @@
+{
+  "category": "structural_aggregation",
+  "input_file": "13_structural_aggregation_2_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 15.313,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T02:29:48.089061+00:00",
+  "proficiency": 2,
+  "prompt": "How do I retrieve all text under a specific heading level 1, such as a section titled ALFWORLD?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunks describe the ALFWORLD benchmark environment rather than providing technical guidance on document parsing or text extraction, making them irrelevant to the user's programming intent.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The model correctly identified the retrieval gap, clearly separated benchmark context from its own knowledge, and provided comprehensive, format-specific extraction code that directly answers the user's question.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved results focused on unrelated research papers about WebThinker and PsyPlay, containing no information relevant to text extraction or heading parsing.\",\n    \"response_score\": 5,\n    \"response_basis\": \"The model appropriately acknowledged the lack of relevant information in the retrieval results and refused to answer, though it could have offered general guidance.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved chunk contained only a fragmented label from a paper on structural memory, offering no relevant technical context for document processing.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The response was completely empty, failing to address the prompt or acknowledge the lack of retrieval results.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"ALFWORLD Benchmark Description\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T02:29:32.771558+00:00",
+      "elapsed_seconds": 14.441,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The approach to extracting text under a specific Level 1 (H1) heading depends entirely on your **document format** (Markdown, HTML, PDF, Word, etc.) and whether the file preserves structural heading metadata. The provided search results describe the `ALFWORLD` benchmark and its task structure [1][2], but do not contain document-processing guidance, so the following relies on standard text extraction techniques.\n\nBelow are robust, format-specific solutions. I'll clearly separate the benchmark context from the extraction methodology.\n\n---\n### 🔍 **Method 1: Markdown or Plain Text**\nIf your source is a `.md`, `.txt`, or `.rst` file, H1 headings typically start with `# ` (or `# ` followed by text). You can extract everything until the next `# ` using Python + `re`:\n\n```python\nimport re\n\ndef extract_h1_section(text, heading=\"ALFWORLD\"):\n    # Case-insensitive match, captures until next H1 or end of string\n    pattern = rf\"(?i)^#\\s+{re.escape(heading)}\\s*\\n((?:.|\\n)*?)(?=\\n# |$)\"\n    match = re.search(pattern, text, re.MULTILINE)\n    if match:\n        return match.group(1).strip()\n    return None\n\n# Example usage:\n# section_text = extract_h1_section(your_full_text, \"ALFWORLD\")\n```\n\n**Why this works:** `re.MULTILINE` treats `^` as the start of each line. The non-greedy `.*?` captures content until it hits another `# ` or the string ends.\n\n---\n### 🌐 **Method 2: HTML**\nHTML preserves semantic heading structure. Use `BeautifulSoup` to find the `<h1>` and extract siblings until the next `<h1>` or section boundary:\n\n```python\nfrom bs4 import BeautifulSoup\n\ndef extract_h1_html(html_content, heading=\"ALFWORLD\"):\n    soup = BeautifulSoup(html_content, \"html.parser\")\n    target = soup.find(\"h1\", string=lambda t: t and heading.lower() in t.get_text().lower())\n    if not target:\n        return None\n    \n    extracted = []\n    for sibling in target.find_next_siblings():\n        if sibling.name == \"h1\":\n            break\n        if sibling.get_text(strip=True):\n            extracted.append(sibling.get_text(strip=True))\n            \n    return \"\\n\".join(extracted)\n```\n\n---\n### 📄 **Method 3: PDF**\nPDFs are notoriously difficult because they often store text as raw coordinates rather than semantic headings. You'll need a library that preserves structure:\n\n**Using `pdfplumber` (recommended for layout-aware extraction):**\n```python\nimport pdfplumber\n\ndef extract_h1_pdf(pdf_path, heading=\"ALFWORLD\"):\n    sections = []\n    current_section = []\n    collecting = False\n    \n    with pdfplumber.open(pdf_path) as pdf:\n        for page in pdf.pages:\n            for line in page.lines:\n                text = line[\"text\"].strip()\n                # Heuristic: H1 is often larger font or centered\n                if \"ALFWORLD\" in text.upper() and line[\"size\"] > 14:  # adjust threshold\n                    if current_section:\n                        sections.append(\"\\n\".join(current_section))\n                    current_section = []\n                    collecting = True\n                    continue\n                if collecting:\n                    current_section.append(text)\n                    \n    if current_section:\n        sections.append(\"\\n\".join(current_section))\n        \n    return sections[0] if sections else None\n```\n\n⚠️ **PDF Caveat:** If the PDF lacks OCR or structural tags, headings may not be distinguishable from body text. In that case, fallback to regex on extracted text (Method 1) or use Adobe's export-to-Word feature to restore heading styles.\n\n---\n### 🧠 **General Logic & Best Practices**\n1. **Define boundaries:** An H1 section starts at the heading and ends at the next H1, or at a clear structural break (e.g., `##`, `<h2>`, blank page, or table of contents boundary).\n2. **Handle case & whitespace:** Always normalize casing (`str.lower()`) and strip surrounding whitespace.\n3. **Preserve formatting:** If you need rich text, parse to HTML/Markdown rather than raw strings.\n4. **Validate assumptions:** If your document uses non-standard headings (e.g., `# ALFWORLD: Benchmark Overview`), adjust the regex or CSS selector accordingly.\n\n---\n📖 **Delineation Note:**  \n- The description of `ALFWORLD` as a text-based embodied benchmark with compositional goal templates (Pick, Clean, Heat, Cool, Look, PICK2) is derived directly from your provided search results [1][2].  \n- All extraction code, regex patterns, and format-specific strategies are general technical solutions not contained in the provided results, as the search focused on benchmark methodology rather than document processing.\n\nLet me know your exact file format or language preference, and I can tailor the extraction pipeline further.",
+      "started_at": "2026-04-26T02:29:18.326673+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T02:28:54.423093+00:00",
+      "elapsed_seconds": 13.628,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, I cannot answer how to retrieve all text under a specific heading level 1, such as a section titled ALFWORLD. The retrieved results focus on \"WebThinker\" and \"PsyPlay\" papers and do not contain technical instructions or code for extracting text by headings [1][2].\n\n**References:**\n[1] Xiaoxi Li, Jiajie Jin, Guanting Dong, Hongjin Qian, Yongkang Wu, Ji-Rong Wen, Yutao Zhu, Zhicheng Dou. *WebThinker: Empowering Large Reasoning Models with Deep Research Capability*.\n[2] Tao Yang, Yuhua Zhu, Xiaojun Quan, Cong Liu, Qifan Wang. *PsyPlay: Personality-Infused Role-Playing Conversational Agents*.",
+      "started_at": "2026-04-26T02:28:40.794434+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T02:29:18.326661+00:00",
+      "elapsed_seconds": 23.903,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T02:28:54.423099+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The model correctly identified the retrieval gap, clearly separated benchmark context from its own knowledge, and provided comprehensive, format-specific extraction code that directly answers the user's question.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved chunks describe the ALFWORLD benchmark environment rather than providing technical guidance on document parsing or text extraction, making them irrelevant to the user's programming intent.",
+      "retrieval_score": 1
+    },
+    "papers": {
+      "response_basis": "The model appropriately acknowledged the lack of relevant information in the retrieval results and refused to answer, though it could have offered general guidance.",
+      "response_score": 5,
+      "retrieval_basis": "The retrieved results focused on unrelated research papers about WebThinker and PsyPlay, containing no information relevant to text extraction or heading parsing.",
+      "retrieval_score": 1
+    },
+    "papers_semantic": {
+      "response_basis": "The response was completely empty, failing to address the prompt or acknowledge the lack of retrieval results.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieved chunk contained only a fragmented label from a paper on structural memory, offering no relevant technical context for document processing.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:12:02.559086+00:00",
+  "topk": 2
+}

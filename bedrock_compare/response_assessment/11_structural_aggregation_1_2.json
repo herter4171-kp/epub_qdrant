@@ -1,0 +1,59 @@
+{
+  "category": "structural_aggregation",
+  "input_file": "11_structural_aggregation_1_2.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 23.433,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T02:13:13.972719+00:00",
+  "proficiency": 1,
+  "prompt": "How can I find the main heading of the section that a given text passage belongs to?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 4,\n    \"retrieval_basis\": \"The retrieved snippet outlines guidelines for extracting major sections from academic papers, which loosely aligns with the user's goal of mapping passages to headings.\",\n    \"response_score\": 9,\n    \"response_basis\": \"The response excellently separates the limited retrieval context from robust general techniques, providing clear, actionable methods across multiple document formats without hallucination.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 2,\n    \"retrieval_basis\": \"The retrieved chunks discuss a deep research agent framework and are completely unrelated to document structure or heading extraction.\",\n    \"response_score\": 6,\n    \"response_basis\": \"The model provides a technically sound answer but hallucinates citations and fails to acknowledge the irrelevant retrieval, reducing trustworthiness.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 1,\n    \"retrieval_basis\": \"The retrieved results focus on keyword counting and claim verification, offering no guidance on section hierarchy or heading mapping.\",\n    \"response_score\": 7,\n    \"response_basis\": \"The model correctly identifies the retrieval gap and accurately describes the unrelated content, though it stops short of offering general technical alternatives.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"ParserAgent (4): Structured Section Extraction\",\n    \"source_file\": \"bedrock_context\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T02:12:50.537264+00:00",
+      "elapsed_seconds": 17.408,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Finding the main heading for a given text passage depends heavily on the format of your source material and the tools available to you. Below is a breakdown of reliable approaches, clearly separated into what’s derived from your provided reference and what represents standard technical practices.\n\n📌 **Based on Your Provided Reference**\nIf you are working with academic papers or similarly structured documents, one effective method is to use an LLM-powered parser with explicit extraction guidelines. For example, agents can be prompted to “Identify Major Sections” (e.g., Introduction/Background, Methodology, Experiments/Results, Discussion) and process the content while preserving key technical details, formulas, and bullet points [1]. This approach works well when your text is already segmented into predictable section types, but it requires you to provide a structured prompt or document outline to anchor the extraction.\n\n🔍 **General Technical Approaches (Beyond the Reference)**\nSince your question applies more broadly, here are the most robust ways to map a passage to its parent heading, depending on your input format:\n\n1. **Structural/Markup Parsing (HTML, PDF, Markdown)**\n   - **HTML/Web Pages:** Parse the Document Object Model (DOM) and locate the nearest `<h1>`–`<h6>` tag that precedes the passage in the document hierarchy. Libraries like BeautifulSoup (Python) or Cheerio (Node.js) can traverse the tree and bind heading nodes to their child content.\n   - **PDFs:** Extract the structural tree or use heading detection heuristics (font size, weight, indentation, baseline alignment). Tools like `pdfplumber`, `Unstructured`, or Adobe's PDF Extract API can reliably pull heading hierarchies.\n   - **Markdown:** Scan for the nearest `#`-prefixed line above the passage.\n\n2. **NLP & LLM-Assisted Classification**\n   - If your text lacks explicit markup (e.g., plain text, emails, or scanned content), you can use an LLM to classify the passage into predefined sections or infer the heading. Provide the LLM with the passage alongside a document outline or candidate headings, and prompt it to return only the matching section title.\n   - For higher accuracy, use a two-step pipeline: (1) segment the full document into logical chunks, (2) assign the nearest or most semantically relevant heading to each chunk using lightweight embedding similarity or a classifier.\n\n3. **Heuristic/Rule-Based Methods**\n   - Scan backward from the passage until you hit a line matching common heading patterns: capitalized, short length, ends with a colon, or separated by distinct whitespace/indentation.\n   - For OCR/scanned documents, leverage spacing gaps, baseline shifts, and confidence scores to infer section boundaries before applying NLP classification.\n\n💡 **Recommendation by Use Case**\n- **Structured documents (HTML, tagged PDFs, Markdown):** Use structural parsing for deterministic, highly reliable heading extraction.\n- **Unstructured/plain text:** Combine LLM prompting with document-level context to infer headings accurately.\n- **Academic papers specifically:** Align your pipeline with standard section taxonomies (Introduction, Related Work, Methodology, Results, Discussion) as outlined in your reference material [1].\n\nIf you share the exact format of your documents (e.g., HTML, PDF, plain text, LLM output) and your preferred stack (Python, Node, no-code, etc.), I can provide a ready-to-run code snippet tailored to your setup.\n\n**Reference**\n[1] Provided system results: `ParserAgent (4): Structured Section Extraction` guidelines for academic papers, emphasizing identification of major sections, content processing limits, and preservation of key technical details.",
+      "started_at": "2026-04-26T02:12:33.128911+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T02:12:16.337103+00:00",
+      "elapsed_seconds": 22.202,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To find the main heading of a section for a given text passage, you can use a combination of semantic similarity, structural analysis, and keyword matching. The best method depends on whether you have the original document structure or only the raw text.\n\n### 1. Semantic Similarity (Recommended for Raw Text)\nWhen a text passage has been rephrased, merged, or split from its original source, exact keyword matching often fails. A robust approach, supported by recent research in large reasoning models, is to use **sentence embeddings** to find the most semantically similar heading [2].\n\n**How it works:**\n*   **Vectorization:** You convert the text passage and the list of candidate headings (and their subheadings) into dense vector representations using a pre-trained sentence-transformer model (e.g., from Hugging Face) [2].\n*   **Similarity Calculation:** You calculate the cosine similarity between the passage's vector and the headings' vectors.\n*   **Mapping:** The heading with the highest similarity score is identified as the parent section. If the highest match is a sub-heading, you can traverse up the document hierarchy to find the \"main\" heading.\n\nThis method is effective because it captures the underlying meaning of the text rather than just matching words [1].\n\n### 2. Hierarchical Structure Analysis\nIf you are working with structured documents (like HTML, Markdown, or PDFs with a Table of Contents), you can parse the document tree.\n*   **DOM Traversal (HTML):** Locate the text passage within the Document Object Model (DOM). Walk up the ancestor nodes until you find the nearest `<h1>` or `<h2>` tag.\n*   **Markdown/Text Parsing:** Look for lines starting with `#` or `##` preceding the passage. The most recent heading before the text block is its parent.\n\n### 3. Keyword Extraction & TF-IDF\nFor a simpler, lightweight approach, you can extract the top nouns or key phrases from the passage (",
+      "started_at": "2026-04-26T02:11:54.134683+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T02:12:33.128903+00:00",
+      "elapsed_seconds": 16.792,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "The provided search results do not contain information on how to find the main heading of a section for a given text passage.\n\nThe results focus on different text processing and retrieval methods:\n*   **Graph of Thoughts (GoT)** discusses splitting input text into passages for keyword counting, but does not mention finding section headings [1].\n*   **RefineBench** evaluates the ability of language models to refine answers based on multiple passages, without addressing section hierarchy [2].\n*   **Long-Context Language Models** (LOFT dataset) outlines instructions for retrieval tasks (finding documents relevant to a claim or query), but does not describe locating section headers [3].\n*   **GEPA** focuses on verifying claims using passages and context, also without mentioning section headings [4].",
+      "started_at": "2026-04-26T02:12:16.337108+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response excellently separates the limited retrieval context from robust general techniques, providing clear, actionable methods across multiple document formats without hallucination.",
+      "response_score": 9,
+      "retrieval_basis": "The retrieved snippet outlines guidelines for extracting major sections from academic papers, which loosely aligns with the user's goal of mapping passages to headings.",
+      "retrieval_score": 4
+    },
+    "papers": {
+      "response_basis": "The model provides a technically sound answer but hallucinates citations and fails to acknowledge the irrelevant retrieval, reducing trustworthiness.",
+      "response_score": 6,
+      "retrieval_basis": "The retrieved chunks discuss a deep research agent framework and are completely unrelated to document structure or heading extraction.",
+      "retrieval_score": 2
+    },
+    "papers_semantic": {
+      "response_basis": "The model correctly identifies the retrieval gap and accurately describes the unrelated content, though it stops short of offering general technical alternatives.",
+      "response_score": 7,
+      "retrieval_basis": "The retrieved results focus on keyword counting and claim verification, offering no guidance on section hierarchy or heading mapping.",
+      "retrieval_score": 1
+    }
+  },
+  "timestamp": "2026-04-25T19:13:23.760546+00:00",
+  "topk": 2
+}

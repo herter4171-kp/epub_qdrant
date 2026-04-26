@@ -1,0 +1,35 @@
+{
+  "category": "corpus_lineage",
+  "input_file": "32_corpus_lineage_1_16.json",
+  "input_id": 32,
+  "proficiency": 1,
+  "prompt": "How do I filter my search results to only show chunks from a specific source file like 2010_03768.pdf?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T05:10:46.988684+00:00",
+      "elapsed_seconds": 23.588,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T05:10:23.400207+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T05:09:48.148864+00:00",
+      "elapsed_seconds": 25.209,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided results, the specific syntax to filter for `2010_03768.pdf` depends on the retrieval system or tool you are using, but the general approaches for isolating a specific source file include the following:\n\n### 1. Metadata Filtering (RAG Pipelines)\nIn Retrieval-Augmented Generation (RAG) systems, filtering results by a specific document is typically achieved by filtering the metadata of the vector store or document index [13].\n*   **Method**: You would apply a filter condition to your retrieval query targeting the source identifier.\n*   **Example Logic**: `source_file == \"2010_03768.pdf\"` or `filename == \"2010_03768\"`.\n*   **Context**: This ensures that the retrieval step only considers chunks associated with that specific file before the model processes them [13].\n\n### 2. Agent or Command-Line Search\nIf you are using an AI agent or a file management tool to search your local documents:\n*   **Wildcards**: You can use wildcards to target specific file patterns. For example, entering `*2010_03768*` or `*03768*` into a file search or agent tool can help locate the exact document [3].\n*   **Path Specification**: You can explicitly provide the file path or address to the agent and instruct it to only process files from that location [10].\n\n### 3. Prompting and Context Instructions\nYou can also filter results by instructing the LLM or agent to prioritize specific metadata:\n*   **Explicit Filtering**: Instruct the model to \"only search within documents where the filename contains `2010_03768`\" [10].\n*   **ID-Based Filtering**: If the system returns a list of documents, you can prompt the model to \"print the Title and ID of each document\" and then manually or programmatically filter for the ID associated with `2010_03768.pdf` [5].\n\n**Note**: The filename `2010_03768.pdf` suggests this is an arXiv paper. If you are using a specific library (such as LangChain, LlamaIndex, or a custom search engine), the exact filtering command (e.g., `filter`, `where`, or `metadata`) will be specific to that library's documentation.",
+      "started_at": "2026-04-26T05:09:22.940094+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T05:10:23.400191+00:00",
+      "elapsed_seconds": 35.251,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided research on agent-based document search and RAG (Retrieval-Augmented Generation) systems, the exact syntax depends on the search engine or framework you're using. However, the following patterns are consistently supported for isolating results to a specific source file like `2010_03768.pdf`:\n\n### 1. Command-Line / CLI Arguments\nIf you are using a custom search CLI or terminal-based tool, you can typically restrict the search scope by passing the specific file as an argument. For example, many CLI search tools accept a `[FILES]` argument to limit the search to provided paths:\n```bash\nsearch [OPTIONS] \"<your query>\" 2010_03768.pdf\n```\nThis ensures the engine only indexes and returns matches from the specified file(s) rather than scanning the entire directory [1].\n\n### 2. RAG Framework Metadata Filtering\nWhen using standard RAG frameworks like **LangChain** or **LlamaIndex**, filtering is almost always handled at the retrieval stage using metadata. You can attach the source filename as metadata to your document chunks and query it during retrieval:\n```python\n# Example conceptual filter for a vector store or retriever\nfilter={\"source\": \"2010_03768.pdf\"}\n```\nThese frameworks natively support filtering by file paths, names, or custom metadata tags to ensure only relevant chunks are returned [8].\n\n### 3. Agent/LLM Prompting\nIf you are working with an LLM agent that has access to a search tool or document QA pipeline, you can enforce file-specific results through the system prompt. Agents can be instructed to:\n* Limit their search scope to a specific path: `Try to answer the question based on the PDFs at \\{PDF_PATH\\}` [1].\n* Return structured citations that explicitly name the file, which you can then parse or validate: `citations: List of sources. Each citation must have: - file: Exact PDF filename shown in image (e.g., “1007969.pdf”)` [1].\n\n### 4. Programmatic / Post-Processing Filtering\nIf your search tool does not support native filtering, you can isolate results programmatically after retrieval. This involves iterating through the raw results and keeping only those that match your target filename:\n```python\n# Conceptual post-processing filter\nfiltered_results = [chunk for chunk in raw_results if chunk.metadata['source'] == '2010_03768.pdf']\n```\nThis pattern is frequently used in agent workflows to clean up downloads or search outputs before further processing [2].\n\n**Recommendation:** If you're building a pipeline, metadata filtering (Approach #2) is the most efficient and scalable method, as it avoids fetching irrelevant chunks into your context window entirely. If you're using a terminal tool, stick to the CLI flag approach (Approach #1) to save compute and reduce latency.\n\n*Let me know which specific search framework or tool you're working with, and I can provide the exact code or CLI syntax for it.*\n\n**References:**\n[1] Łukasz Borchmann et al., *Strategic Navigation or Stochastic Search? How Agents and Humans Reason Over Document Collections*, arXiv:2603_12180. (CLI `[FILES]` arguments & Agent citation prompts)\n[2] Minki Kang et al., *ACON: Optimizing Context Compression for Long-horizon LLM Agents*, arXiv:2510_00615. (Programmatic file filtering)\n[8] Zixia Jia et al., *The AI Hippocampus: How Far are We From Human Memory?*, arXiv:2601_09113. (LangChain/LlamaIndex metadata filtering capabilities)",
+      "started_at": "2026-04-26T05:09:48.148870+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:15:58.940622+00:00",
+  "topk": 16
+}

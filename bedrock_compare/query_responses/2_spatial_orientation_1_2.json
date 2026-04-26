@@ -1,0 +1,35 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "2_spatial_orientation_1_2.json",
+  "input_id": 2,
+  "proficiency": 1,
+  "prompt": "If a text passage seems cut off, how do I get the very next chunk from the same document?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T00:57:50.010216+00:00",
+      "elapsed_seconds": 21.312,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:57:28.698171+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T00:57:21.230003+00:00",
+      "elapsed_seconds": 22.421,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T00:56:58.809047+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T00:57:28.698164+00:00",
+      "elapsed_seconds": 7.468,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "If a text passage appears cut off or truncated, the recommended approach described in the **A-RAG** framework is to use the `chunk_read` tool to fetch adjacent chunks [1].\n\nHere is the specific strategy for retrieving the next chunk:\n\n*   **Identify the Target ID**: Based on the context or the order of the retrieved results, determine the ID of the chunk that follows your current one (e.g., if you are reading chunk `0`, the next chunk might be `1`).\n*   **Use the `chunk_read` Tool**: Call the `chunk_read` tool with the ID of the adjacent chunk in the `chunk_ids` parameter.\n    *   *Example:* If the current chunk is `0`, request `chunk_ids: [\"1\"]`.\n*   **Rationale**: The documentation explicitly advises: **\"If information seems incomplete or truncated, read adjacent chunks (+/- 1)\"** to ensure you capture the complete context that was cut off in the snippet [1].\n\nBy reading these adjacent chunks, you can gather the missing information needed to answer the question or complete the passage.",
+      "started_at": "2026-04-26T00:57:21.230012+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:13:18.088148+00:00",
+  "topk": 2
+}

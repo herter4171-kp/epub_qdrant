@@ -1,0 +1,35 @@
+{
+  "category": "lexical_vs_semantic",
+  "input_file": "23_lexical_vs_semantic_2_8.json",
+  "input_id": 23,
+  "proficiency": 2,
+  "prompt": "How do I search for the exact acronym RRF instead of getting documents generally about search algorithms?",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T03:55:47.477628+00:00",
+      "elapsed_seconds": 27.298,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T03:55:20.179699+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T03:54:57.275740+00:00",
+      "elapsed_seconds": 13.278,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "Based on the provided search results, the available literature focuses specifically on **Retrieval-Augmented Generation (RAG)**, **LLM-based search agents**, and **multimodal search frameworks** (e.g., MMSearch-R1, Search-o1) rather than general search engine query syntax [1][2][4]. As a result, the provided context does not contain specific instructions for isolating exact acronyms.\n\nTo search for an exact acronym like \"RRF\" instead of general related documents, you should use **quotation marks**:\n* **Action**: Type `\"RRF\"` into the search bar.\n* **Why it works**: Quotation marks tell the search engine's ranking algorithm to match that exact phrase in that exact order. This filters out results where the letters appear as part of longer words, different acronyms, or loosely related concepts.\n\n*(Note: The standard quotation mark technique is a general search engine best practice. The provided results exclusively covered LLM-driven retrieval pipelines, ranking strategies, and agentic search behaviors rather than native query syntax [3][5][6].)*",
+      "started_at": "2026-04-26T03:54:43.997994+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T03:55:20.179691+00:00",
+      "elapsed_seconds": 22.904,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To retrieve documents specifically focused on the exact acronym **RRF** (which stands for Reciprocal Rank Fusion) rather than broad discussions about search algorithms, you need to bypass semantic/vector search and route your query through an **exact-match** or **keyword-based search** pathway. Based on current retrieval system architectures, here is how to do it:\n\n1. **Use a Keyword/Exact-Match Search Tool**: Unlike semantic search, which matches by conceptual meaning and often retrieves general algorithmic documentation, keyword search performs literal, case-insensitive text matching [1]. When using this tool, keep your query to short, specific terms (1–3 words maximum), as acronyms are treated as exact technical terms or proper nouns rather than natural language phrases [1].\n2. **Prioritize Sparse Indexing**: Dense vector search excels at capturing intent and conceptual relationships, but it frequently misses domain-specific keywords and acronyms [2]. To guarantee that exact-match terminology is always located, retrieval systems pair dense search with sparse lexical indexing (like BM25) [2]. When searching for acronyms, explicitly select or weight the sparse/exact channel over the semantic one.\n3. **Understand Hybrid Retrieval Routing**: Modern systems often execute exact and semantic queries in parallel, merging the results using non-parametric fusion methods like Reciprocal Rank Fusion (RRF) to balance precision and recall [2][8]. If your platform defaults to semantic search, look for interface toggles to switch to `keyword_search`, `exact_match`, or `sparse` modes, or use query modifiers that force literal string matching.\n\nBy isolating `RRF` as a standalone technical term and routing it through a literal-matching mechanism rather than a natural language description, you will reliably filter out general search algorithm literature and surface documents specifically discussing Reciprocal Rank Fusion.\n\n**References:**\n[1] A-RAG: Scaling Agentic Retrieval-Augmented Generation via Hierarchical Retrieval Interfaces (keyword_search tool description)\n[2] MirrorMind: Empowering OmniScientist with the Expert Perspectives and Collective Knowledge of Human Scientists (sparse BM25 indexing for exact-match terminology)\n[6] Taxonomy of the Retrieval System Framework: Pitfalls and Paradigms (Reciprocal Rank Fusion aggregation)\n[8] Hindsight is 20/20: Building Agent Memory that Retains, Recalls, and Reflects (RRF fusion mechanics)",
+      "started_at": "2026-04-26T03:54:57.275745+00:00"
+    }
+  },
+  "timestamp": "2026-04-25T19:14:48.144369+00:00",
+  "topk": 8
+}

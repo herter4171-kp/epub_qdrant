@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -23,8 +24,23 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
+_logging_level = os.getenv("JUDGE_LOG_LEVEL", "INFO").upper()
+# Import shared logging helpers.
+try:
+    from bedrock_compare.logging_utils import (
+        log_key, log_info, log_dim, log_green, log_red, log_yellow,
+        log_blue, log_cyan,
+        truncate_line,
+    )
+except ImportError:
+    from logging_utils import (
+        log_key, log_info, log_dim, log_green, log_red, log_yellow,
+        log_blue, log_cyan,
+        truncate_line,
+    )
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.DEBUG if _logging_level == "DEBUG" else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("judge")
@@ -126,12 +142,62 @@ def call_judge_llm(
     return result
 
 
+def _validate_score_block(val: Any, valid_keys: set) -> Optional[Dict[str, Any]]:
+    """Validate a source's score block. Accepts either:
+    
+    Old schema: {"rating": int, "basis": str}
+    New schema: {"retrieval_score": int, "retrieval_basis": str,
+                 "response_score": int, "response_basis": str}
+    
+    Returns normalized dict or None.
+    """
+    if not isinstance(val, dict):
+        return None
+
+    # Old schema: rating + basis
+    if "rating" in val and "basis" in val:
+        rating = val["rating"]
+        if isinstance(rating, int) and 1 <= rating <= 10:
+            return {
+                "rating": rating,
+                "basis": str(val["basis"]),
+            }
+        logger.warning("  Invalid rating for source %s: %s (must be int 1-10)", valid_keys, rating)
+        return None
+
+    # New schema: retrieval_score + retrieval_basis + response_score + response_basis
+    if "retrieval_score" in val and "retrieval_basis" in val and \
+       "response_score" in val and "response_basis" in val:
+        rs = val["retrieval_score"]
+        ps = val["response_score"]
+        ok = True
+        if not (isinstance(rs, int) and 1 <= rs <= 10):
+            logger.warning("  Invalid retrieval_score for source %s: %s (must be int 1-10)", valid_keys, rs)
+            ok = False
+        if not (isinstance(ps, int) and 1 <= ps <= 10):
+            logger.warning("  Invalid response_score for source %s: %s (must be int 1-10)", valid_keys, ps)
+            ok = False
+        if ok:
+            return {
+                "retrieval_score": rs,
+                "retrieval_basis": str(val["retrieval_basis"]),
+                "response_score": ps,
+                "response_basis": str(val["response_basis"]),
+            }
+        return None
+
+    logger.warning("  Invalid response structure for source %s: %s", valid_keys, val)
+    return None
+
+
 def parse_judge_response(
     response_text: str, source_names: List[str]
 ) -> Optional[Dict[str, Dict[str, Any]]]:
     """Parse the LLM's JSON scoring response.
 
-    Returns a dict mapping source_name -> {"rating": int, "basis": str}.
+    Returns a dict mapping source_name -> score object.
+    Supports both old schema (rating/basis) and new schema
+    (retrieval_score/retrieval_basis/response_score/response_basis).
     Returns None if parsing fails.
     """
     text = response_text.strip()
@@ -149,27 +215,16 @@ def parse_judge_response(
                      e, text[:500])
         return None
 
-    # Validate: keys should be source names, values should have rating and basis
+    # Validate: keys should be source names, values should have score blocks
     result = {}
     valid_keys = set(source_names)
     for key, val in parsed.items():
         if key not in valid_keys:
             logger.warning("  Unexpected source key in judge response: %s", key)
             continue
-        if isinstance(val, dict) and "rating" in val and "basis" in val:
-            rating = val["rating"]
-            if isinstance(rating, int) and 1 <= rating <= 10:
-                result[key] = {
-                    "rating": rating,
-                    "basis": str(val["basis"]),
-                }
-            else:
-                logger.warning(
-                    "  Invalid rating for source %s: %s (must be int 1-10)",
-                    key, rating,
-                )
-        else:
-            logger.warning("  Invalid response structure for source %s: %s", key, val)
+        block = _validate_score_block(val, key)
+        if block is not None:
+            result[key] = block
 
     return result if result else None
 
@@ -183,7 +238,7 @@ def process_file(
     overwrite: bool,
 ) -> bool:
     """Process one response file. Returns True on success."""
-    logger.info("Processing %s", fpath.name)
+    log_cyan(f"▶ {fpath.name}")
 
     with open(fpath, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -192,25 +247,26 @@ def process_file(
     responses = data.get("responses", {})
 
     if not responses:
-        logger.warning("  No responses found in %s, skipping", fpath.name)
+        log_yellow("  No responses found, skipping")
         return False
 
     source_names = list(responses.keys())
-    logger.info("  Sources: %s", ", ".join(source_names))
+    log_info(f"  Sources: {', '.join(source_names)}")
+    log_dim(f"  Query: {truncate_line(prompt, shutil.get_terminal_size().columns - 10)}")
 
     # Build judge prompt
     user_message = build_judge_prompt(prompt, responses)
 
-    # Call LLM judge
+    # Call LLM judge — blue announcement
     started_epoch = time.time()
+    log_blue("  LLM judge: calling completion endpoint...")
     try:
-        logger.info("  Calling LLM judge...")
         llm_response = call_judge_llm(client, system_prompt, user_message, model)
         elapsed = round(time.time() - started_epoch, 3)
         response_text = llm_response["choices"][0]["message"]["content"] or ""
-        logger.info("  LLM judge returned in %.1fs", elapsed)
+        log_dim(f"  LLM judge returned in {elapsed:.1f}s")
     except Exception as exc:
-        logger.error("  LLM judge call FAILED: %s", exc)
+        log_red(f"  LLM judge call FAILED: {exc}")
         elapsed = 0.0
         llm_response = {"model": model, "choices": [{"message": {"content": ""}}]}
         response_text = ""
@@ -221,12 +277,22 @@ def process_file(
         scores = parse_judge_response(response_text, source_names)
 
     if scores is None:
-        # Failed to parse — assign 0 for all sources
-        logger.warning("  Failed to parse judge response, assigning 0 for all sources")
+        log_yellow("  Failed to parse judge response, assigning 0 for all sources")
         scores = {
             src: {"rating": 0, "basis": "Failed to parse judge response"}
             for src in source_names
         }
+
+    # Print scores — always show them
+    score_parts = []
+    for src in source_names:
+        block = scores.get(src, {})
+        if isinstance(block, dict):
+            rating = block.get("rating", block.get("response_score", "?"))
+            score_parts.append(f"{src}: {rating}/10")
+        else:
+            score_parts.append(f"{src}: ?/10")
+    log_green(f"  {' | '.join(score_parts)}")
 
     # Build output
     output: Dict[str, Any] = {
@@ -250,9 +316,9 @@ def process_file(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, sort_keys=True, indent=2)
-        logger.info("Wrote %s", out_path.name)
+        log_dim(f"  → {out_path.name}")
     else:
-        logger.info("Skipping %s (already exists, use --overwrite)", out_path.name)
+        log_dim(f"  ⏭ {out_path.name} (already exists)")
 
     return True
 
@@ -304,24 +370,32 @@ def main():
         default=os.getenv("LITELLM_API_KEY", ""),
         help="API key (default: $LITELLM_API_KEY)",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose (DEBUG) logging",
+    )
 
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger("judge").setLevel(logging.DEBUG)
 
     responses_dir = Path(args.query_responses_dir)
     assessment_dir = Path(args.response_assessment_dir)
 
     # Validate input directory
     if not responses_dir.exists():
-        logger.error("Query responses directory not found: %s", responses_dir)
+        log_red(f"Query responses directory not found: {responses_dir}")
         sys.exit(1)
     if not responses_dir.is_dir():
-        logger.error("Query responses path is not a directory: %s", responses_dir)
+        log_red(f"Query responses path is not a directory: {responses_dir}")
         sys.exit(1)
 
     # Load judge system prompt
     judge_prompt_path = Path(args.prompt_judge)
     if not judge_prompt_path.exists():
-        logger.error("Judge prompt file not found: %s", args.prompt_judge)
+        log_red(f"Judge prompt file not found: {args.prompt_judge}")
         sys.exit(1)
     system_prompt = judge_prompt_path.read_text(encoding="utf-8")
 
@@ -331,27 +405,27 @@ def main():
         api_key=args.api_key,
     )
 
-    # Health check
+    # Health check — dimmed
     try:
         models = client.models.list()
-        logger.info("Connected to %s (model: %s)", args.api_base, args.model)
+        log_dim(f"Connected to {args.api_base} (model: {args.model})")
     except Exception as e:
-        logger.error("Failed to connect to %s: %s", args.api_base, e)
+        log_red(f"Failed to connect to {args.api_base}: {e}")
         sys.exit(1)
 
     # Select files
     files = select_input_files(responses_dir, args.limit)
     if not files and args.limit not in (0, None):
-        logger.error("No JSON files found in %s", responses_dir)
+        log_red(f"No JSON files found in {responses_dir}")
         sys.exit(1)
 
     if args.limit is not None:
-        logger.info("Selected %d input files from %s", len(files), responses_dir)
+        log_key(f"Selected {len(files)} input files from {responses_dir}")
     else:
-        logger.info("Selected all input files from %s", responses_dir)
+        log_key(f"Selected all input files from {responses_dir}")
 
     if args.limit == 0:
-        logger.info("Limit is 0, exiting.")
+        log_key("Limit is 0, exiting.")
         return
 
     assessment_dir.mkdir(parents=True, exist_ok=True)
@@ -369,12 +443,11 @@ def main():
             else:
                 fail_count += 1
         except Exception as e:
-            logger.error("Failed to process %s: %s", fpath.name, e)
+            log_red(f"Failed to process {fpath.name}: {e}")
             fail_count += 1
 
-    logger.info("\nDone. %d succeeded, %d failed out of %d files.",
-                success_count, fail_count, len(files))
-    logger.info("Assessments in: %s", assessment_dir)
+    log_key(f"\nDone. {success_count} succeeded, {fail_count} failed out of {len(files)} files.")
+    log_dim(f"Assessments in: {assessment_dir}")
 
 
 if __name__ == "__main__":

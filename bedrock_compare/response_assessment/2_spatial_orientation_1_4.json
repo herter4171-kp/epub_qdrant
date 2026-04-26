@@ -1,0 +1,59 @@
+{
+  "category": "spatial_orientation",
+  "input_file": "2_spatial_orientation_1_4.json",
+  "input_id": null,
+  "judge_elapsed_seconds": 17.559,
+  "judge_model": "gemma4",
+  "judged_at": "2026-04-26T01:00:55.192206+00:00",
+  "proficiency": 1,
+  "prompt": "If a text passage seems cut off, how do I get the very next chunk from the same document?",
+  "raw_judge_response": "{\n  \"bedrock\": {\n    \"retrieval_score\": 10,\n    \"retrieval_basis\": \"The retrieved text explicitly contains the exact strategy for handling truncated passages, directly answering the user's question.\",\n    \"response_score\": 10,\n    \"response_basis\": \"The response accurately and concisely applies the retrieved strategy, directly addressing the prompt without unnecessary fluff or hallucination.\"\n  },\n  \"papers\": {\n    \"retrieval_score\": 5,\n    \"retrieval_basis\": \"The retrieved snippets touch on RAG surveys and chunking methods but lack the specific procedural answer requested.\",\n    \"response_score\": 6,\n    \"response_basis\": \"The response provides a structured, plausible approach based on general RAG knowledge but relies on inference rather than the provided retrieval.\"\n  },\n  \"papers_semantic\": {\n    \"retrieval_score\": 5,\n    \"retrieval_basis\": \"The retrieval mentions a chunk reading tool but provides insufficient context to answer the question.\",\n    \"response_score\": 1,\n    \"response_basis\": \"The model failed to generate any response, leaving the user's question completely unanswered.\"\n  },\n  \"source_verdict\": {\n    \"title\": \"Chunking and Retrieval Strategy Documentation\",\n    \"source_file\": \"bedrock\"\n  }\n}",
+  "responses": {
+    "bedrock": {
+      "completed_at": "2026-04-26T01:00:37.629529+00:00",
+      "elapsed_seconds": 4.197,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "If a text passage appears cut off or incomplete, you should retrieve the **adjacent chunks** to capture the missing context. \n\nAccording to the documentation, if information seems truncated, you should read the adjacent chunks (indicated as `+/- 1` from the current chunk) to ensure complete information is gathered [2]. This is particularly important because sentences are sometimes split across chunk boundaries, and retrieving the adjacent segment ensures the full sentence remains accessible [3].",
+      "started_at": "2026-04-26T01:00:33.432411+00:00"
+    },
+    "papers": {
+      "completed_at": "2026-04-26T01:00:06.808256+00:00",
+      "elapsed_seconds": 12.793,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "To retrieve the very next chunk from a document when a passage appears cut off, you generally need to rely on the **chunking strategy** used to segment the text or the **document indexing system** your retrieval tool uses. Based on recent frameworks and surveys on Retrieval Augmented Generation (RAG) and document understanding, here are the common methods to achieve this:\n\n### 1. Use Structural Identifiers (Section/Page IDs)\nMany advanced document processing frameworks decompose documents into logical parts and assign unique identifiers to them. To get the next chunk, you should request the next identifier in the sequence.\n*   **Section and Page Navigation**: Systems like **DocDancer** use **section IDs** and **page numbers** to pinpoint information [4]. If you are in a specific section, you can request the tool to \"Read\" the next sequential section ID to retrieve the immediate following text [4].\n*   **Hierarchical Traversal**: For long documents, methods exist to infer hierarchical levels (titles, sections) to ensure fine-grained segmentation, allowing you to navigate down the structure to find the next block of text [4].\n\n### 2. Leverage Sequential Chunking Strategies\nThe way a document was originally split determines how you access its neighbors. If the document uses specific chunking strategies, you can often access the next piece by index or overlap.\n*   **Sliding Window / Recursive Chunking**: Strategies such as **sliding window chunking** or **recursive chunking** are commonly used to segment long texts [1]. These methods process text sequentially. If your retrieval system supports index-based access, you can fetch the chunk at the next index number or the next overlap window [1].\n*   **Incremental Retrieval**: Some approaches refine text into segments that maintain information completeness [1]. In these setups, you may need to explicitly instruct the retrieval agent to look for text segments that follow the current context boundaries rather than just searching by semantic relevance [1].\n\n### 3. Iterative Search\nIf the system relies on semantic search rather than strict sequential IDs, the \"next\" chunk might be identified by its proximity to the current one in the document embedding space.\n*   **Sequential Search**: You can formulate a query that includes a constraint for the document ID (if available) and ask for the text segment following the current context [4].\n\n**Summary Recommendation:**\nIf your system supports it, the most reliable method is to use **Document IDs** (like Section IDs or Page Numbers) to navigate sequentially [4]. If you are limited to semantic search, check if your chunking strategy is **sliding window** or **recursive**, as these are designed for sequential processing [1].\n\n**Sources:**\n*   **Chunking Strategies**: [1] Zhao et al., *Retrieval Augmented Generation (RAG) and Beyond: A Comprehensive Survey on How to Make your LLMs use External Data More Wisely*, arXiv:2409.14924.\n*   **Document Navigation**: [4] Zhang et al., *DocDancer: Towards Agentic Document-Grounded Information Seeking*, arXiv:2601.05163.",
+      "started_at": "2026-04-26T00:59:54.015338+00:00"
+    },
+    "papers_semantic": {
+      "completed_at": "2026-04-26T01:00:33.432402+00:00",
+      "elapsed_seconds": 26.624,
+      "error": null,
+      "model": "gemma4",
+      "response_text": "",
+      "started_at": "2026-04-26T01:00:06.808264+00:00"
+    }
+  },
+  "scores": {
+    "bedrock": {
+      "response_basis": "The response accurately and concisely applies the retrieved strategy, directly addressing the prompt without unnecessary fluff or hallucination.",
+      "response_score": 10,
+      "retrieval_basis": "The retrieved text explicitly contains the exact strategy for handling truncated passages, directly answering the user's question.",
+      "retrieval_score": 10
+    },
+    "papers": {
+      "response_basis": "The response provides a structured, plausible approach based on general RAG knowledge but relies on inference rather than the provided retrieval.",
+      "response_score": 6,
+      "retrieval_basis": "The retrieved snippets touch on RAG surveys and chunking methods but lack the specific procedural answer requested.",
+      "retrieval_score": 5
+    },
+    "papers_semantic": {
+      "response_basis": "The model failed to generate any response, leaving the user's question completely unanswered.",
+      "response_score": 1,
+      "retrieval_basis": "The retrieval mentions a chunk reading tool but provides insufficient context to answer the question.",
+      "retrieval_score": 5
+    }
+  },
+  "timestamp": "2026-04-25T19:13:50.290234+00:00",
+  "topk": 4
+}
