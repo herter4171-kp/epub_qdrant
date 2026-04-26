@@ -5,6 +5,12 @@ Walks the MinerU output tree, discovers all content_list_v2.json files,
 parses them, chunks sections, and runs the full two-pass dense + sparse
 embedding pipeline — identical to ingest_fresh.py's pattern.
 
+Two-phase approach (GPU-efficient):
+  Phase 1: chunk ALL papers → embed ALL dense in big batches → upsert all
+  Phase 2: scroll entire collection → embed ALL sparse in big batches → upsert all
+
+Single-doc mode (--arxiv-id): per-paper dense-then-sparse for debugging.
+
 Usage:
     python scripts/ingest_mineru_json.py --collection papers-semantic \\
         [--base-dir /tank/scraps/mineru_output] \\
@@ -19,8 +25,9 @@ import json
 import logging
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -150,7 +157,7 @@ def read_sidecar(metadata_dir: str, arxiv_id: str) -> Dict[str, str]:
         return {}
 
 
-# ── Two-pass embedding ───────────────────────────────────────────────────────
+# ── Sparse helpers ────────────────────────────────────────────────────────────
 
 def _chunk_text_for_sparse(text: str) -> List[str]:
     """Split text into <=512-word windows for sparse embedding."""
@@ -173,18 +180,19 @@ def _aggregate_sparse(vecs: List[dict]) -> dict:
     return {"indices": list(agg.keys()), "values": list(agg.values())}
 
 
-def ingest_paper(
-    client: QdrantClient,
-    collection: str,
+# ── Single-paper helpers (for --arxiv-id mode) ────────────────────────────────
+
+def _chunk_paper_to_points(
     arxiv_id: str,
     json_path: Path,
     metadata_dir: str,
     token_counter,
     config: ChunkConfig,
-) -> Optional[tuple]:
+    point_offset: int,
+) -> Optional[Tuple[List[PointStruct], int, int, int]]:
     """Parse one JSON, chunk sections, embed dense, upsert.
 
-    Returns (sections, chunks, tokens) on success, or None on failure.
+    Returns (points, sections, chunks, tokens) or None on failure.
     """
     # Parse JSON → sections
     try:
@@ -195,7 +203,7 @@ def ingest_paper(
 
     if not json_sections:
         log.warning("JSON %s produced 0 sections — skipping", json_path)
-        return (0, 0, 0)
+        return ([], 0, 0, 0)
 
     # Read sidecar metadata
     meta = read_sidecar(metadata_dir, arxiv_id)
@@ -212,15 +220,15 @@ def ingest_paper(
     authors = meta.get("authors", "")
     publish_date = meta.get("publish_date", "")
 
-    # Chunk each section
-    all_chunks: List[tuple] = []  # (text, metadata)
+    # Chunk each section (no embedding_fn — dense done in batch below)
+    all_chunks: List[Tuple[str, Dict]] = []  # (text, metadata)
     for js in json_sections:
         results = chunk_section(
             title=js.title,
             content=js.content,
             config=config,
             token_counter=token_counter,
-            embedding_fn=None,  # dense embedding done in batch below
+            embedding_fn=None,
         )
         chunk_count = len(results)
         for cr in results:
@@ -245,7 +253,7 @@ def ingest_paper(
             ))
 
     if not all_chunks:
-        return (len(json_sections), 0, 0)
+        return ([], len(json_sections), 0, 0)
 
     # Embed dense in batches
     texts = [c[0] for c in all_chunks]
@@ -254,13 +262,7 @@ def ingest_paper(
         batch = texts[b : b + DENSE_BATCH]
         all_vecs.extend(get_dense_vectors(batch))
 
-    # Upsert with dense vectors
-    # Point IDs: query current collection count so IDs are globally unique across papers
-    try:
-        point_offset = client.get_collection(collection).points_count or 0
-    except Exception:
-        point_offset = 0
-
+    # Build points
     points: List[PointStruct] = []
     for idx, ((chunk_text, metadata), vec) in enumerate(zip(all_chunks, all_vecs)):
         points.append(PointStruct(
@@ -269,10 +271,8 @@ def ingest_paper(
             payload={"text": chunk_text, **metadata},
         ))
 
-    client.upsert(collection_name=collection, points=points)
-
     total_tokens = sum(c[1]["token_count"] for c in all_chunks)
-    return (len(json_sections), len(all_chunks), total_tokens)
+    return (points, len(json_sections), len(all_chunks), total_tokens)
 
 
 def pass2_sparse_for_paper(
@@ -290,7 +290,7 @@ def pass2_sparse_for_paper(
     total = 0
 
     while True:
-        points, next_offset = client.scroll(
+        pts, next_offset = client.scroll(
             collection_name=collection,
             limit=SCROLL_BATCH,
             offset=offset,
@@ -298,11 +298,11 @@ def pass2_sparse_for_paper(
             with_payload=["text"],
             query_filter=f,
         )
-        if not points:
+        if not pts:
             break
 
         upsert_points: List[PointVectors] = []
-        for p in points:
+        for p in pts:
             text = (p.payload.get("text") or "").strip()
             if not text:
                 continue
@@ -389,105 +389,293 @@ def main():
     # Discover JSONs
     jsons = discover_json_files(base_dir)
 
-    # Filter by arxiv_id if specified
+    # Filter by arxiv_id if specified — single-paper mode (per-doc dense+sparse)
     if args.arxiv_id:
         normalized = args.arxiv_id.replace(".", "_")
         if normalized not in jsons:
             log.error("No JSON found for arxiv_id=%s", args.arxiv_id)
             sys.exit(1)
-        jsons = {normalized: jsons[normalized]}
-        log.info("Single paper mode: %s", args.arxiv_id)
+
+        arxiv_id = normalized
+        json_path = jsons[arxiv_id]
+
+        # Get current point offset for unique IDs
+        try:
+            point_offset = client.get_collection(args.collection).points_count or 0
+        except Exception:
+            point_offset = 0
+
+        # Chunk + embed dense for this single paper
+        result = _chunk_paper_to_points(
+            arxiv_id, json_path, args.metadata_dir,
+            token_counter, config, point_offset,
+        )
+        if result is None:
+            log.error("Single paper %s — FAILED", args.arxiv_id)
+            sys.exit(1)
+
+        points, sections, chunks, tokens = result
+        client.upsert(collection_name=args.collection, points=points)
+        log.info("  dense: %d points upserted", len(points))
+
+        # Pass 2: sparse for this paper
+        sparse_count = pass2_sparse_for_paper(client, args.collection, arxiv_id)
+        log.info("  [%s] %d sections, %d chunks, %d tokens, %d sparse vectors",
+                 args.arxiv_id, sections, chunks, tokens, sparse_count)
+        return
+
+    # ── Multi-paper mode: two-phase (GPU-efficient) ──────────────────────
 
     # Apply limit
     arxiv_ids = sorted(jsons.keys())
     if args.limit:
         arxiv_ids = arxiv_ids[:args.limit]
 
-    # Process each paper
-    total_processed = 0
-    total_chunks = 0
+    log.info("Multi-paper mode: %d papers, two-phase embedding", len(arxiv_ids))
+
+    # ── Phase 1: chunk ALL → embed ALL dense → upsert ALL ────────────────
+
+    # First, check which papers are already ingested (skip them entirely)
+    to_process: List[str] = []
     total_skipped = 0
-    total_failed = 0
 
-    for i, arxiv_id in enumerate(arxiv_ids, 1):
-        json_path = jsons[arxiv_id]
-
-        # Idempotency: check if already ingested
+    for arxiv_id in arxiv_ids:
         try:
-            info = client.get_collection(args.collection)
-        except Exception:
-            info = None
-
-        if info is not None:
-            # Count this paper's points
             f = Filter(must=[FieldCondition(
                 key="arxiv_id", match=MatchValue(value=arxiv_id),
             )])
-            try:
-                scroll_pts, _ = client.scroll(
-                    collection_name=args.collection,
-                    limit=1,
-                    with_payload=False,
-                    with_vectors=False,
-                    query_filter=f,
-                )
-                if scroll_pts:
-                    # Already has this paper — count total points for it
-                    count = 0
-                    offset2 = None
-                    while True:
-                        pts, next_off = client.scroll(
-                            collection_name=args.collection,
-                            limit=SCROLL_BATCH,
-                            offset=offset2,
-                            with_payload=False,
-                            with_vectors=False,
-                            query_filter=f,
-                        )
-                        if not pts:
-                            break
-                        count += len(pts)
-                        if next_off is None:
-                            break
-                        offset2 = next_off
-                    total_skipped += count
-                    log.info("  [%d/%d] %s — already ingested (%d chunks), skipping",
-                             i, len(arxiv_ids), arxiv_id, count)
-                    continue
-            except Exception:
-                pass
+            scroll_pts, _ = client.scroll(
+                collection_name=args.collection,
+                limit=1,
+                with_payload=False,
+                with_vectors=False,
+                query_filter=f,
+            )
+            if scroll_pts:
+                # Count points for this paper
+                count = 0
+                off = None
+                while True:
+                    pts2, noff = client.scroll(
+                        collection_name=args.collection,
+                        limit=SCROLL_BATCH,
+                        offset=off,
+                        with_payload=False,
+                        with_vectors=False,
+                        query_filter=f,
+                    )
+                    if not pts2:
+                        break
+                    count += len(pts2)
+                    if noff is None:
+                        break
+                    off = noff
+                total_skipped += count
+                log.info("  [%d/%d] %s — already ingested (%d chunks), skipping",
+                         len(to_process) + 1, len(arxiv_ids), arxiv_id, count)
+                continue
+        except Exception:
+            pass
+        to_process.append(arxiv_id)
 
-        # Ingest this paper
-        result = ingest_paper(
-            client, args.collection, arxiv_id, json_path,
-            args.metadata_dir, token_counter, config,
-        )
+    log.info("Phase 1: chunking %d papers (skipped %d)", len(to_process), total_skipped)
 
-        if result is None:
-            log.error("  [%d/%d] %s — FAILED", i, len(arxiv_ids), arxiv_id)
-            total_failed += 1
+    # Step 1a: chunk ALL papers into (text, metadata) tuples
+    all_chunks: List[Tuple[str, Dict]] = []       # (text, metadata)
+    all_ids: List[Tuple[str, int, int]] = []       # (arxiv_id, chunk_start_idx, chunk_count)
+    paper_info: Dict[str, dict] = {}               # arxiv_id → {title, category, ...}
+    paper_sections: Dict[str, int] = {}             # arxiv_id → section_count
+
+    # Track how many points are already in the collection for ID assignment
+    try:
+        point_offset = client.get_collection(args.collection).points_count or 0
+    except Exception:
+        point_offset = 0
+
+    current_chunk_idx = 0
+
+    for i, arxiv_id in enumerate(to_process, 1):
+        json_path = jsons[arxiv_id]
+
+        # Parse JSON → sections
+        try:
+            json_sections = parse_content_list(json_path)
+        except Exception as e:
+            log.error("  [%d/%d] JSON parse failed for %s: %s", i, len(to_process), json_path, e)
             continue
 
-        sections, chunks, tokens = result
-        total_processed += 1
-        total_chunks += chunks
+        if not json_sections:
+            log.warning("  [%d/%d] JSON %s produced 0 sections — skipping", i, len(to_process), json_path)
+            continue
 
-        # Pass 2: sparse embedding for this paper's points
-        pass2_sparse_for_paper(client, args.collection, arxiv_id)
+        # Read sidecar metadata
+        meta = read_sidecar(args.metadata_dir, arxiv_id)
+        arxiv_id_dot = meta.get("arxiv_id", arxiv_id.replace("_", "."))
+        title = meta.get("title", arxiv_id)
+        category = meta.get("category", "")
+        subcategory = meta.get("subcategory", "")
+        authors = meta.get("authors", "")
+        publish_date = meta.get("publish_date", "")
 
-        log.info("  [%d/%d] %s — %d sections, %d chunks, %d tokens",
-                 i, len(arxiv_ids), arxiv_id, sections, chunks, tokens)
+        paper_info[arxiv_id] = {
+            "arxiv_id": arxiv_id_dot,
+            "title": title,
+            "category": category,
+            "subcategory": subcategory,
+            "authors": authors,
+            "publish_date": publish_date,
+        }
 
-    # Final summary
+        # Chunk each section
+        chunks_for_paper: List[Tuple[str, Dict]] = []
+        for js in json_sections:
+            results = chunk_section(
+                title=js.title,
+                content=js.content,
+                config=config,
+                token_counter=token_counter,
+                embedding_fn=None,  # dense embedding done in batch below
+            )
+            chunk_count = len(results)
+            for cr in results:
+                chunks_for_paper.append((
+                    cr.text,
+                    {
+                        "doc_type": "paper",
+                        "source_file": f"{arxiv_id}.pdf",
+                        "title": title or "",
+                        "arxiv_id": arxiv_id_dot,
+                        "category": category or "",
+                        "subcategory": subcategory or "",
+                        "authors": authors or "",
+                        "publish_date": publish_date or "",
+                        "section_title": cr.section_title or "",
+                        "chunk_index": cr.chunk_index,
+                        "chunk_count": chunk_count,
+                        "token_count": cr.token_count,
+                        "has_heading_context": cr.has_heading_context,
+                        "heading_level": js.heading_level,
+                    },
+                ))
+
+        if not chunks_for_paper:
+            paper_sections[arxiv_id] = 0
+            continue
+
+        all_ids.append((arxiv_id, current_chunk_idx, len(chunks_for_paper)))
+        current_chunk_idx += len(chunks_for_paper)
+        all_chunks.extend(chunks_for_paper)
+        paper_sections[arxiv_id] = len(json_sections)
+
+        log.info("  [%d/%d] %s — %d sections, %d chunks buffered",
+                 i, len(to_process), arxiv_id, len(json_sections), len(chunks_for_paper))
+
+    total_buffered = len(all_chunks)
+    log.info("Phase 1a: %d total chunks buffered across %d papers", total_buffered, len(to_process))
+
+    if total_buffered == 0:
+        log.info("No chunks to embed. Done.")
+        return
+
+    # Step 1b: embed ALL dense in batches
+    all_texts = [c[0] for c in all_chunks]
+    log.info("Phase 1b: embedding %d texts dense...", total_buffered)
+
+    all_vecs: List[List[float]] = []
+    for b in range(0, total_buffered, DENSE_BATCH):
+        batch = all_texts[b : b + DENSE_BATCH]
+        all_vecs.extend(get_dense_vectors(batch))
+
+    log.info("Phase 1b: dense embedding done (%d vectors)", len(all_vecs))
+
+    # Step 1c: upsert ALL points with dense vectors
+    log.info("Phase 1c: upserting %d points with dense vectors", total_buffered)
+
+    points: List[PointStruct] = []
+    for idx, ((chunk_text, metadata), vec) in enumerate(zip(all_chunks, all_vecs)):
+        points.append(PointStruct(
+            id=point_offset + idx,
+            vector={"dense": vec},
+            payload={"text": chunk_text, **metadata},
+        ))
+
+    client.upsert(collection_name=args.collection, points=points)
+    log.info("Phase 1c: %d points upserted", len(points))
+
+    # ── Phase 2: scroll entire collection → embed ALL sparse → upsert ALL ──
+
+    info = client.get_collection(args.collection)
+    total_points = info.points_count or 0
+    log.info("Phase 2: scrolling %d points for sparse embedding", total_points)
+
+    sparse_offset = None
+    total_sparse = 0
+    sparse_points: List[PointVectors] = []
+
+    while True:
+        pts, next_offset = client.scroll(
+            collection_name=args.collection,
+            limit=SCROLL_BATCH,
+            offset=sparse_offset,
+            with_vectors=False,
+            with_payload=["text"],
+        )
+        if not pts:
+            break
+
+        for p in pts:
+            text = (p.payload.get("text") or "").strip()
+            if not text:
+                continue
+
+            windows = _chunk_text_for_sparse(text)
+            all_sparse: List[dict] = []
+            for b in range(0, len(windows), SPARSE_BATCH):
+                sub = windows[b : b + SPARSE_BATCH]
+                all_sparse.extend(get_sparse_vectors(sub, is_query=False))
+
+            sv = _aggregate_sparse(all_sparse)
+            sparse_points.append(PointVectors(
+                id=p.id,
+                vector={"sparse": SparseVector(indices=sv["indices"], values=sv["values"])},
+            ))
+
+        # Batch upsert sparse vectors for this page
+        if sparse_points:
+            client.update_vectors(collection_name=args.collection, points=sparse_points)
+            total_sparse += len(sparse_points)
+            log.info("  [sparse] %d / %d", total_sparse, total_points)
+            sparse_points = []
+
+        if next_offset is None:
+            break
+        sparse_offset = next_offset
+
+    # Flush any remaining sparse points
+    if sparse_points:
+        client.update_vectors(collection_name=args.collection, points=sparse_points)
+        total_sparse += len(sparse_points)
+
+    log.info("Phase 2: %d points with sparse vectors upserted", total_sparse)
+
+    # ── Summary ──────────────────────────────────────────────────────────
+
+    total_chunks_upserted = sum(count for _, _, count in all_ids)
+    total_tokens = 0
+    for arxiv_id, start, count in all_ids:
+        for chunk_text, metadata in all_chunks[start:start+count]:
+            total_tokens += metadata.get("token_count", 0)
+
     log.info("=" * 60)
     log.info("SUMMARY:")
-    log.info("  Processed: %d", total_processed)
-    log.info("  Chunks:    %d", total_chunks)
-    log.info("  Skipped:   %d", total_skipped)
-    log.info("  Failed:    %d", total_failed)
+    log.info("  Papers processed: %d", len(to_process))
+    log.info("  Papers skipped:   %d", total_skipped)
+    log.info("  Total chunks:     %d", total_chunks_upserted)
+    log.info("  Total tokens:     %d", total_tokens)
+    log.info("  Dense points:     %d", total_buffered)
+    log.info("  Sparse vectors:   %d", total_sparse)
     log.info("=" * 60)
 
 
 if __name__ == "__main__":
     main()
-

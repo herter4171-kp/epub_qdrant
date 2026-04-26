@@ -46,7 +46,7 @@ class Settings:
     EMBEDDING_SERVER_URL: str = os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8100")
 
     # Chunking
-    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "2048"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
 
     # Semantic chunking
