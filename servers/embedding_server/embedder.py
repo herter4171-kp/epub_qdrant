@@ -5,12 +5,13 @@ import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Dict, List
 
 import torch
 import torch.nn as nn
 from safetensors.torch import safe_open
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,14 @@ SAE_ID = "layer_12_width_65k_l0_medium"
 SAE_HOOK_LAYER = 12          # resid_post after layer 12
 SPLADE_THRESHOLD = 0.01      # prune near-zero activations before returning
 INTERNAL_BATCH_SIZE = 32     # micro-batch size for GPU inference
+
+# Query Rewriter (IT model) paths
+IT_MODEL_LOCAL_PATH = "/tank/huggingface/gemma-3-270m-it"
+IT_MAX_NEW_TOKENS = 512
+IT_TEMPERATURE = float(os.getenv("IT_TEMPERATURE", "0.05"))
+
+# Path to the system prompt file (same directory as this module)
+_PROMPT_FILE = Path(__file__).parent / "rewrite_prompt.txt"
 
 
 # ── Minimal JumpReLU SAE ──────────────────────────────────────────────────────
@@ -300,4 +309,106 @@ class SparseEmbedder:
         return await loop.run_in_executor(
             _executor,
             lambda: self.encode(texts, is_query),
+        )
+
+
+# ── QueryRewriter ─────────────────────────────────────────────────────────────
+
+class QueryRewriter:
+    """Rewrites user prompts using gemma-scope-2-270m-it for better retrieval.
+
+    Loads the Instruct-Tuned Gemma Scope 2 model from local disk and uses it
+    to reformulate natural-language queries into precise technical search queries
+    optimized for retrieving AI/ML research papers.
+    """
+
+    def __init__(self):
+        self._load_model()
+        self._load_prompt()
+
+    def _load_model(self):
+        """Load the IT model tokenizer and causal LM from local disk."""
+        logger.info("Loading Gemma Scope 2 IT model from %s", IT_MODEL_LOCAL_PATH)
+        self.tokenizer = AutoTokenizer.from_pretrained(IT_MODEL_LOCAL_PATH)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            IT_MODEL_LOCAL_PATH,
+            torch_dtype=torch.bfloat16,
+            device_map="cuda",
+        ).eval()
+        allocated = torch.cuda.memory_allocated() / 1e9
+        logger.info("IT model loaded. VRAM allocated: %.2f GB", allocated)
+
+        assert next(self.model.parameters()).device.type == "cuda", \
+            "FATAL: IT model is on CPU. Check device_map."
+
+    def _load_prompt(self):
+        """Load the system prompt from the accompanying text file."""
+        if _PROMPT_FILE.exists():
+            self.system_prompt = _PROMPT_FILE.read_text(encoding="utf-8").strip()
+        else:
+            # Fallback if the file is missing (shouldn't happen, but be safe)
+            self.system_prompt = (
+                "You are a technical query reformulation engine. Transform the user's "
+                "natural-language input into a precise, effective search query optimized "
+                "for retrieving AI/ML research papers. Return ONLY the reformulated query "
+                "text. No explanation, no preamble, no quotes."
+            )
+        logger.info("System prompt loaded (%d characters)", len(self.system_prompt))
+
+    def rewrite(self, query: str) -> str:
+        """Reformulate a user query into a precise technical search query.
+
+        Args:
+            query: The raw user input (natural language, potentially imprecise).
+
+        Returns:
+            Reformulated query string optimized for retrieval.
+        """
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": query},
+        ]
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+        input_ids = self.tokenizer(text, return_tensors="pt").input_ids.to("cuda")
+        attention_mask = torch.ones_like(input_ids)
+
+        with torch.no_grad():
+            gen_kwargs = dict(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=IT_MAX_NEW_TOKENS,
+                do_sample=IT_TEMPERATURE > 0.1,
+                pad_token_id=self.tokenizer.eos_token_id,
+            )
+            if IT_TEMPERATURE > 0.1:
+                gen_kwargs["temperature"] = IT_TEMPERATURE
+            outputs = self.model.generate(**gen_kwargs)
+
+        # Decode only the generated tokens (skip the prompt)
+        generated = outputs[0][input_ids.shape[1]:]
+        result = self.tokenizer.decode(generated, skip_special_tokens=True).strip()
+
+        # Clean up: take only the first meaningful line if the model adds extras
+        if "\n\n" in result:
+            result = result.split("\n\n")[0].strip()
+        if "\n" in result:
+            result = result.split("\n")[0].strip()
+
+        logger.info("Rewrote query (%d → %d chars)", len(query), len(result))
+        return result
+
+    async def rewrite_async(self, query: str) -> str:
+        """Async wrapper for use in FastAPI async routes.
+
+        Pushes GPU inference to the thread pool so the event loop is not blocked.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _executor,
+            lambda: self.rewrite(query),
         )

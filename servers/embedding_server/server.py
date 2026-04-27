@@ -4,6 +4,8 @@ import logging
 import os
 from typing import List, Optional
 
+from pydantic import BaseModel
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -11,6 +13,7 @@ from servers.embedding_server.embedder import (
     DENSE_MODEL,
     BACKBONE_LOCAL_PATH,
     DenseEmbedder,
+    QueryRewriter,
     SparseEmbedder,
 )
 
@@ -48,16 +51,23 @@ class ModelsResponse(BaseModel):
     dense: str
     sparse: str
 
+class RewriteRequest(BaseModel):
+    query: str
+
+class RewriteResponse(BaseModel):
+    rewritten: str
+
 
 # ── Model singletons ─────────────────────────────────────────────────
 
 _dense: Optional[DenseEmbedder] = None
 _sparse: Optional[SparseEmbedder] = None
+_rewriter: Optional[QueryRewriter] = None
 
 
 def _load_models():
-    """Load both models into GPU memory."""
-    global _dense, _sparse
+    """Load all models into GPU memory."""
+    global _dense, _sparse, _rewriter
     try:
         _dense = DenseEmbedder()
     except Exception:
@@ -66,6 +76,10 @@ def _load_models():
         _sparse = SparseEmbedder()
     except Exception:
         logger.exception("Failed to load sparse model")
+    try:
+        _rewriter = QueryRewriter()
+    except Exception:
+        logger.exception("Failed to load query rewriter")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────
@@ -103,6 +117,19 @@ async def embed_sparse(req: SparseEmbedRequest):
     return SparseEmbedResponse(vectors=vectors)
 
 
+@app.post("/rewrite", response_model=RewriteResponse)
+async def rewrite_query(req: RewriteRequest):
+    """Reformulate a user query into a precise technical search query.
+
+    Uses the IT model to rewrite natural-language prompts into queries
+    optimized for retrieving AI/ML research papers from the vector store.
+    """
+    if _rewriter is None:
+        raise HTTPException(status_code=503, detail="Query rewriter not loaded")
+    rewritten = await _rewriter.rewrite_async(req.query)
+    return RewriteResponse(rewritten=rewritten)
+
+
 @app.get("/health", response_model=HealthResponse)
 def health():
     ok = _dense is not None and _sparse is not None
@@ -115,7 +142,14 @@ def health():
 
 @app.get("/models", response_model=ModelsResponse)
 def models():
+    from servers.embedding_server.embedder import IT_MODEL_LOCAL_PATH
     return ModelsResponse(dense=DENSE_MODEL, sparse=BACKBONE_LOCAL_PATH)
+
+
+@app.get("/rewrite/status", response_model=bool)
+def rewrite_status():
+    """Check whether the query rewriter is loaded and ready."""
+    return _rewriter is not None
 
 
 # ── Entry point ───────────────────────────────────────────────────────

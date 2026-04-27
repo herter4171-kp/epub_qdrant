@@ -1,0 +1,48 @@
+# Corpus Overview
+
+Knowledge base ID: RQMBIXUSXH
+
+## Core Domains
+
+Based on analysis of the papers in the knowledge base:
+
+1. **Retrieval-Augmented Generation (RAG) & Retrieval Systems**
+2. **LLM Agents for Scientific Research & Discovery**
+3. **Paper Evaluation & Benchmarking**
+4. **Survey Generation & Topic Mining**
+5. **Embedding Models & Vector Search**
+6. **LLM Reasoning & Agentic Systems**
+7. **Machine Learning Engineering & Evaluation**
+
+## Topics & Representative Queries
+
+### Retrieval-Augmented Generation (RAG)
+
+- How to combine dense and sparse embeddings?
+- Why does chunking break retrieval accuracy?
+- Best practices for RAG system design?
+- How to improve RAG for multi-hop queries?
+- What are failure modes of retrieval-augmented generation?
+
+### LLM Agents for Research
+
+- How to use AI agents for scientific discovery?
+- Can LLMs write research papers?
+- How to automate literature reviews with AI?
+- Best agents for research assistance?
+
+### Paper Evaluation & Benchmarks
+
+- How to evaluate AI-generated research papers?
+- What benchmarks exist for paper quality?
+- Can LLMs detect fake scientific papers?
+
+### Embedding Models & Vector Search
+
+- How to choose embedding models for retrieval?
+- What are sparse vs dense embeddings for search?
+- How does hybrid retrieval compare to pure dense?
+
+## Additions
+
+_Add new topics and representative queries as they emerge._
