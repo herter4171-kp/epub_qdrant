@@ -1,4 +1,4 @@
-"""Unified embedding server — dense (Snowflake) + sparse (MiniCOIL) on one port."""
+"""Unified embedding server — dense (Snowflake) + sparse (SAE-SPLADE) on one port."""
 
 import logging
 import os
@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from servers.embedding_server.embedder import (
     DENSE_MODEL,
-    SPARSE_MODEL,
+    BACKBONE_LOCAL_PATH,
     DenseEmbedder,
     SparseEmbedder,
 )
@@ -29,6 +29,9 @@ class SparseEmbedRequest(BaseModel):
     texts: List[str]
     is_query: bool = False
 
+
+MAX_TEXTS = 1024
+
 class SparseVector(BaseModel):
     indices: List[int]
     values: List[float]
@@ -45,8 +48,6 @@ class ModelsResponse(BaseModel):
     dense: str
     sparse: str
 
-
-MAX_TEXTS = 1024
 
 # ── Model singletons ─────────────────────────────────────────────────
 
@@ -90,14 +91,14 @@ def embed_dense(req: DenseEmbedRequest):
 
 
 @app.post("/embed_sparse", response_model=SparseEmbedResponse)
-def embed_sparse(req: SparseEmbedRequest):
+async def embed_sparse(req: SparseEmbedRequest):
     if len(req.texts) > MAX_TEXTS:
         raise HTTPException(status_code=400, detail=f"Maximum {MAX_TEXTS} texts per request")
     if not req.texts:
         return SparseEmbedResponse(vectors=[])
     if _sparse is None:
         raise HTTPException(status_code=503, detail="Sparse model not loaded")
-    raw = _sparse.encode(req.texts, is_query=req.is_query)
+    raw = await _sparse.encode_async(req.texts, is_query=req.is_query)
     vectors = [SparseVector(**v) for v in raw]
     return SparseEmbedResponse(vectors=vectors)
 
@@ -114,7 +115,7 @@ def health():
 
 @app.get("/models", response_model=ModelsResponse)
 def models():
-    return ModelsResponse(dense=DENSE_MODEL, sparse=SPARSE_MODEL)
+    return ModelsResponse(dense=DENSE_MODEL, sparse=BACKBONE_LOCAL_PATH)
 
 
 # ── Entry point ───────────────────────────────────────────────────────
