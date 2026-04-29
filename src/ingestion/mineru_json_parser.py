@@ -5,9 +5,10 @@ Reads a MinerU ``content_list_v2.json`` file and produces a list of
 
 Block-type policy:
     - **Include:** ``title``, ``paragraph``, ``list``, ``table``,
-      ``code``, ``algorithm``, ``page_footnote``
+      ``code``, ``algorithm``
     - **Exclude:** ``page_header``, ``page_number``, ``page_aside_text``,
-      ``image``, ``equation_interline``, ``chart``, ``page_footer``
+      ``page_footnote``, ``image``, ``equation_interline``, ``chart``,
+      ``page_footer``
 
 Section exclusion policy:
     - ``references``, ``bibliography`` → excluded at any level
@@ -42,12 +43,12 @@ logger = logging.getLogger(__name__)
 # ── Block-type inventory ──────────────────────────────────────────────────────
 
 INCLUDED_BLOCK_TYPES: frozenset[str] = frozenset({
-    "title", "paragraph", "list", "table", "code", "algorithm", "page_footnote",
+    "title", "paragraph", "list", "table", "code", "algorithm",
 })
 
 EXCLUDED_BLOCK_TYPES: frozenset[str] = frozenset({
     "page_header", "page_number", "page_aside_text",
-    "image", "equation_interline", "chart", "page_footer",
+    "page_footnote", "image", "equation_interline", "chart", "page_footer",
 })
 
 DEFAULT_MINERU_OUTPUT_DIR: str = "./mineru_output"
@@ -372,19 +373,7 @@ def parse_content_list(path: Union[str, Path]) -> List[JsonSection]:
                         preamble_parts.append(text)
                 continue
 
-            # ── Page footnote block ──
-            if block_type == "page_footnote":
-                content_data = block.get("content", {})
-                spans = content_data.get("page_footnote_content", []) if isinstance(content_data, dict) else []
-                text = _assemble_inline(spans) if spans else ""
-                if text.strip():
-                    if current_section is not None:
-                        section_content_parts.append(text)
-                    else:
-                        preamble_parts.append(text)
-                continue
-
-    # ── Finalize last section ──
+    # ── Finalize
     if current_section is not None:
         content = "\n\n".join(section_content_parts) if section_content_parts else ""
         if content.strip():

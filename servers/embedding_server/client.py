@@ -13,10 +13,8 @@ Usage:
     rewritten = rewrite_query("how do we handle salt leaks?")
     ok = health_check()
 
-The dense/sparse embedding functions automatically rewrite queries via the
-IT model before sending to the embedding endpoints.  The original and
-rewritten queries are logged at INFO level.  Callers do not need to
-call rewrite_query() manually unless they want the raw rewritten text.
+The embedding functions do NOT rewrite — they pass texts through verbatim.
+Use rewrite_query() at the agent/client layer for query-time reformulation.
 """
 
 import logging
@@ -29,7 +27,6 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# Ensure .env is loaded before reading env vars
 from dotenv import load_dotenv
 _env_path = Path(__file__).parent.parent.parent / ".env"
 if _env_path.exists():
@@ -39,22 +36,25 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_SERVER_URL = os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8100")
 
-# Per-request timeout: (connect, read).  Connect should be fast on LAN;
-# read can be slow when the GPU is saturated.
 _TIMEOUT = (10, 300)
 
-# Retry forever with backoff — the server is alive but busy.
+# Only retry on gateway errors — 500 is handled manually below because
+# urllib3 Retry won't resend POST bodies reliably on 500.
 _RETRY = Retry(
-    total=None,            # no cap on total retries
-    connect=None,          # no cap on connect retries
-    read=None,             # no cap on read retries
-    backoff_factor=2,      # 2s, 4s, 8s, 16s, … between retries
+    total=None,
+    connect=None,
+    read=None,
+    backoff_factor=2,
     status_forcelist=[502, 503, 504],
     allowed_methods=["POST", "GET"],
 )
 
+# Delays between 500 retries — CUDA TDR recovery typically takes 2-5s,
+# but give it more room in case the server needs to reload models.
+_500_RETRY_DELAYS = [5, 10, 20, 40, 60]  # seconds
+
+
 def _session() -> requests.Session:
-    """Build a requests Session with unlimited retries."""
     s = requests.Session()
     adapter = HTTPAdapter(max_retries=_RETRY)
     s.mount("http://", adapter)
@@ -64,88 +64,84 @@ def _session() -> requests.Session:
 _sess = _session()
 
 
-def _rewrite(texts: List[str]) -> List[str]:
-    """Rewrite a batch of queries via the IT model.
+def _post_with_500_retry(url: str, payload: dict) -> dict:
+    """POST with manual retry on 500 (CUDA crash / kernel timeout).
 
-    Logs the original and rewritten text at INFO level.
-    Returns the rewritten queries (one-to-one mapping).
+    urllib3 Retry won't resend POST bodies on 500, so we handle it here.
+    Waits progressively longer between attempts so the server has time to
+    recover before we hammer it again.
     """
-    url = f"{EMBEDDING_SERVER_URL}/rewrite"
-    resp = _sess.post(
-        url,
-        json={"query": texts[0]},
-        timeout=_TIMEOUT,
-    )
-    if not resp.ok:
-        logger.warning("Rewrite failed (%d), using original query: %s", resp.status_code, resp.text)
-        return texts
-    rewritten = resp.json().get("rewritten", texts[0])
-    logger.info("Rewrite: '%s' → '%s'", texts[0], rewritten)
-    return [rewritten]
+    for attempt, delay in enumerate(_500_RETRY_DELAYS + [None], start=1):
+        resp = _sess.post(url, json=payload, timeout=_TIMEOUT)
+        if resp.status_code != 500:
+            resp.raise_for_status()
+            return resp.json()
+        if delay is None:
+            resp.raise_for_status()  # exhausted — let it propagate
+        logger.warning(
+            "500 from %s (attempt %d/%d) — CUDA crash? Waiting %ds...",
+            url, attempt, len(_500_RETRY_DELAYS) + 1, delay,
+        )
+        time.sleep(delay)
+
+    raise RuntimeError(f"Unreachable")  # satisfies type checker
 
 
 def get_dense_vectors(texts: List[str], batch_size: int = 128) -> List[List[float]]:
-    """Embed texts into 768-d dense vectors via the unified embedding server.
+    """Embed texts into 768-d dense vectors.
 
-    Automatically rewrites the first query via the IT model before embedding.
-    Only the first text is rewritten; subsequent texts are treated as documents.
+    Slices input into chunks of batch_size and fires one HTTP request per
+    chunk — the server never sees more than batch_size texts at once.
+    Results are returned in input order.
     """
-    texts = _rewrite(texts)
+    if not texts:
+        return []
+
     url = f"{EMBEDDING_SERVER_URL}/embed_dense"
-    resp = _sess.post(
-        url,
-        json={"texts": texts, "batch_size": batch_size},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["vectors"]
+    results: List[List[float]] = []
+    for i in range(0, len(texts), batch_size):
+        data = _post_with_500_retry(url, {
+            "texts": texts[i : i + batch_size],
+            "batch_size": batch_size,
+        })
+        results.extend(data["vectors"])
+    return results
 
 
-def get_sparse_vectors(texts: List[str], is_query: bool = False) -> List[Dict]:
-    """Embed texts into sparse vectors via the unified embedding server.
+def get_sparse_vectors(
+    texts: List[str],
+    is_query: bool = False,
+    batch_size: int = 256,
+) -> List[Dict]:
+    """Embed texts into sparse (SPLADE) vectors.
 
-    Automatically rewrites the first query via the IT model before embedding.
-    Only the first text is rewritten; subsequent texts are treated as documents.
+    Slices input into chunks of batch_size — one HTTP request per chunk.
+    On a 500 (CUDA kernel timeout / TDR), waits for server recovery and
+    retries only the failed chunk, not the whole list.
+    Results are returned in input order.
     """
-    texts = _rewrite(texts)
+    if not texts:
+        return []
+
     url = f"{EMBEDDING_SERVER_URL}/embed_sparse"
-    resp = _sess.post(
-        url,
-        json={"texts": texts, "is_query": is_query},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["vectors"]
+    results: List[Dict] = []
+    for i in range(0, len(texts), batch_size):
+        data = _post_with_500_retry(url, {
+            "texts": texts[i : i + batch_size],
+            "is_query": is_query,
+        })
+        results.extend(data["vectors"])
+    return results
 
 
 def rewrite_query(query: str) -> str:
-    """Reformulate a user query into a precise technical search query.
-
-    Uses the IT model (gemma-3-270m-it) to rewrite natural-language prompts
-    into queries optimized for retrieving AI/ML research papers.
-
-    Args:
-        query: Raw user input (natural language, potentially imprecise).
-
-    Returns:
-        Reformulated query string optimized for retrieval.
-    """
+    """Reformulate a user query into a precise technical search query."""
     url = f"{EMBEDDING_SERVER_URL}/rewrite"
-    resp = _sess.post(
-        url,
-        json={"query": query},
-        timeout=_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["rewritten"]
+    return _post_with_500_retry(url, {"query": query})["rewritten"]
 
 
 def health_check() -> bool:
-    """Check if the embedding server is healthy with both models loaded.
-
-    Returns:
-        True if both dense and sparse models are loaded, False otherwise.
-    """
+    """Check if the embedding server is healthy with both models loaded."""
     url = f"{EMBEDDING_SERVER_URL}/health"
     try:
         resp = requests.get(url, timeout=15)

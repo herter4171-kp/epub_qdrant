@@ -71,5 +71,11 @@ class Settings:
     def has_collections(self) -> bool:
         return len(self.collections) > 0
 
+    # Backward-compat alias: singular form returns first collection or empty string.
+    # Used by server.py main() validation check.
+    @property
+    def QDRANT_COLLECTION(self) -> str:
+        return self.DEFAULT_COLLECTION
+
 
 settings = Settings()

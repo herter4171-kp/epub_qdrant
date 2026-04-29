@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """Generate ctx_len_study markdown files.
 
-Compares retrieval from `papers` vs `papers-2048ctx` across 50 prompts,
-for papers discovered from the `papers-2048ctx` collection.
+Compares retrieval from Qdrant collections plus Bedrock KB across 50 prompts,
+for papers discovered from the first collection in the list.
 
-Reads papers_semantic data from bedrock_compare/query_results/*.json
-(which contains agent-lookup MCP results for the `papers` collection).
-Queries `papers-2048ctx` via qdrant-client.
+Usage:
+    python3 generate_study.py --collections "papers,papers-2048ctx-SAE" --topk 8
+    python3 generate_study.py --collections "papers" --topk 4 --limit 10
+    bash run_study.sh                        # defaults to papers + papers-2048ctx-SAE
+    bash run_study.sh --collections "papers" --limit 5  # override defaults
 
-Writes one md file per paper + intro.md + compile.sh.
+Collections are specified via --collections (comma-separated, required).
+Bedrock KB is always queried as a fourth contender.
+Named-vector collections use hybrid dense+sparse (topk//2 each).
+Other collections use single dense query.
+Auto-detect named-vector collections via Qdrant API unless --named-vectors is set.
 """
 
 import argparse
 import json
 import os
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -28,7 +35,6 @@ from bedrock_compare.bedrock_client import BedrockKBClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue, SparseVector
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://192.168.68.75:6333")
-PAPERS_2048CTX = "papers-2048ctx"
 BEDROCK_KB_ID = os.getenv("BEDROCK_KB_ID", "RQMBIXUSXH")
 OUTPUT_DIR = Path(__file__).parent
 
@@ -72,7 +78,6 @@ def discover_papers_from_collection(collection, qdrant_url):
     Returns a sorted list of paper IDs (underscore format, e.g. '2010_03768').
     """
     client = QdrantClient(url=qdrant_url)
-    # Scroll with limit=100 to get unique source files
     source_files = set()
     offset = None
     while True:
@@ -88,62 +93,32 @@ def discover_papers_from_collection(collection, qdrant_url):
         for p in points:
             sf = p.payload.get("source_file", "")
             if sf.endswith(".pdf"):
-                stem = sf[:-4]  # remove .pdf
+                stem = sf[:-4]
                 source_files.add(stem)
         if offset is None:
             break
     return sorted(source_files)
 
 
-def query_papers_collection(query, paper_ids, top_k=8):
-    """Query `papers` collection via qdrant-client, filtered to specific papers.
+def query_qdrant_collection(collection, query, paper_ids, top_k, named_vector_collections=None):
+    """Query a single Qdrant collection, filtered to specific papers.
 
-    Returns list of dicts with score, text, source_file.
-    Papers collection gets k=topk/2 results (papers-2048ctx gets topk via hybrid).
-    """
-    client = QdrantClient(url=QDRANT_URL)
-    query_vec = get_dense_vectors([query])[0]
-
-    # Build should filter: source_file matches any of the paper PDF names
-    source_conditions = [
-        FieldCondition(key="source_file", match=MatchValue(value=f"{pid}.pdf"))
-        for pid in paper_ids
-    ]
-    query_filter = Filter(should=source_conditions)
-
-    points = client.query_points(
-        collection_name="papers",
-        query=query_vec,
-        limit=top_k,
-        query_filter=query_filter,
-    )
-
-    results = []
-    for point in points.points:
-        payload = point.payload or {}
-        source_file = payload.get("source_file", "")
-        results.append({
-            "score": point.score,
-            "text": payload.get("text", ""),
-            "source_file": source_file,
-        })
-    return results
-
-
-def query_papers_2048ctx(query, paper_ids, top_k=8):
-    """Query papers-2048ctx collection via qdrant-client with hybrid dense+sparse.
-
-    Queries both dense and sparse named vectors, each fetching top_k//2 results
-    so the combined total equals top_k.
+    Named vector collections use hybrid dense+sparse (topk//2 each).
+    Unnamed collections use single dense query.
 
     Args:
-        query: The query string.
-        paper_ids: Set of paper IDs (underscore format) to filter to.
-        top_k: Total number of results to return.
+        collection: Qdrant collection name.
+        query: Natural language query string.
+        paper_ids: List of paper IDs (underscore format) to filter on.
+        top_k: Number of results to return per vector.
+        named_vector_collections: Set of collection names that use named vectors.
+                                  If None, auto-detects via Qdrant API.
 
-    Returns:
-        List of dicts with score, text, source_file.
+    Returns list of dicts with score, text, source_file.
     """
+    if named_vector_collections is None:
+        named_vector_collections = set()
+
     client = QdrantClient(url=QDRANT_URL)
 
     source_conditions = [
@@ -152,56 +127,110 @@ def query_papers_2048ctx(query, paper_ids, top_k=8):
     ]
     query_filter = Filter(should=source_conditions)
 
-    half_k = top_k // 2
-
-    # Dense query: fetch half_k results
-    query_vec = get_dense_vectors([query])[0]
-    dense_points = client.query_points(
-        collection_name=PAPERS_2048CTX,
-        query=query_vec,
-        using="dense",
-        limit=half_k,
-        query_filter=query_filter,
-    ).points
-
-    # Sparse query: fetch half_k results
-    sparse_vec = get_sparse_vectors([query], is_query=True)[0]
-    sparse_points = client.query_points(
-        collection_name=PAPERS_2048CTX,
-        query=SparseVector(
-            indices=sparse_vec["indices"],
-            values=sparse_vec["values"],
-        ),
-        using="sparse",
-        limit=half_k,
-        query_filter=query_filter,
-    ).points
-
-    # Concatenate dense first, then sparse (total = top_k)
     results = []
-    for point in dense_points + sparse_points:
-        payload = point.payload or {}
-        results.append({
-            "score": point.score,
-            "text": payload.get("text", ""),
-            "source_file": payload.get("source_file", ""),
-        })
+
+    use_hybrid = False
+    try:
+        use_hybrid = collection in named_vector_collections
+    except Exception:
+        pass  # set comparison failed -> fall through to dense-only
+
+    if use_hybrid:
+        half_k = max(1, top_k // 2)
+
+        # Dense query
+        query_vec = get_dense_vectors([query])[0]
+        dense_points = client.query_points(
+            collection_name=collection,
+            query=query_vec,
+            using="dense",
+            limit=half_k,
+            query_filter=query_filter,
+        ).points
+
+        # Sparse query
+        sparse_vec = get_sparse_vectors([query], is_query=True)[0]
+        sparse_points = client.query_points(
+            collection_name=collection,
+            query=SparseVector(
+                indices=sparse_vec["indices"],
+                values=sparse_vec["values"],
+            ),
+            using="sparse",
+            limit=half_k,
+            query_filter=query_filter,
+        ).points
+
+        for point in dense_points + sparse_points:
+            payload = point.payload or {}
+            results.append({
+                "score": point.score,
+                "text": payload.get("text", ""),
+                "source_file": payload.get("source_file", ""),
+            })
+    else:
+        # Unnamed dense-only collection
+        query_vec = get_dense_vectors([query])[0]
+        points = client.query_points(
+            collection_name=collection,
+            query=query_vec,
+            limit=top_k,
+            query_filter=query_filter,
+        )
+
+        for point in points.points:
+            payload = point.payload or {}
+            results.append({
+                "score": point.score,
+                "text": payload.get("text", ""),
+                "source_file": payload.get("source_file", ""),
+            })
+
     return results
 
 
 # ── Markdown generation ─────────────────────────────────────────────────────
 
+def _source_display_name(coll):
+    """Human-readable display name for a collection."""
+    names = {
+        "papers": "Papers",
+        "papers-2048ctx-SAE": "Papers-2048ctx-SAE",
+    }
+    return names.get(coll, coll)
+
+
+def _source_key(coll):
+    """Internal key for results dict."""
+    return coll
+
+
+def _bedrock_display_name():
+    return "Bedrock"
+
+
 def intro_md(paper_list):
+    sources = []
+    for c in QDRANT_COLLECTIONS:
+        names = {
+            "papers": "Papers",
+            "papers-2048ctx-SAE": "Papers-2048ctx-SAE",
+        }
+        sources.append((names.get(c, c), f"Qdrant `{c}` ({len(paper_list)} papers)"))
+    source_rows = "| ".join([
+        "| Source | Description |",
+        "|--------|-------------|"
+    ]) + "\n"
+    for s, desc in sources:
+        source_rows += f"| **{s}** | {desc} |\n"
+
     return f"""# Context Window Length Study
 
 ## Overview
 
-Comparing retrieval from two Qdrant collections across 50 prompts:
+Comparing retrieval from Qdrant collections plus Bedrock KB across {len(PROMPT_IDS)} prompts:
 
-| Source | Description |
-|--------|-------------|
-| **Papers** | Qdrant `papers` collection (~96K points, smaller chunks), dense-only |
-| **Papers-2048ctx** | Qdrant `papers-2048ctx` (692 points, 2048-token chunks), hybrid dense+sparse |
+{source_rows}
 
 ## {len(paper_list)} Papers Studied
 
@@ -211,7 +240,7 @@ Comparing retrieval from two Qdrant collections across 50 prompts:
 
 - **Scores are NOT comparable across collections.** Different embedding models, different chunk sizes, different collection sizes.
 - This study focuses on **which chunks appear** (qualitative overlap), not their scores.
-- 50 prompts used across 5 categories x 5 proficiency levels.
+- {len(PROMPT_IDS)} prompts used across 5 categories x 5 proficiency levels.
 
 ---
 
@@ -246,7 +275,9 @@ def paper_md(paper_id, prompts, all_results):
         md += "| Source | Score | Text |\n"
         md += "|--------|-------|------|\n"
 
-        for source_name, source_key in [("Papers", "papers"), ("Papers-2048ctx", "papers-2048ctx"), ("Bedrock", "bedrock")]:
+        # Qdrant collections first, then Bedrock
+        for source_key in QDRANT_COLLECTIONS:
+            source_name = _source_display_name(source_key)
             rows = all_results.get((paper_id, pid, source_key), [])
             if not rows:
                 md += f"| {source_name} | - | (no results) |\n"
@@ -256,18 +287,97 @@ def paper_md(paper_id, prompts, all_results):
                     display_text = display_text.replace('|', '\\|')
                     md += f"| {source_name} | {score:.4f} | {display_text} |\n"
 
+        # Bedrock always last
+        bedrock_rows = all_results.get((paper_id, pid, "bedrock"), [])
+        bedrock_name = _bedrock_display_name()
+        if not bedrock_rows:
+            md += f"| {bedrock_name} | - | (no results) |\n"
+        else:
+            for score, text in bedrock_rows:
+                display_text = text.replace('\n', ' ')
+                display_text = display_text.replace('|', '\\|')
+                md += f"| {bedrock_name} | {score:.4f} | {display_text} |\n"
+
         md += "\n---\n\n"
 
     return md
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(description="Generate ctx_len_study markdown files")
+    parser.add_argument("--collections", type=str, default="",
+                        help="Comma-separated list of Qdrant collections to query (e.g. 'papers,papers-2048ctx-SAE')")
+    parser.add_argument("--named-vectors", type=str, default="",
+                        help="Comma-separated list of collections that use named vectors (dense+sparse). All others use dense-only. If empty, auto-detects via Qdrant API.")
     parser.add_argument("--limit", type=int, default=None,
                         help="Number of papers to process (sorted, first N)")
+    parser.add_argument("--topk", type=int, default=8,
+                        help="Results per Qdrant query per collection. MUST be divisible by 4 for named-vector (hybrid) collections.")
     args = parser.parse_args()
+
+    # Parse collections
+    if not args.collections:
+        print("\033[31mERROR: --collections is required. Provide comma-separated collection names.\033[0m")
+        sys.exit(1)
+    QDRANT_COLLECTIONS = [c.strip() for c in args.collections.split(",") if c.strip()]
+    if not QDRANT_COLLECTIONS:
+        print("\033[31mERROR: no valid collections provided.\033[0m")
+        sys.exit(1)
+
+    # Parse named vector collections
+    if args.named_vectors:
+        NAMED_VECTOR_COLLECTIONS = set(c.strip() for c in args.named_vectors.split(",") if c.strip())
+    else:
+        # Auto-detect: check each collection's vector config
+        NAMED_VECTOR_COLLECTIONS = set()
+        print("Auto-detecting named-vector collections via Qdrant API...")
+        client = QdrantClient(url=QDRANT_URL)
+        for coll in QDRANT_COLLECTIONS:
+            try:
+                info = client.get_collection(coll)
+                vec_config = info.config.params.vectors
+                is_named = False
+                # Unnamed single vector: Vectors object with size but no named sub-config
+                if isinstance(vec_config, dict):
+                    # Named multi-vector config: {"dense": VectorParams(...), "sparse": SparseVectorParams(...)}
+                    # Check if values are VectorParams/SparseVectorParams (named vectors)
+                    # vs sparse/vector_config (legacy unnamed)
+                    is_named = True
+                elif vec_config is not None:
+                    # Could be a Vectors object (unnamed) or NamedVectors object
+                    # Vectors has 'size' attribute; NamedVectors has 'vectors' dict
+                    has_named_attr = hasattr(vec_config, 'named_vectors') or (
+                        hasattr(vec_config, 'vectors') and isinstance(getattr(vec_config, 'vectors', None), dict)
+                    )
+                    if has_named_attr:
+                        is_named = True
+
+                if is_named:
+                    NAMED_VECTOR_COLLECTIONS.add(coll)
+                    print(f"  {coll} -> named-vector collection")
+                else:
+                    print(f"  {coll} -> single-vector collection")
+            except Exception as e:
+                print(f"  {coll} -> warning: could not inspect config ({e}), assuming single-vector")
+        print(f"  Named-vector collections: {NAMED_VECTOR_COLLECTIONS or '(none)'}")
+
+    # Validate topk is divisible by 4 for named-vector collections
+    if NAMED_VECTOR_COLLECTIONS:
+        if args.topk % 4 != 0:
+            msg = (
+                "\033[31m"
+                f"\n{'='*70}\n"
+                f"  ERROR: --topk {args.topk} is not divisible by 4.\n"
+                f"  Named-vector collections ({', '.join(NAMED_VECTOR_COLLECTIONS)})\n"
+                f"  split topk into topk//2 dense + topk//2 sparse.\n"
+                f"  Fix: use --topk 8, 12, 16, 20, etc.\n"
+                f"  {'='*70}\033[0m"
+            )
+            print(msg)
+            sys.exit(1)
+        print(f"  Named-vector collections will use hybrid search (topk//{4 // 4 * 2} = {args.topk // 2} dense + {args.topk // 2} sparse each)")
+
+    topk = args.topk
 
     print("Loading prompts...")
     prompts = load_prompts()
@@ -277,8 +387,10 @@ def main():
     get_bedrock_client()
     print("  Bedrock client ready")
 
-    print(f"Discovering papers from {PAPERS_2048CTX}...")
-    all_paper_ids = discover_papers_from_collection(PAPERS_2048CTX, QDRANT_URL)
+    # Discover papers from first collection
+    discover_coll = QDRANT_COLLECTIONS[0]
+    print(f"Discovering papers from {discover_coll}...")
+    all_paper_ids = discover_papers_from_collection(discover_coll, QDRANT_URL)
     print(f"  Found {len(all_paper_ids)} papers")
 
     if args.limit:
@@ -295,36 +407,23 @@ def main():
         query = prompt["prompt"]
         print(f"  [{pid:2d}] {query[:55]}...")
 
-        # Query papers collection filtered to our papers
-        papers_texts = query_papers_collection(query, paper_ids)
+        # Query ALL qdrant collections for this prompt
+        for coll in QDRANT_COLLECTIONS:
+            coll_texts = query_qdrant_collection(coll, query, paper_ids, topk, NAMED_VECTOR_COLLECTIONS)
 
-        # Query papers-2048ctx (hybrid dense+sparse), filtered to our papers
-        p2048_results = query_papers_2048ctx(query, paper_ids)
+            # Group by source_file -> paper_id
+            by_paper = defaultdict(list)
+            for t in coll_texts:
+                sf = t["source_file"]
+                for pid_check in paper_ids:
+                    if sf.endswith(f"{pid_check}.pdf"):
+                        by_paper[pid_check].append((t["score"], t["text"]))
+                        break
 
-        # Group papers results by source_file
-        papers_by_paper = defaultdict(list)
-        for t in papers_texts:
-            sf = t["source_file"]
             for pid_check in paper_ids:
-                if sf.endswith(f"{pid_check}.pdf"):
-                    papers_by_paper[pid_check].append((t["score"], t["text"]))
-                    break
+                all_results[(pid_check, pid, coll)] = by_paper.get(pid_check, [])
 
-        # Group papers-2048ctx results by source_file
-        p2048_by_paper = defaultdict(list)
-        for t in p2048_results:
-            sf = t["source_file"]
-            for pid_check in paper_ids:
-                if sf.endswith(f"{pid_check}.pdf"):
-                    p2048_by_paper[pid_check].append((t["score"], t["text"]))
-                    break
-
-        # Store results for each paper
-        for pid_check in paper_ids:
-            all_results[(pid_check, pid, "papers")] = papers_by_paper.get(pid_check, [])
-            all_results[(pid_check, pid, "papers-2048ctx")] = p2048_by_paper.get(pid_check, [])
-
-        # Query bedrock directly from KB (same results for all papers, this prompt)
+        # Query Bedrock (same for all papers)
         bedrock_texts = query_bedrock(query, top_k=8)
         for pid_check in paper_ids:
             all_results[(pid_check, pid, "bedrock")] = bedrock_texts
@@ -369,8 +468,9 @@ def main():
         f.write(compile_script)
     os.chmod(OUTPUT_DIR / "compile.sh", 0o755)
 
-    print(f"\nDone! {len(PROMPT_IDS)} prompts x {len(paper_ids)} papers")
+    print(f"\nDone! {len(PROMPT_IDS)} prompts x {len(paper_ids)} papers x {len(QDRANT_COLLECTIONS)} Qdrant collections + Bedrock")
     print(f"Run: bash compile.sh")
+
 
 if __name__ == "__main__":
     main()

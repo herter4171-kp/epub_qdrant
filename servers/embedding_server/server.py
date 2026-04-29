@@ -2,7 +2,8 @@
 
 import logging
 import os
-from typing import List, Optional
+import time
+from typing import List, Optional, Dict
 
 from pydantic import BaseModel
 
@@ -11,7 +12,7 @@ from pydantic import BaseModel
 
 from servers.embedding_server.embedder import (
     DENSE_MODEL,
-    BACKBONE_LOCAL_PATH,
+    SPLADE_LOCAL_PATH,
     DenseEmbedder,
     QueryRewriter,
     SparseEmbedder,
@@ -57,6 +58,24 @@ class RewriteRequest(BaseModel):
 class RewriteResponse(BaseModel):
     rewritten: str
 
+class ProfileDenseRequest(BaseModel):
+    count: int = 128
+
+class ProfileDenseResponse(BaseModel):
+    elapsed_ms: float
+    vram_alloc_before: float
+    vram_alloc_after: float
+    vram_delta: float
+
+class ProfileSparseRequest(BaseModel):
+    count: int = 32
+    is_query: bool = False
+
+class ProfileSparseResponse(BaseModel):
+    elapsed_ms: float
+    vram_alloc_before: float
+    vram_alloc_after: float
+    vram_delta: float
 
 # ── Model singletons ─────────────────────────────────────────────────
 
@@ -143,13 +162,58 @@ def health():
 @app.get("/models", response_model=ModelsResponse)
 def models():
     from servers.embedding_server.embedder import IT_MODEL_LOCAL_PATH
-    return ModelsResponse(dense=DENSE_MODEL, sparse=BACKBONE_LOCAL_PATH)
+    return ModelsResponse(dense=DENSE_MODEL, sparse=SPLADE_LOCAL_PATH)
 
 
 @app.get("/rewrite/status", response_model=bool)
 def rewrite_status():
     """Check whether the query rewriter is loaded and ready."""
     return _rewriter is not None
+
+
+@app.post("/profile/dense", response_model=ProfileDenseResponse)
+def profile_dense(req: ProfileDenseRequest):
+    """Measure VRAM delta for dense embedding of `count` texts. Runs in server process."""
+    global _dense
+    if _dense is None:
+        raise HTTPException(status_code=503, detail="Dense model not loaded")
+    import torch
+    before = torch.cuda.memory_allocated(device="cuda")
+    t0 = time.time()
+    # Generate dummy texts to match real workload length (~150 words each)
+    texts = [f"token{i % 100} word {(i+j) % 200}" for i in range(req.count) for j in range(150)]
+    _dense.encode(texts)
+    delta = time.time() - t0
+    after = torch.cuda.memory_allocated(device="cuda")
+    return ProfileDenseResponse(
+        elapsed_ms=delta * 1000,
+        vram_alloc_before=before / 1e9,
+        vram_alloc_after=after / 1e9,
+        vram_delta=(after - before) / 1e9,
+    )
+
+
+@app.post("/profile/sparse", response_model=ProfileSparseResponse)
+def profile_sparse(req: ProfileSparseRequest):
+    """Measure VRAM delta for sparse embedding of `count` texts. Runs in server process."""
+    global _sparse
+    if _sparse is None:
+        raise HTTPException(status_code=503, detail="Sparse model not loaded")
+    import torch
+    import asyncio
+    before = torch.cuda.memory_allocated(device="cuda")
+    t0 = time.time()
+    texts = [f"token{i % 100} word {(i+j) % 200}" for i in range(req.count) for j in range(150)]
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, lambda: _sparse.encode(texts, is_query=req.is_query))
+    delta = time.time() - t0
+    after = torch.cuda.memory_allocated(device="cuda")
+    return ProfileSparseResponse(
+        elapsed_ms=delta * 1000,
+        vram_alloc_before=before / 1e9,
+        vram_alloc_after=after / 1e9,
+        vram_delta=(after - before) / 1e9,
+    )
 
 
 # ── Entry point ───────────────────────────────────────────────────────
