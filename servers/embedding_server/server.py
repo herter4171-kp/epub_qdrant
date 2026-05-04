@@ -1,7 +1,9 @@
 """Unified embedding server — dense (Snowflake) + sparse (SAE-SPLADE) on one port."""
 
+import argparse
 import logging
 import os
+import sys
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -63,11 +65,16 @@ class RewriteResponse(BaseModel):
 _dense: Optional[DenseEmbedder] = None
 _sparse: Optional[SparseEmbedder] = None
 _rewriter: Optional[QueryRewriter] = None
+_rewriter_enabled: bool = True
 
 
-def _load_models():
-    """Load all models into GPU memory."""
-    global _dense, _sparse, _rewriter
+def _load_models(skip_rewriter: bool = False):
+    """Load all models into GPU memory.
+
+    Args:
+        skip_rewriter: If True, skip loading the IT model (saves ~2.6 GB VRAM).
+    """
+    global _dense, _sparse, _rewriter, _rewriter_enabled
     try:
         _dense = DenseEmbedder()
     except Exception:
@@ -76,10 +83,15 @@ def _load_models():
         _sparse = SparseEmbedder()
     except Exception:
         logger.exception("Failed to load sparse model")
-    try:
-        _rewriter = QueryRewriter()
-    except Exception:
-        logger.exception("Failed to load query rewriter")
+    if skip_rewriter:
+        logger.info("Skipping IT model load (--no-rewrite flag)")
+        _rewriter = None
+        _rewriter_enabled = False
+    else:
+        try:
+            _rewriter = QueryRewriter()
+        except Exception:
+            logger.exception("Failed to load query rewriter")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────
@@ -89,7 +101,7 @@ app = FastAPI(title="Unified Embedding Server", version="0.1.0")
 
 @app.on_event("startup")
 def startup():
-    _load_models()
+    _load_models(skip_rewriter=not _rewriter_enabled)
 
 
 @app.post("/embed_dense", response_model=DenseEmbedResponse)
@@ -123,7 +135,14 @@ async def rewrite_query(req: RewriteRequest):
 
     Uses the IT model to rewrite natural-language prompts into queries
     optimized for retrieving AI/ML research papers from the vector store.
+
+    Returns 503 if the rewriter was disabled (--no-rewrite flag).
     """
+    if not _rewriter_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Query rewriter is disabled. Start server without --no-rewrite to enable.",
+        )
     if _rewriter is None:
         raise HTTPException(status_code=503, detail="Query rewriter not loaded")
     rewritten = await _rewriter.rewrite_async(req.query)
@@ -154,9 +173,28 @@ def rewrite_status():
 
 # ── Entry point ───────────────────────────────────────────────────────
 
+def parse_args():
+    """Parse CLI arguments."""
+    parser = argparse.ArgumentParser(
+        description="Unified embedding server — dense (Snowflake) + sparse (SAE-SPLADE)",
+    )
+    parser.add_argument(
+        "--no-rewrite",
+        action="store_true",
+        help="Skip loading the IT model (saves ~2.6 GB VRAM, /rewrite endpoint disabled)",
+    )
+    return parser.parse_args()
+
+
 def main():
     import uvicorn
 
+    args = parse_args()
+    global _rewriter_enabled
+    _rewriter_enabled = not args.no_rewrite
+
+    if args.no_rewrite:
+        logger.info("IT model bypassed (--no-rewrite). /rewrite endpoint will return 503.")
     port = int(os.getenv("EMBEDDING_SERVER_PORT", "8100"))
     logger.info("Starting embedding server on port %d", port)
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -42,9 +42,9 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
-    Modifier,
     PointStruct,
     PointVectors,
+    SparseIndexParams,
     SparseVector,
     SparseVectorParams,
     VectorParams,
@@ -91,8 +91,13 @@ def ensure_collection(client: QdrantClient, name: str) -> None:
     client.create_collection(
         collection_name=name,
         vectors_config={"dense": VectorParams(size=768, distance=Distance.COSINE)},
-        sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.IDF)},
+        sparse_vectors_config={
+            "sparse": SparseVectorParams(
+                index=SparseIndexParams(on_disk=False),  # SPLADE sparse in RAM
+            ),
+        },
     )
+    log.info("Collection '%s' created with dense(768) + sparse(SPLADE ~30522)", name)
     for field in INDEX_FIELDS:
         try:
             client.create_payload_index(
@@ -296,7 +301,6 @@ def pass2_sparse_for_paper(
             offset=offset,
             with_vectors=False,
             with_payload=["text"],
-            query_filter=f,
         )
         if not pts:
             break
