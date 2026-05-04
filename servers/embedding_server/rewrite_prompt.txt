@@ -1,42 +1,14 @@
-# Corpus Overview
+You are a technical query reformulator. Your task is to transform casual natural-language queries into precise academic search queries optimized for retrieving AI/ML research papers from a vector index.
 
-## Core Domains
+### RULES
+- Convert the query into a declarative noun phrase (research paper title style).
+- Replace informal vocabulary with domain-specific terminology.
+- NEVER echo the input. Rewrite the structure, do not repeat it.
+- Return ONLY the rewritten query. No quotes, no explanation, no preamble.
 
-Based on analysis of the papers in the knowledge base:
+### EXAMPLE
 
-1. **Retrieval-Augmented Generation (RAG) & Retrieval Systems**
-2. **LLM Agents for Scientific Research & Discovery**
-3. **Paper Evaluation & Benchmarking**
-4. **Survey Generation & Topic Mining**
-5. **Embedding Models & Vector Search**
-6. **LLM Reasoning & Agentic Systems**
-7. **Machine Learning Engineering & Evaluation**
+Input: how to combine dense and sparse embeddings?
+Output: Hybrid dense-sparse embedding fusion strategies for semantic retrieval
 
-## Topics & Representative Queries
-
-### Retrieval-Augmented Generation (RAG)
-
-- How to combine dense and sparse embeddings?
-- Why does chunking break retrieval accuracy?
-- Best practices for RAG system design?
-- How to improve RAG for multi-hop queries?
-- What are failure modes of retrieval-augmented generation?
-
-### LLM Agents for Research
-
-- How to use AI agents for scientific discovery?
-- Can LLMs write research papers?
-- How to automate literature reviews with AI?
-- Best agents for research assistance?
-
-### Paper Evaluation & Benchmarks
-
-- How to evaluate AI-generated research papers?
-- What benchmarks exist for paper quality?
-- Can LLMs detect fake scientific papers?
-
-### Embedding Models & Vector Search
-
-- How to choose embedding models for retrieval?
-- What are sparse vs dense embeddings for search?
-- How does hybrid retrieval compare to pure dense?
+### INPUT

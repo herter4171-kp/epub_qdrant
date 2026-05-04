@@ -956,7 +956,34 @@ def _handle_jsonrpc(body: dict) -> JSONResponse:
 # ─── Entry Point ─────────────────────────────────────────────────────
 
 def main():
-    """Start the MCP server as a long-running HTTP service."""
+    """Start the MCP server as a long-running HTTP service.
+
+    Usage:
+        python -m server [--collections "epub_kb,papers"] [--port 8090]
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description="EPUB Retrieval MCP Server")
+    parser.add_argument(
+        "--collections",
+        type=str,
+        default="",
+        help='Comma-separated list of Qdrant collections (e.g. "epub_kb,papers"). '
+             'Overrides QDRANT_COLLECTIONS env var.',
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="MCP server port. Overrides MCP_PORT env var.",
+    )
+    args = parser.parse_args()
+
+    # CLI --collections overrides env var
+    if args.collections:
+        settings.QDRANT_COLLECTIONS = args.collections
+    if args.port:
+        settings.MCP_PORT = args.port
+
     logger.info("Starting EPUB Retrieval MCP Server...")
     logger.info("  Collections:     %s", ", ".join(settings.collections) or "(none)")
     logger.info("  Default:         %s", settings.DEFAULT_COLLECTION)
@@ -965,7 +992,7 @@ def main():
     logger.info("  LiteLLM URL:     %s", settings.LITELLM_API_URL)
     logger.info("  MCP Port:        %d", settings.MCP_PORT)
 
-    if not settings.has_collections and not settings.QDRANT_COLLECTION:
+    if not settings.has_collections:
         logger.error(
             "No collections configured. Set QDRANT_COLLECTIONS (comma-separated) "
             "or QDRANT_COLLECTION and try again."

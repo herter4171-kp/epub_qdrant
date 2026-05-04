@@ -1,10 +1,9 @@
 """Unified embedding server — dense (Snowflake) + sparse (SAE-SPLADE) on one port."""
 
-import argparse
 import logging
 import os
-import sys
-from typing import List, Optional
+import time
+from typing import List, Optional, Dict
 
 from pydantic import BaseModel
 
@@ -13,7 +12,7 @@ from pydantic import BaseModel
 
 from servers.embedding_server.embedder import (
     DENSE_MODEL,
-    BACKBONE_LOCAL_PATH,
+    SPLADE_LOCAL_PATH,
     DenseEmbedder,
     QueryRewriter,
     SparseEmbedder,
@@ -59,22 +58,35 @@ class RewriteRequest(BaseModel):
 class RewriteResponse(BaseModel):
     rewritten: str
 
+class ProfileDenseRequest(BaseModel):
+    count: int = 128
+
+class ProfileDenseResponse(BaseModel):
+    elapsed_ms: float
+    vram_alloc_before: float
+    vram_alloc_after: float
+    vram_delta: float
+
+class ProfileSparseRequest(BaseModel):
+    count: int = 32
+    is_query: bool = False
+
+class ProfileSparseResponse(BaseModel):
+    elapsed_ms: float
+    vram_alloc_before: float
+    vram_alloc_after: float
+    vram_delta: float
 
 # ── Model singletons ─────────────────────────────────────────────────
 
 _dense: Optional[DenseEmbedder] = None
 _sparse: Optional[SparseEmbedder] = None
 _rewriter: Optional[QueryRewriter] = None
-_rewriter_enabled: bool = True
 
 
-def _load_models(skip_rewriter: bool = False):
-    """Load all models into GPU memory.
-
-    Args:
-        skip_rewriter: If True, skip loading the IT model (saves ~2.6 GB VRAM).
-    """
-    global _dense, _sparse, _rewriter, _rewriter_enabled
+def _load_models():
+    """Load all models into GPU memory."""
+    global _dense, _sparse, _rewriter
     try:
         _dense = DenseEmbedder()
     except Exception:
@@ -83,15 +95,10 @@ def _load_models(skip_rewriter: bool = False):
         _sparse = SparseEmbedder()
     except Exception:
         logger.exception("Failed to load sparse model")
-    if skip_rewriter:
-        logger.info("Skipping IT model load (--no-rewrite flag)")
-        _rewriter = None
-        _rewriter_enabled = False
-    else:
-        try:
-            _rewriter = QueryRewriter()
-        except Exception:
-            logger.exception("Failed to load query rewriter")
+    try:
+        _rewriter = QueryRewriter()
+    except Exception:
+        logger.exception("Failed to load query rewriter")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────
@@ -101,7 +108,7 @@ app = FastAPI(title="Unified Embedding Server", version="0.1.0")
 
 @app.on_event("startup")
 def startup():
-    _load_models(skip_rewriter=not _rewriter_enabled)
+    _load_models()
 
 
 @app.post("/embed_dense", response_model=DenseEmbedResponse)
@@ -135,14 +142,7 @@ async def rewrite_query(req: RewriteRequest):
 
     Uses the IT model to rewrite natural-language prompts into queries
     optimized for retrieving AI/ML research papers from the vector store.
-
-    Returns 503 if the rewriter was disabled (--no-rewrite flag).
     """
-    if not _rewriter_enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Query rewriter is disabled. Start server without --no-rewrite to enable.",
-        )
     if _rewriter is None:
         raise HTTPException(status_code=503, detail="Query rewriter not loaded")
     rewritten = await _rewriter.rewrite_async(req.query)
@@ -162,7 +162,7 @@ def health():
 @app.get("/models", response_model=ModelsResponse)
 def models():
     from servers.embedding_server.embedder import IT_MODEL_LOCAL_PATH
-    return ModelsResponse(dense=DENSE_MODEL, sparse=BACKBONE_LOCAL_PATH)
+    return ModelsResponse(dense=DENSE_MODEL, sparse=SPLADE_LOCAL_PATH)
 
 
 @app.get("/rewrite/status", response_model=bool)
@@ -171,30 +171,56 @@ def rewrite_status():
     return _rewriter is not None
 
 
+@app.post("/profile/dense", response_model=ProfileDenseResponse)
+def profile_dense(req: ProfileDenseRequest):
+    """Measure VRAM delta for dense embedding of `count` texts. Runs in server process."""
+    global _dense
+    if _dense is None:
+        raise HTTPException(status_code=503, detail="Dense model not loaded")
+    import torch
+    before = torch.cuda.memory_allocated(device="cuda")
+    t0 = time.time()
+    # Generate dummy texts to match real workload length (~150 words each)
+    texts = [f"token{i % 100} word {(i+j) % 200}" for i in range(req.count) for j in range(150)]
+    _dense.encode(texts)
+    delta = time.time() - t0
+    after = torch.cuda.memory_allocated(device="cuda")
+    return ProfileDenseResponse(
+        elapsed_ms=delta * 1000,
+        vram_alloc_before=before / 1e9,
+        vram_alloc_after=after / 1e9,
+        vram_delta=(after - before) / 1e9,
+    )
+
+
+@app.post("/profile/sparse", response_model=ProfileSparseResponse)
+def profile_sparse(req: ProfileSparseRequest):
+    """Measure VRAM delta for sparse embedding of `count` texts. Runs in server process."""
+    global _sparse
+    if _sparse is None:
+        raise HTTPException(status_code=503, detail="Sparse model not loaded")
+    import torch
+    import asyncio
+    before = torch.cuda.memory_allocated(device="cuda")
+    t0 = time.time()
+    texts = [f"token{i % 100} word {(i+j) % 200}" for i in range(req.count) for j in range(150)]
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, lambda: _sparse.encode(texts, is_query=req.is_query))
+    delta = time.time() - t0
+    after = torch.cuda.memory_allocated(device="cuda")
+    return ProfileSparseResponse(
+        elapsed_ms=delta * 1000,
+        vram_alloc_before=before / 1e9,
+        vram_alloc_after=after / 1e9,
+        vram_delta=(after - before) / 1e9,
+    )
+
+
 # ── Entry point ───────────────────────────────────────────────────────
-
-def parse_args():
-    """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(
-        description="Unified embedding server — dense (Snowflake) + sparse (SAE-SPLADE)",
-    )
-    parser.add_argument(
-        "--no-rewrite",
-        action="store_true",
-        help="Skip loading the IT model (saves ~2.6 GB VRAM, /rewrite endpoint disabled)",
-    )
-    return parser.parse_args()
-
 
 def main():
     import uvicorn
 
-    args = parse_args()
-    global _rewriter_enabled
-    _rewriter_enabled = not args.no_rewrite
-
-    if args.no_rewrite:
-        logger.info("IT model bypassed (--no-rewrite). /rewrite endpoint will return 503.")
     port = int(os.getenv("EMBEDDING_SERVER_PORT", "8100"))
     logger.info("Starting embedding server on port %d", port)
     uvicorn.run(app, host="0.0.0.0", port=port)
