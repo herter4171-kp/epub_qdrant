@@ -36,6 +36,7 @@ class ResolvedConfig:
     judge_attempts: int
     judges_per_case: int
     case_timeout_seconds: float
+    turbo_submit: int  # batch size for parallel judge submissions (0 = serial)
 
     def to_snapshot(self) -> ConfigSnapshot:
         return ConfigSnapshot(
@@ -59,6 +60,7 @@ class ResolvedConfig:
             judge_attempts=self.judge_attempts,
             judges_per_case=self.judges_per_case,
             case_timeout_seconds=self.case_timeout_seconds,
+            turbo_submit=self.turbo_submit,
         )
 
 
@@ -105,6 +107,10 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
                         help="Hard wall-clock cap per case across all judges + retries. "
                              "When exceeded, remaining judge slots are filled with "
                              "case_wallclock_exceeded errors. Default 600.")
+    parser.add_argument("--turbo-submit", type=int, required=False, default=0,
+                        help="Batch size for parallel judge LLM submissions. When > 0, "
+                             "judges are submitted in batches of this size using asyncio. "
+                             "Default 0 (serial).")
     args = parser.parse_args(argv)
 
     topk = args.topk or int(os.environ.get("EVAL_TOPK", 0))
@@ -190,6 +196,10 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         args.case_timeout_seconds, "CASE_TIMEOUT_SECONDS", 600.0,
     )
 
+    turbo_submit = args.turbo_submit if args.turbo_submit is not None else 0
+    if turbo_submit < 0:
+        parser.error(f"--turbo-submit must be >= 0, got {turbo_submit}")
+
     if judge_timeout_seconds <= 0:
         parser.error(f"--judge-timeout-seconds must be > 0, got {judge_timeout_seconds}")
     if judge_per_chunk_timeout_seconds <= 0:
@@ -227,4 +237,5 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         judge_attempts=judge_attempts,
         judges_per_case=judges_per_case,
         case_timeout_seconds=case_timeout_seconds,
+        turbo_submit=turbo_submit,
     )

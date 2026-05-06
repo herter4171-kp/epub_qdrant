@@ -1,5 +1,6 @@
 """LLM judge critique of a retrieval set."""
 
+import asyncio
 import json
 import logging
 import os
@@ -8,8 +9,8 @@ import re
 import sys
 import threading
 import time
-
-from typing import Any, Dict, Iterable, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from openai import OpenAI
 
@@ -397,6 +398,38 @@ def _run_one_judgement(
     )
 
 
+def _make_judge_task(
+    *,
+    client: OpenAI,
+    judge_model: str,
+    system_prompt: str,
+    user_message: str,
+    issued_ids: set,
+    expected_chunks: int,
+    label: str,
+    judge_attempts: int,
+    judge_timeout_seconds: float,
+    judge_per_chunk_timeout_seconds: float,
+    judge_max_tokens: int,
+    case_deadline: float,
+) -> JudgeOutput:
+    """Run a single judgement with retries. Used as a task for ThreadPoolExecutor."""
+    return _run_one_judgement(
+        client=client,
+        judge_model=judge_model,
+        system_prompt=system_prompt,
+        user_message=user_message,
+        issued_ids=issued_ids,
+        expected_chunks=expected_chunks,
+        label=label,
+        judge_attempts=judge_attempts,
+        judge_timeout_seconds=judge_timeout_seconds,
+        judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
+        judge_max_tokens=judge_max_tokens,
+        case_deadline=case_deadline,
+    )
+
+
 def critique(
     retrieval_set: RetrievalSet,
     system_prompt: str,
@@ -409,6 +442,7 @@ def critique(
     judge_attempts: int = _JUDGE_ATTEMPTS,
     judges_per_case: int = 1,
     case_timeout_seconds: float = _CASE_TIMEOUT_SECONDS,
+    turbo_submit: int = 0,
 ) -> Critique:
     """Run LLM judge on retrieval_set N times. Returns one Critique with
     ``judge_outputs`` holding all N samples. Used to characterize judge noise
@@ -420,6 +454,10 @@ def critique(
     A case-level wall-clock cap (``case_timeout_seconds``) backstops the
     whole call. If exceeded, remaining judge slots are filled with
     ``error='case_wallclock_exceeded'`` JudgeOutputs.
+
+    When ``turbo_submit > 0``, judges are submitted in parallel batches of
+    that size using a ThreadPoolExecutor.  When ``turbo_submit == 0`` (the
+    default), judges run serially as before.
     """
     chunk_lines = []
     for chunk in retrieval_set.merged:
@@ -440,29 +478,95 @@ def critique(
     case_deadline = time.monotonic() + case_timeout_seconds
 
     judge_outputs: List[JudgeOutput] = []
-    for j in range(judges_per_case):
-        label = base_label if judges_per_case == 1 else f"{base_label} j={j+1}/{judges_per_case}"
-        if time.monotonic() >= case_deadline:
-            judge_outputs.append(JudgeOutput(
-                raw="", parsed=None, parse_ok=False, retried=False,
-                error="case_wallclock_exceeded",
-            ))
-            continue
-        jo = _run_one_judgement(
-            client=client,
-            judge_model=judge_model,
-            system_prompt=system_prompt,
-            user_message=user_message,
-            issued_ids=issued_ids,
-            expected_chunks=expected_chunks,
-            label=label,
-            judge_attempts=judge_attempts,
-            judge_timeout_seconds=judge_timeout_seconds,
-            judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
-            judge_max_tokens=judge_max_tokens,
-            case_deadline=case_deadline,
-        )
-        judge_outputs.append(jo)
+
+    if turbo_submit <= 0 or judges_per_case <= 1:
+        # Serial mode (original behavior)
+        for j in range(judges_per_case):
+            label = base_label if judges_per_case == 1 else f"{base_label} j={j+1}/{judges_per_case}"
+            if time.monotonic() >= case_deadline:
+                judge_outputs.append(JudgeOutput(
+                    raw="", parsed=None, parse_ok=False, retried=False,
+                    error="case_wallclock_exceeded",
+                ))
+                continue
+            jo = _run_one_judgement(
+                client=client,
+                judge_model=judge_model,
+                system_prompt=system_prompt,
+                user_message=user_message,
+                issued_ids=issued_ids,
+                expected_chunks=expected_chunks,
+                label=label,
+                judge_attempts=judge_attempts,
+                judge_timeout_seconds=judge_timeout_seconds,
+                judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
+                judge_max_tokens=judge_max_tokens,
+                case_deadline=case_deadline,
+            )
+            judge_outputs.append(jo)
+    else:
+        # Batched parallel mode
+        # Build list of all judge tasks with their labels
+        tasks = []
+        for j in range(judges_per_case):
+            label = base_label if judges_per_case == 1 else f"{base_label} j={j+1}/{judges_per_case}"
+            tasks.append({
+                "index": j,
+                "label": label,
+                "deadline": case_deadline,
+            })
+
+        # Sort by deadline (all same here, but future-proofing)
+        tasks.sort(key=lambda t: t["deadline"])
+
+        # Submit in batches
+        max_workers = min(turbo_submit, len(tasks))
+        if max_workers < 1:
+            max_workers = 1
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks, tracking futures
+            future_to_task: Dict[Any, Dict] = {}
+            for task in tasks:
+                if time.monotonic() >= task["deadline"]:
+                    # Already past deadline, fill with error
+                    judge_outputs.append((task["index"], JudgeOutput(
+                        raw="", parsed=None, parse_ok=False, retried=False,
+                        error="case_wallclock_exceeded",
+                    )))
+                    continue
+                future = executor.submit(
+                    _make_judge_task,
+                    client=client,
+                    judge_model=judge_model,
+                    system_prompt=system_prompt,
+                    user_message=user_message,
+                    issued_ids=issued_ids,
+                    expected_chunks=expected_chunks,
+                    label=task["label"],
+                    judge_attempts=judge_attempts,
+                    judge_timeout_seconds=judge_timeout_seconds,
+                    judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
+                    judge_max_tokens=judge_max_tokens,
+                    case_deadline=task["deadline"],
+                )
+                future_to_task[future] = task
+
+            # Collect results as futures complete
+            for future in asyncio.as_completed([f for f in future_to_task.keys()]) if False else _as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    jo = future.result()
+                    judge_outputs.append((task["index"], jo))
+                except Exception as exc:
+                    judge_outputs.append((task["index"], JudgeOutput(
+                        raw="", parsed=None, parse_ok=False, retried=False,
+                        error=f"unexpected_error: {exc}",
+                    )))
+
+        # Sort by index and extract JudgeOutput values
+        judge_outputs.sort(key=lambda x: x[0])
+        judge_outputs = [jo for _, jo in judge_outputs]
 
     critique_chunks = [
         CritiqueChunk(
@@ -496,3 +600,22 @@ def critique(
         chunks=critique_chunks,
         judge_outputs=judge_outputs,
     )
+
+
+def _as_completed(future_to_task: Dict) -> Iterable:
+    """Yield futures as they complete using a simple polling approach.
+
+    This avoids asyncio dependency since we're in a sync context with
+    ThreadPoolExecutor. Uses a polling loop with short sleep intervals.
+    """
+    import time
+
+    remaining = dict(future_to_task)
+    while remaining:
+        done = [f for f in remaining if f.done()]
+        if not done:
+            time.sleep(0.1)
+            continue
+        for f in done:
+            yield f
+            del remaining[f]

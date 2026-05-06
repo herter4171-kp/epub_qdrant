@@ -226,6 +226,7 @@ def run_eval(argv: list = None) -> None:
                     judge_attempts=config.judge_attempts,
                     judges_per_case=judges_per_case,
                     case_timeout_seconds=config.case_timeout_seconds,
+                    turbo_submit=config.turbo_submit,
                 )
                 critique_path = write_critique(c, run_dir)
 

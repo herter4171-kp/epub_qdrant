@@ -151,6 +151,7 @@ class ConfigSnapshot:
     judge_attempts: int = 3
     judges_per_case: int = 1
     case_timeout_seconds: float = 600.0
+    turbo_submit: int = 0  # batch size for parallel judge submissions (0 = serial)
     prompts: List[str] = field(default_factory=list)
     system_prompt: str = ""
 
