@@ -16,17 +16,18 @@ def _slug_prompt(index: int) -> str:
     return f"prompt_{index:03d}"
 
 
-def _slug_retrieval(index: int, sparse_k: int) -> str:
+def _slug_case(index: int, sparse_k: int) -> str:
     return f"{_slug_prompt(index)}_sk_{sparse_k}"
 
 
-def _full_path(retrieval: RetrievalSet, run_dir: str, prefix: str) -> str:
-    slug = _slug_retrieval(retrieval.prompt_index, retrieval.sparse_k)
-    if prefix == "retrieval":
-        return os.path.join(run_dir, _RETRIEVALS_DIR, f"{slug}.json")
-    elif prefix == "critique":
-        return os.path.join(run_dir, _CRITIQUES_DIR, f"{slug}.json")
-    raise ValueError(f"Unknown prefix: {prefix}")
+def _retrieval_path(prompt_index: int, sparse_k: int, run_dir: str) -> str:
+    slug = _slug_case(prompt_index, sparse_k)
+    return os.path.join(run_dir, _RETRIEVALS_DIR, f"{slug}.json")
+
+
+def _critique_path(prompt_index: int, sparse_k: int, run_dir: str) -> str:
+    slug = _slug_case(prompt_index, sparse_k)
+    return os.path.join(run_dir, _CRITIQUES_DIR, f"{slug}.json")
 
 
 def write_json_atomic(path: str, data: Dict[str, Any]) -> None:
@@ -53,14 +54,15 @@ def ensure_run_dir(run_dir: str) -> None:
 
 def write_retrieval(retrieval: RetrievalSet, run_dir: str) -> str:
     """Write retrieval JSON, return path."""
-    path = _full_path(retrieval, run_dir, "retrieval")
+    path = _retrieval_path(retrieval.prompt_index, retrieval.sparse_k, run_dir)
     write_json_atomic(path, retrieval.to_dict())
     return path
 
 
 def write_critique(critique: Critique, run_dir: str) -> str:
-    """Write critique JSON, return path."""
-    path = _full_path(critique, run_dir, "critique")
+    """Write critique JSON, return path. One file per (prompt_index, sparse_k);
+    multi-sample runs hold all judge_outputs in the file's list."""
+    path = _critique_path(critique.prompt_index, critique.sparse_k, run_dir)
     write_json_atomic(path, critique.to_dict())
     return path
 
@@ -72,9 +74,11 @@ def write_config(snapshot: ConfigSnapshot, run_dir: str) -> str:
     return path
 
 
-def read_critique(run_dir: str, prompt_index: int, sparse_k: int) -> Optional[Dict[str, Any]]:
+def read_critique(
+    run_dir: str, prompt_index: int, sparse_k: int,
+) -> Optional[Dict[str, Any]]:
     """Read a critique JSON by prompt_index + sparse_k."""
-    path = _full_path(type("", (), {"prompt_index": prompt_index, "sparse_k": sparse_k})(), run_dir, "critique")
+    path = _critique_path(prompt_index, sparse_k, run_dir)
     if not os.path.exists(path):
         return None
     with open(path, "r", encoding="utf-8") as f:
@@ -83,7 +87,7 @@ def read_critique(run_dir: str, prompt_index: int, sparse_k: int) -> Optional[Di
 
 def read_retrieval(run_dir: str, prompt_index: int, sparse_k: int) -> Optional[Dict[str, Any]]:
     """Read a retrieval JSON by prompt_index + sparse_k."""
-    path = _full_path(type("", (), {"prompt_index": prompt_index, "sparse_k": sparse_k})(), run_dir, "retrieval")
+    path = _retrieval_path(prompt_index, sparse_k, run_dir)
     if not os.path.exists(path):
         return None
     with open(path, "r", encoding="utf-8") as f:

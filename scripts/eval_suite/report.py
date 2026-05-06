@@ -30,6 +30,16 @@ def _sparse_fractions_set(critiques: List[Dict]) -> List[str]:
 
 
 def _get_judge_reply(critique: Dict) -> str:
+    """Reply from the first parsed judgement (legacy or new). Returns ""
+    when nothing parsed."""
+    outs = critique.get("judge_outputs")
+    if isinstance(outs, list):
+        for jo in outs:
+            if isinstance(jo, dict) and jo.get("parse_ok"):
+                parsed = jo.get("parsed", {})
+                if isinstance(parsed, dict):
+                    return parsed.get("reply", "") or ""
+        return ""
     jout = critique.get("judge_output")
     if not jout or not jout.get("parse_ok"):
         return ""
@@ -144,7 +154,9 @@ def build_report(run_dir: str) -> str:
     config_data = read_config(run_dir)
     if config_data:
         lines.append("\n## Configuration\n")
-        lines.append(f"Collection: {config_data.get('collection', 'unknown')}\n")
+        lines.append(f"Dense collection: {config_data.get('dense_collection', 'unknown')}\n")
+        lines.append(f"Sparse collection: {config_data.get('sparse_collection', 'unknown')}\n")
+        lines.append(f"Dense vector name: {config_data.get('dense_vector_name', '') or '(unnamed)'}\n")
         lines.append(f"Topk: {config_data.get('topk', '?')}\n")
         lines.append(f"Sparse step: {config_data.get('sparse_step', '?')}\n")
         lines.append(f"Judge model: {config_data.get('judge_model', '?')}\n")

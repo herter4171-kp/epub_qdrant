@@ -21,36 +21,52 @@ def _norm_frac(s: Any) -> str:
         return str(s)
 
 
-def _get_satisfaction(critique: Dict) -> int:
-    """Satisfaction score 1-10, or -1 if unavailable."""
-    jout = critique.get("judge_output")
-    if not jout or not jout.get("parse_ok"):
+def _iter_judge_outputs(critique: Dict):
+    """Yield judge_output dicts. Supports new ``judge_outputs`` list and
+    legacy single ``judge_output`` field."""
+    outs = critique.get("judge_outputs")
+    if isinstance(outs, list):
+        for o in outs:
+            if isinstance(o, dict):
+                yield o
+        return
+    one = critique.get("judge_output")
+    if isinstance(one, dict):
+        yield one
+
+
+def _get_satisfaction(critique: Dict) -> float:
+    """Mean satisfaction across all parsed judgements, or -1 if none parsed."""
+    vals: List[float] = []
+    for jo in _iter_judge_outputs(critique):
+        if not jo.get("parse_ok"):
+            continue
+        parsed = jo.get("parsed", {})
+        if not isinstance(parsed, dict):
+            continue
+        sat = parsed.get("satisfaction")
+        if isinstance(sat, (int, float)) and 1 <= sat <= 10:
+            vals.append(float(sat))
+    if not vals:
         return -1
-    parsed = jout.get("parsed", {})
-    if not isinstance(parsed, dict):
-        return -1
-    sat = parsed.get("satisfaction")
-    if not isinstance(sat, (int, float)) or sat < 1 or sat > 10:
-        return -1
-    return int(sat)
+    return float(np.mean(vals))
 
 
 def _get_avg_relevance(critique: Dict) -> float:
-    """Mean relevance over judge-parsed chunks, or NaN if none."""
-    jout = critique.get("judge_output")
-    if not jout or not jout.get("parse_ok"):
-        return float("nan")
-    parsed = jout.get("parsed", {})
-    if not isinstance(parsed, dict):
-        return float("nan")
-    chunks = parsed.get("chunks") or []
-    vals = []
-    for ch in chunks:
-        if not isinstance(ch, dict):
+    """Mean relevance pooled across all judgements × all chunks. NaN if none."""
+    vals: List[float] = []
+    for jo in _iter_judge_outputs(critique):
+        if not jo.get("parse_ok"):
             continue
-        r = ch.get("relevance")
-        if isinstance(r, (int, float)) and 1 <= r <= 10:
-            vals.append(float(r))
+        parsed = jo.get("parsed", {})
+        if not isinstance(parsed, dict):
+            continue
+        for ch in parsed.get("chunks") or []:
+            if not isinstance(ch, dict):
+                continue
+            r = ch.get("relevance")
+            if isinstance(r, (int, float)) and 1 <= r <= 10:
+                vals.append(float(r))
     if not vals:
         return float("nan")
     return float(np.mean(vals))
@@ -59,46 +75,48 @@ def _get_avg_relevance(critique: Dict) -> float:
 def _get_avg_relevance_by_source(critique: Dict) -> Tuple[float, float]:
     """Return (avg_relevance_dense, avg_relevance_sparse). NaN if absent.
 
-    New format: judge.parsed.chunks[].id is a judge_id hash; map via
-    critique.chunks[].judge_id -> source.
-    Legacy format: id is the 1-based rank; fall back to rank -> source.
+    Pools across all judgements × chunks. Map judge.parsed.chunks[].id
+    through critique.chunks[].docket_id (legacy: judge_id) to recover
+    source. Older legacy: id may be the 1-based rank.
     """
-    jout = critique.get("judge_output")
     chunks_meta = critique.get("chunks") or []
-    hash_to_source: Dict[str, str] = {}
+    docket_to_source: Dict[str, str] = {}
     rank_to_source: Dict[int, str] = {}
     for c in chunks_meta:
         if not isinstance(c, dict):
             continue
         src = c.get("source", "")
-        jid = c.get("judge_id")
-        if isinstance(jid, str) and jid:
-            hash_to_source[jid] = src
+        did = c.get("docket_id") or c.get("judge_id")
+        if isinstance(did, str) and did:
+            docket_to_source[did] = src
         rank = c.get("rank")
         if isinstance(rank, int):
             rank_to_source[rank] = src
-    if not jout or not jout.get("parse_ok"):
-        return float("nan"), float("nan")
-    parsed = jout.get("parsed", {})
-    if not isinstance(parsed, dict):
-        return float("nan"), float("nan")
-    dense_vals, sparse_vals = [], []
-    for ch in parsed.get("chunks") or []:
-        if not isinstance(ch, dict):
+
+    dense_vals: List[float] = []
+    sparse_vals: List[float] = []
+    for jo in _iter_judge_outputs(critique):
+        if not jo.get("parse_ok"):
             continue
-        r = ch.get("relevance")
-        rid = ch.get("id")
-        if not isinstance(r, (int, float)) or not (1 <= r <= 10):
+        parsed = jo.get("parsed", {})
+        if not isinstance(parsed, dict):
             continue
-        src = ""
-        if isinstance(rid, str):
-            src = hash_to_source.get(rid, "")
-        elif isinstance(rid, (int, float)):
-            src = rank_to_source.get(int(rid), "")
-        if src == "dense":
-            dense_vals.append(float(r))
-        elif src == "sparse":
-            sparse_vals.append(float(r))
+        for ch in parsed.get("chunks") or []:
+            if not isinstance(ch, dict):
+                continue
+            r = ch.get("relevance")
+            rid = ch.get("id")
+            if not isinstance(r, (int, float)) or not (1 <= r <= 10):
+                continue
+            src = ""
+            if isinstance(rid, str):
+                src = docket_to_source.get(rid, "")
+            elif isinstance(rid, (int, float)):
+                src = rank_to_source.get(int(rid), "")
+            if src == "dense":
+                dense_vals.append(float(r))
+            elif src in ("sparse", "sparse_resolved"):
+                sparse_vals.append(float(r))
     d = float(np.mean(dense_vals)) if dense_vals else float("nan")
     s = float(np.mean(sparse_vals)) if sparse_vals else float("nan")
     return d, s

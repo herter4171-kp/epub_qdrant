@@ -15,12 +15,14 @@ class Prompt:
 @dataclass
 class MergedChunk:
     rank: int
-    id: Any  # qdrant point id — int/uuid
-    source: str  # "dense" or "sparse"
+    id: Any  # dense point id, or "+"-joined composite for combined sparse_resolved
+    source: str  # "dense" or "sparse_resolved"
     token_count: int
     text: str
-    title: str = ""        # publication title from payload
-    judge_id: str = ""     # ephemeral random hash shown to judge
+    title: str = ""                            # publication title from payload
+    docket_id: str = ""                        # opaque per-result token shown to judge
+    constituent_ids: List[Any] = field(default_factory=list)  # dense ids combined into this chunk
+    originating_sparse_id: Any = None          # sparse point id that resolved here (None for direct dense)
 
 
 @dataclass
@@ -31,7 +33,9 @@ class RetrievalSet:
     sparse_k: int
     dense_k: int
     sparse_fraction: str  # e.g. "0.33"
-    collection: str
+    dense_collection: str
+    sparse_collection: str
+    dense_vector_name: str  # "" means unnamed single-vector dense collection
     timestamp_utc: str
     dense_raw: List[Dict[str, Any]]
     sparse_raw: List[Dict[str, Any]]
@@ -51,13 +55,13 @@ class CritiqueChunk:
     token_count: int
     text: str
     title: str = ""
-    judge_id: str = ""      # ephemeral hash shown to judge
+    docket_id: str = ""     # opaque per-result token shown to judge
 
 
 @dataclass
 class CritiqueParsedChunk:
     rank: int
-    id: str                 # judge-side hash
+    id: str                 # docket_id echoed back by judge
     relevance: int  # 1-10
     reason: str
 
@@ -82,13 +86,15 @@ class Critique:
     sparse_k: int = 0
     dense_k: int = 0
     sparse_fraction: str = ""
-    collection: str = ""
+    dense_collection: str = ""
+    sparse_collection: str = ""
+    dense_vector_name: str = ""
     embed_model_endpoint: str = ""
     judge_model: str = ""
     judge_base_url: str = ""
     timestamp_utc: str = ""
     chunks: List[CritiqueChunk] = field(default_factory=list)
-    judge_output: Optional[JudgeOutput] = None
+    judge_outputs: List[JudgeOutput] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -101,21 +107,25 @@ class Critique:
             "sparse_k": self.sparse_k,
             "dense_k": self.dense_k,
             "sparse_fraction": self.sparse_fraction,
-            "collection": self.collection,
+            "dense_collection": self.dense_collection,
+            "sparse_collection": self.sparse_collection,
+            "dense_vector_name": self.dense_vector_name,
             "embed_model_endpoint": self.embed_model_endpoint,
             "judge_model": self.judge_model,
             "judge_base_url": self.judge_base_url,
             "timestamp_utc": self.timestamp_utc,
         }
         d["chunks"] = [asdict(c) for c in self.chunks]
-        if self.judge_output:
-            d["judge_output"] = {
-                "raw": self.judge_output.raw,
-                "parsed": self.judge_output.parsed,
-                "parse_ok": self.judge_output.parse_ok,
-                "retried": self.judge_output.retried,
-                "error": self.judge_output.error,
+        d["judge_outputs"] = [
+            {
+                "raw": jo.raw,
+                "parsed": jo.parsed,
+                "parse_ok": jo.parse_ok,
+                "retried": jo.retried,
+                "error": jo.error,
             }
+            for jo in self.judge_outputs
+        ]
         return d
 
 
@@ -126,13 +136,21 @@ class ConfigSnapshot:
     prompts_file: str
     system_prompt_file: str
     num_prompts: Optional[int]
-    collection: str
+    dense_collection: str
+    sparse_collection: str
+    dense_vector_name: str  # "" = unnamed single-vector dense collection
     qdrant_url: str
     embed_url: str
     judge_base_url: str
     judge_model: str
     judge_api_key: Optional[str]
     output_root: str
+    judge_timeout_seconds: float = 180.0
+    judge_per_chunk_timeout_seconds: float = 30.0
+    judge_max_tokens: int = 2048
+    judge_attempts: int = 3
+    judges_per_case: int = 1
+    case_timeout_seconds: float = 600.0
     prompts: List[str] = field(default_factory=list)
     system_prompt: str = ""
 

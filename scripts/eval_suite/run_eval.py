@@ -50,12 +50,56 @@ except ImportError:
     from eval_suite.report import build_report, render_pdf
     from eval_suite.schemas import Prompt
 
-# Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+# ── ANSI color helpers ───────────────────────────────────────────────────────
+
+_ANSI_RESET = "\033[0m"
+_ANSI_CYAN = "\033[36m"
+_ANSI_YELLOW = "\033[33m"
+_ANSI_GREEN = "\033[32m"
+_ANSI_RED = "\033[31m"
+_USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def _c(text: str, code: str) -> str:
+    if not _USE_COLOR:
+        return text
+    return f"{code}{text}{_ANSI_RESET}"
+
+
+import re as _re
+
+_HTTP_REQ_RE = _re.compile(r"HTTP Request:\s+(GET|POST)\b")
+_STATUS_OK_RE = _re.compile(r'"HTTP/[\d.]+ 2\d\d')
+
+
+class _ColorFormatter(logging.Formatter):
+    """Color HTTP traffic and error-level records on stdout."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        msg = super().format(record)
+        if not _USE_COLOR:
+            return msg
+        if record.levelno >= logging.ERROR:
+            return f"{_ANSI_RED}{msg}{_ANSI_RESET}"
+        raw = record.getMessage()
+        m = _HTTP_REQ_RE.search(raw)
+        if m:
+            method = m.group(1)
+            ok = bool(_STATUS_OK_RE.search(raw))
+            if method == "GET":
+                return f"{_ANSI_YELLOW}{msg}{_ANSI_RESET}"
+            # POST
+            return f"{_ANSI_GREEN if ok else _ANSI_RED}{msg}{_ANSI_RESET}"
+        return msg
+
+
+# Logging — single stdout handler with color formatter.
+_root_handler = logging.StreamHandler(sys.stdout)
+_root_handler.setFormatter(_ColorFormatter("%(asctime)s [%(levelname)s] %(message)s"))
+_root_logger = logging.getLogger()
+_root_logger.handlers.clear()
+_root_logger.addHandler(_root_handler)
+_root_logger.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -103,6 +147,7 @@ def run_eval(argv: list = None) -> None:
 
     # Sweep grid
     sparse_k_values = sweep_grid(config.topk, config.sparse_step)
+    judges_per_case = config.judges_per_case
     total_configs = len(prompts) * len(sparse_k_values)
     done = 0
     missing = 0
@@ -128,10 +173,13 @@ def run_eval(argv: list = None) -> None:
             done += 1
             dense_k = config.topk - sparse_k
             sparse_frac = f"{sparse_k / config.topk:.2f}"
+            status_parts: list = []
+            prefix = _c(
+                f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}]",
+                _ANSI_CYAN,
+            )
 
-            status_parts = []
-
-            # Retrieve
+            # Retrieve once per (prompt, sparse_k); reused across all judgements.
             try:
                 retrieval = retrieve(
                     prompt=prompt,
@@ -139,7 +187,9 @@ def run_eval(argv: list = None) -> None:
                     dense_k=dense_k,
                     sparse_k=sparse_k,
                     qdrant_url=config.qdrant_url,
-                    collection=config.collection,
+                    dense_collection=config.dense_collection,
+                    sparse_collection=config.sparse_collection,
+                    dense_vector_name=config.dense_vector_name,
                     topk=config.topk,
                 )
                 retrieval_path = write_retrieval(retrieval, run_dir)
@@ -158,11 +208,11 @@ def run_eval(argv: list = None) -> None:
                     f.write(json.dumps({"prompt_index": prompt.index, "sparse_k": sparse_k,
                                         "error": str(e)}) + "\n")
                 missing += 1
-                status_parts.append("FAIL")
-                print(f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}] " + " | ".join(status_parts))
+                status_parts.append(_c("RETRIEVAL FAIL", _ANSI_RED))
+                print(f"{prefix} " + " | ".join(status_parts))
                 continue
 
-            # Critique
+            # One critique call runs judges_per_case judgements internally.
             try:
                 c = critique_fn(
                     retrieval_set=retrieval,
@@ -170,26 +220,33 @@ def run_eval(argv: list = None) -> None:
                     judge_base_url=config.judge_base_url,
                     judge_model=config.judge_model,
                     judge_api_key=config.judge_api_key,
+                    judge_timeout_seconds=config.judge_timeout_seconds,
+                    judge_per_chunk_timeout_seconds=config.judge_per_chunk_timeout_seconds,
+                    judge_max_tokens=config.judge_max_tokens,
+                    judge_attempts=config.judge_attempts,
+                    judges_per_case=judges_per_case,
+                    case_timeout_seconds=config.case_timeout_seconds,
                 )
                 critique_path = write_critique(c, run_dir)
 
-                jout = c.judge_output
-                if jout and jout.error == "empty_response_after_retry":
-                    status_parts.append("empty, retrying... empty")
-                    status_parts.append("flagged")
+                outs = c.judge_outputs or []
+                ok_n = sum(1 for jo in outs if jo and jo.parse_ok)
+                bad_n = len(outs) - ok_n
+                if ok_n == 0:
+                    first_err = next((jo.error for jo in outs if jo and jo.error), "no parse")
+                    status_parts.append(_c(f"judges 0/{len(outs)} (last: {first_err})", _ANSI_RED))
                     missing += 1
-                elif jout and not jout.parse_ok:
-                    status_parts.append(f"parse error: {jout.error}")
-                    status_parts.append("flagged")
-                    missing += 1
+                elif bad_n > 0:
+                    status_parts.append(_c(f"judges {ok_n}/{len(outs)}", _ANSI_YELLOW))
                 else:
-                    status_parts.append("ok")
+                    status_parts.append(_c(f"judges {ok_n}/{len(outs)} ok", _ANSI_GREEN))
 
                 status_parts.append(f"wrote {os.path.basename(critique_path)}")
-                print(f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}] " + " | ".join(status_parts))
+                print(f"{prefix} " + " | ".join(status_parts))
 
             except Exception as e:
-                logger.error("Critique failed for prompt %d sk=%d: %s", prompt.index, sparse_k, e)
+                logger.error("Critique failed for prompt %d sk=%d: %s",
+                             prompt.index, sparse_k, e)
                 failures.append({
                     "prompt_index": prompt.index,
                     "prompt_text": prompt.text,
@@ -201,11 +258,14 @@ def run_eval(argv: list = None) -> None:
                     f.write(json.dumps({"prompt_index": prompt.index, "sparse_k": sparse_k,
                                         "error": str(e)}) + "\n")
                 missing += 1
-                status_parts.append(f"CRITIQUE FAIL: {e}")
-                print(f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}] " + " | ".join(status_parts))
+                status_parts.append(_c(f"CRITIQUE FAIL: {e}", _ANSI_RED))
+                print(f"{prefix} " + " | ".join(status_parts))
 
     # Report
-    print(f"\nRun complete. {len(prompts)} prompts x {len(sparse_k_values)} sparse-fractions = {total_configs} configs. {missing} missing.")
+    print(
+        f"\nRun complete. {len(prompts)} prompts x {len(sparse_k_values)} sparse-fractions "
+        f"x {judges_per_case} judges/case = {total_configs} configs. {missing} missing."
+    )
     print("Building report...", end=" ")
     report_path = build_report(run_dir)
     print("done.")

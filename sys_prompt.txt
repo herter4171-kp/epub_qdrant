@@ -16,4 +16,3 @@
   "satisfaction": [1-10 score]
 }
 ```
-</think>

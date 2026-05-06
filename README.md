@@ -37,6 +37,35 @@ epubq list-collections
 epubq delete-collection books
 ```
 
+## Hybrid Retrieval Ingestion (New)
+
+Two independent collections per the Part-1 plan: dense holds MinerU
+sections, sparse holds 256-token chunks pointing back at dense IDs.
+
+### Dense — papers
+Use existing CLI for now; supersedes nothing yet.
+```bash
+epubq ingest-papers <dense_collection> [--base-dir ./mineru_output] [--limit N]
+```
+
+### Sparse — derive from existing dense
+Scrolls dense collection, re-tokenizes payload text into 256-token
+chunks, embeds via SPLADE, writes new sparse-only collection. Each
+sparse point payload carries `dense_chunk_ids = [originating_dense_id]`.
+No JSON re-parse, no PDF, no MinerU dependency at sparse time.
+```bash
+python3 -m src.retrieval.ingest_sparse \
+    --dense-collection <dense_name> \
+    --sparse-collection <sparse_name> \
+    [--limit N]
+```
+`--limit` caps dense points scrolled (smoke testing). Sparse collection
+is created if missing; protected names (`books*`, `papers*`) refused.
+
+### Old single-collection path
+`epubq ingest-papers` writes one named-vector collection (dense + sparse).
+Kept as legacy fallback while the two-collection path stabilizes.
+
 ## Directory Structure
 
 ```
