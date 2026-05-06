@@ -111,6 +111,13 @@ def ensure_collection(client: QdrantClient, name: str) -> None:
         },
     )
     log.info("Collection '%s' created with dense(768) + sparse(SPLADE ~30522)", name)
+    for field in INDEX_FIELDS:
+        try:
+            client.create_payload_index(
+                collection_name=name, field_name=field, field_schema="keyword",
+            )
+        except Exception as e:
+            log.warning("Index '%s' on '%s': %s", field, name, e)
 
 
 # ── JSON discovery ────────────────────────────────────────────────────────────
@@ -492,9 +499,12 @@ def run_sparse_only(client: QdrantClient, collection: str,
     missing_pids = set()
     offset = None
     while True:
-        pts, next_off = client.scroll(
-            collection_name=collection, limit=1000, offset=offset,
-            with_payload=False, with_vectors=["sparse"],
+        pts, next_offset = client.scroll(
+            collection_name=collection,
+            limit=SCROLL_BATCH,
+            offset=offset,
+            with_vectors=False,
+            with_payload=["text"],
         )
         for pt in pts:
             sparse_vec = pt.vector.get("sparse") if pt.vector else None
