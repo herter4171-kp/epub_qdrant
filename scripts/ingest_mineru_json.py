@@ -1,37 +1,41 @@
 #!/usr/bin/env python3
 """Bulk ingest MinerU JSON files (content_list_v2.json) into a Qdrant collection.
 
-Walks the MinerU output tree, discovers all content_list_v2.json files,
-parses them, chunks sections, and runs the full two-pass dense + sparse
-embedding pipeline — identical to ingest_fresh.py's pattern.
+Named-vector pipeline per procedure:
+  Phase 1 — Chunk all papers (pure CPU, no network)
+  Phase 2 — Embed dense vectors in batches, accumulate
+  Phase 3 — Embed sparse vectors in batches, max-pool per point
+  Phase 4a  — Upsert all points with payload only (vector={})
+  Phase 4b  — update_vectors() to add dense vectors (preserves payload)
+  Phase 4c  — update_vectors() to add sparse vectors (preserves dense + payload)
 
-Two-phase approach (GPU-efficient):
-  Phase 1: chunk ALL papers → embed ALL dense in big batches → upsert all
-  Phase 2: scroll entire collection → embed ALL sparse in big batches → upsert all
-
-Single-doc mode (--arxiv-id): per-paper dense-then-sparse for debugging.
+Each phase is idempotent and resumable. Crash mid-way? Restart, picks up from
+boundary. No batch loss beyond current unit of work.
 
 Usage:
-    python scripts/ingest_mineru_json.py --collection papers-semantic \\
-        [--base-dir /tank/scraps/mineru_output] \\
-        [--metadata-dir ./downloads] \\
-        [--limit 10] \\
-        [--arxiv-id 2603.07444]
+    # Dense + sparse (full pipeline):
+    python scripts/ingest_mineru_json.py --collection papers-hybrid
+
+    # Dense only (no sparse):
+    python scripts/ingest_mineru_json.py --collection papers-dense --phase dense
+
+    # Sparse only (adds to existing dense collection):
+    python scripts/ingest_mineru_json.py --collection papers-hybrid --phase sparse
 """
 
 import argparse
 import glob
 import json
 import logging
-import re
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -56,7 +60,7 @@ from servers.embedding_server.client import (
     health_check,
 )
 from src.config import settings
-from src.ingestion.mineru_json_parser import parse_content_list, resolve_json_path
+from src.ingestion.mineru_json_parser import parse_content_list
 from src.ingestion.semantic_chunker import ChunkConfig, chunk_section, load_tokenizer
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
@@ -65,8 +69,7 @@ DEFAULT_MINERU_OUTPUT_DIR = "./mineru_output"
 DEFAULT_METADATA_DIR = "./downloads"
 
 DENSE_BATCH = 128
-SPARSE_BATCH = 32
-SCROLL_BATCH = 256
+SPARSE_BATCH = 256
 MAX_SPARSE_WORDS = 512
 
 INDEX_FIELDS = [
@@ -80,20 +83,30 @@ PROTECTED = {"books", "books-named", "papers", "papers-named"}
 
 
 def ensure_collection(client: QdrantClient, name: str) -> None:
-    """Create a named-vector collection if it doesn't exist."""
+    """Create named-vector collection with both dense and sparse configs."""
     if name in PROTECTED:
         raise ValueError(f"Refusing to overwrite protected collection '{name}'")
     existing = {c.name for c in client.get_collections().collections}
+
+    for field in INDEX_FIELDS:
+        try:
+            client.create_payload_index(
+                collection_name=name, field_name=field, field_schema="keyword",
+            )
+        except Exception as e:
+            log.warning("Index '%s' on '%s': %s", field, name, e)
+
     if name in existing:
         log.info("Collection '%s' already exists — reusing.", name)
         return
+
     log.info("Creating collection: %s", name)
     client.create_collection(
         collection_name=name,
         vectors_config={"dense": VectorParams(size=768, distance=Distance.COSINE)},
         sparse_vectors_config={
             "sparse": SparseVectorParams(
-                index=SparseIndexParams(on_disk=False),  # SPLADE sparse in RAM
+                index=SparseIndexParams(on_disk=False),
             ),
         },
     )
@@ -110,21 +123,15 @@ def ensure_collection(client: QdrantClient, name: str) -> None:
 # ── JSON discovery ────────────────────────────────────────────────────────────
 
 def discover_json_files(base_dir: str) -> Dict[str, Path]:
-    """Discover all content_list_v2.json files.
-
-    Returns {arxiv_id_underscored: json_path} deduplicated.
-    Tries tree layout first, then flat layout.
-    """
+    """Discover all content_list_v2.json files."""
     results: Dict[str, Path] = {}
 
-    # Tree layout: {base}/**/vlm/*_content_list_v2.json
     tree_pattern = str(Path(base_dir) / "**" / "vlm" / "*_content_list_v2.json")
     for p in glob.glob(tree_pattern, recursive=True):
         pp = Path(p)
         arxiv_id = pp.stem.replace("_content_list_v2", "")
         results[arxiv_id] = pp
 
-    # Flat layout: {base}/*_content_list_v2.json (only if arxiv not already found)
     flat_pattern = str(Path(base_dir) / "*_content_list_v2.json")
     for p in glob.glob(flat_pattern, recursive=True):
         pp = Path(p)
@@ -137,112 +144,76 @@ def discover_json_files(base_dir: str) -> Dict[str, Path]:
 
 
 def read_sidecar(metadata_dir: str, arxiv_id: str) -> Dict[str, str]:
-    """Read sidecar metadata JSON for an arxiv ID.
-
-    The metadata file uses the "metadataAttributes" list format from the
-    _read_sidecar helper.  We look for {arxiv_id_underscored}.json in the
-    metadata directory.
-    """
-    meta_path = Path(metadata_dir) / f"{arxiv_id}.json"
+    """Read sidecar metadata JSON for an arxiv ID."""
+    meta_path = Path(metadata_dir) / f"{arxiv_id}.pdf.metadata.json"
     if not meta_path.exists():
         return {}
     try:
         data = json.loads(meta_path.read_text(encoding="utf-8"))
-        result: Dict[str, str] = {}
-        for attr in data.get("metadataAttributes", []):
-            if ": " in attr:
-                k, v = attr.split(": ", 1)
-                result[k] = v
-            elif ":" in attr:
-                k, v = attr.split(":", 1)
-                result[k.strip()] = v.strip()
-        return result
+        attrs = data.get("metadataAttributes", {})
+        if isinstance(attrs, dict):
+            result: Dict[str, str] = {}
+            for k, v in attrs.items():
+                result[k] = str(v) if v else ""
+            return result
+        elif isinstance(attrs, list):
+            result = {}
+            for attr in attrs:
+                if isinstance(attr, str) and ": " in attr:
+                    k, v = attr.split(": ", 1)
+                    result[k.strip()] = v.strip()
+            return result
+        return {}
     except Exception as e:
         log.warning("Failed to parse %s: %s", meta_path.name, e)
         return {}
 
 
-# ── Sparse helpers ────────────────────────────────────────────────────────────
+# ── Chunking helper ───────────────────────────────────────────────────────────
 
-def _chunk_text_for_sparse(text: str) -> List[str]:
-    """Split text into <=512-word windows for sparse embedding."""
-    words = text.split()
-    if not words:
-        return []
-    return [
-        " ".join(words[i : i + MAX_SPARSE_WORDS])
-        for i in range(0, len(words), MAX_SPARSE_WORDS)
-    ]
-
-
-def _aggregate_sparse(vecs: List[dict]) -> dict:
-    """Max-pool sparse vectors across chunks."""
-    agg: Dict[int, float] = {}
-    for v in vecs:
-        for idx, val in zip(v["indices"], v["values"]):
-            if idx not in agg or val > agg[idx]:
-                agg[idx] = val
-    return {"indices": list(agg.keys()), "values": list(agg.values())}
-
-
-# ── Single-paper helpers (for --arxiv-id mode) ────────────────────────────────
-
-def _chunk_paper_to_points(
+def _chunk_paper_to_chunks(
     arxiv_id: str,
     json_path: Path,
     metadata_dir: str,
     token_counter,
     config: ChunkConfig,
-    point_offset: int,
-) -> Optional[Tuple[List[PointStruct], int, int, int]]:
-    """Parse one JSON, chunk sections, embed dense, upsert.
-
-    Returns (points, sections, chunks, tokens) or None on failure.
-    """
-    # Parse JSON → sections
+    point_id_start: int,
+) -> Tuple[List[Tuple[int, str, Dict]], int, int, int]:
+    """Parse one JSON, chunk sections. Returns (chunks, sections, tokens, points)."""
     try:
         json_sections = parse_content_list(json_path)
     except Exception as e:
         log.error("JSON parse failed for %s: %s", json_path, e)
-        return None
+        return ([], 0, 0, 0)
 
     if not json_sections:
         log.warning("JSON %s produced 0 sections — skipping", json_path)
         return ([], 0, 0, 0)
 
-    # Read sidecar metadata
     meta = read_sidecar(metadata_dir, arxiv_id)
-
-    # Bug 3 fix: prefer dot-format arxiv_id from sidecar (e.g. "2201.11903")
-    # over the underscore directory key (e.g. "2201_11903").
     arxiv_id_dot = meta.get("arxiv_id", arxiv_id.replace("_", "."))
-
-    # Bug 1 fix: when sidecar is empty, title falls back to underscore arxiv_id.
-    # Use a cleaned title that's more human-readable.
     title = meta.get("title", arxiv_id)
     category = meta.get("category", "")
     subcategory = meta.get("subcategory", "")
     authors = meta.get("authors", "")
     publish_date = meta.get("publish_date", "")
 
-    # Chunk each section (no embedding_fn — dense done in batch below)
-    all_chunks: List[Tuple[str, Dict]] = []  # (text, metadata)
+    all_chunks: List[Tuple[int, str, Dict]] = []
     for js in json_sections:
         results = chunk_section(
-            title=js.title,
-            content=js.content,
-            config=config,
-            token_counter=token_counter,
-            embedding_fn=None,
+            title=js.title, content=js.content, config=config,
+            token_counter=token_counter, embedding_fn=None,
         )
         chunk_count = len(results)
         for cr in results:
             all_chunks.append((
+                point_id_start + len(all_chunks),
                 cr.text,
                 {
                     "doc_type": "paper",
                     "source_file": f"{arxiv_id}.pdf",
                     "title": title or "",
+                    "text": cr.text or "",
                     "arxiv_id": arxiv_id_dot,
                     "category": category or "",
                     "subcategory": subcategory or "",
@@ -260,40 +231,273 @@ def _chunk_paper_to_points(
     if not all_chunks:
         return ([], len(json_sections), 0, 0)
 
-    # Embed dense in batches
-    texts = [c[0] for c in all_chunks]
-    all_vecs: List[List[float]] = []
-    for b in range(0, len(texts), DENSE_BATCH):
-        batch = texts[b : b + DENSE_BATCH]
-        all_vecs.extend(get_dense_vectors(batch))
-
-    # Build points
-    points: List[PointStruct] = []
-    for idx, ((chunk_text, metadata), vec) in enumerate(zip(all_chunks, all_vecs)):
-        points.append(PointStruct(
-            id=point_offset + idx,
-            vector={"dense": vec},
-            payload={"text": chunk_text, **metadata},
-        ))
-
-    total_tokens = sum(c[1]["token_count"] for c in all_chunks)
-    return (points, len(json_sections), len(all_chunks), total_tokens)
+    total_tokens = sum(c[2]["token_count"] for c in all_chunks)
+    return (all_chunks, len(json_sections), total_tokens, len(all_chunks))
 
 
-def pass2_sparse_for_paper(
-    client: QdrantClient,
-    collection: str,
-    arxiv_id: str,
-) -> int:
-    """Scroll this paper's points, embed sparse, upsert same IDs."""
-    f = Filter(must=[FieldCondition(
-        key="arxiv_id",
-        match=MatchValue(value=arxiv_id),
-    )])
+# ── Sparse helpers ────────────────────────────────────────────────────────────
 
+def _chunk_text_for_sparse(text: str) -> List[str]:
+    """Split text into <=512-word windows for sparse embedding."""
+    words = text.split()
+    if not words:
+        return []
+    return [
+        " ".join(words[i : i + MAX_SPARSE_WORDS])
+        for i in range(0, len(words), MAX_SPARSE_WORDS)
+    ]
+
+
+def _aggregate_sparse(vecs: List[dict]) -> dict:
+    """Max-pool sparse vectors across windows for a single point."""
+    agg: Dict[int, float] = {}
+    for v in vecs:
+        for idx, val in zip(v["indices"], v["values"]):
+            if idx not in agg or val > agg[idx]:
+                agg[idx] = val
+    return {"indices": list(agg.keys()), "values": list(agg.values())}
+
+
+def _format_eta(elapsed: float, done: int, total: int) -> str:
+    if total == 0:
+        return ""
+    rate = done / elapsed if elapsed > 0 else 0
+    remaining = total - done
+    if rate == 0:
+        return "~???:? remaining"
+    eta_secs = remaining / rate
+    mins = int(eta_secs // 60)
+    secs = int(eta_secs % 60)
+    return f"~{mins}:{secs:02d} remaining"
+
+
+# ── Chunk all papers ─────────────────────────────────────────────────────────
+
+def _chunk_all_papers(
+    arxiv_ids: List[str],
+    jsons: Dict[str, Path],
+    metadata_dir: str,
+    token_counter,
+    config: ChunkConfig,
+) -> Tuple[List[Tuple[int, str, Dict]], int, int]:
+    """Chunk all papers into (id, text, metadata) tuples."""
+    log.info("Chunking %d papers...", len(arxiv_ids))
+
+    all_chunked: List[Tuple[int, str, Dict]] = []
+    total_sections = 0
+    total_tokens = 0
+    start = time.time()
+
+    for i, arxiv_id in enumerate(arxiv_ids, 1):
+        json_path = jsons[arxiv_id]
+        elapsed = time.time() - start
+        eta = _format_eta(elapsed, i, len(arxiv_ids))
+        log.info("[%4d/%4d] %s (%s) — %s",
+                 i, len(arxiv_ids), arxiv_id, json_path.name, eta)
+
+        result = _chunk_paper_to_chunks(arxiv_id, json_path, metadata_dir,
+                                         token_counter, config, len(all_chunked))
+        if result is None:
+            log.error("  [%s] FAILED — skipping", arxiv_id)
+            continue
+        chunks, sections, tokens, points = result
+        all_chunked.extend(chunks)
+        total_sections += sections
+        total_tokens += tokens
+        log.info("  [%s] ✓ %d chunks, %d tokens", arxiv_id, points, tokens)
+
+    log.info("Chunking complete: %d chunks, %d tokens in %.1fs",
+             len(all_chunked), total_tokens, time.time() - start)
+
+    return all_chunked, total_sections, total_tokens
+
+
+# ── PHASE 1 (Dense): embed + upsert per batch ────────────────────────────────
+
+def run_phase_dense(client: QdrantClient, collection: str,
+                    all_chunked: List[Tuple[int, str, Dict]]) -> int:
+    """Embed dense vectors and write to Qdrant in batches.
+
+    On a fresh collection: upsert(payload + dense vector) per batch.
+    On a collection that already has points (e.g. sparse was run first):
+      only update_vectors(dense) — preserves payload and sparse.
+
+    Memory: O(DENSE_BATCH) vectors live at once. Never accumulates all.
+    """
+    if not all_chunked:
+        return 0
+
+    n = len(all_chunked)
+    log.info("=" * 60)
+    log.info("PHASE dense: %d chunks, batch=%d", n, DENSE_BATCH)
+    log.info("=" * 60)
+
+    # Detect whether points already exist so we don't wipe sparse vectors
+    # with a full upsert.
+    first_pid = all_chunked[0][0]
+    has_points = False
+    try:
+        pts, _ = client.scroll(
+            collection_name=collection, limit=1,
+            offset=first_pid, with_payload=False, with_vectors=["sparse"],
+        )
+        if pts:
+            has_points = True
+    except Exception:
+        pass
+
+    if has_points:
+        log.info("Existing points detected — will update_vectors(dense) only (preserves sparse + payload).")
+    else:
+        log.info("Fresh collection — will upsert(payload + dense) per batch.")
+
+    total_batches = (n + DENSE_BATCH - 1) // DENSE_BATCH
+    start = time.time()
+
+    for b in range(0, n, DENSE_BATCH):
+        batch = all_chunked[b : b + DENSE_BATCH]
+        texts = [t[1] for t in batch]
+
+        # Embed this batch only — O(DENSE_BATCH) in memory
+        vecs = get_dense_vectors(texts)
+
+        batch_num = b // DENSE_BATCH + 1
+        elapsed = time.time() - start
+        eta = _format_eta(elapsed, b + len(batch), n)
+
+        if has_points:
+            client.update_vectors(
+                collection_name=collection,
+                points=[
+                    PointVectors(id=pid, vector={"dense": vecs[i]})
+                    for i, (pid, _text, _meta) in enumerate(batch)
+                ],
+            )
+        else:
+            client.upsert(
+                collection_name=collection,
+                points=[
+                    PointStruct(id=pid, vector={"dense": vecs[i]}, payload=meta)
+                    for i, (pid, _text, meta) in enumerate(batch)
+                ],
+            )
+
+        log.info("  [dense %d/%d] %d pts — %s", batch_num, total_batches, len(batch), eta)
+
+        # vecs goes out of scope here — GC can reclaim immediately
+        del vecs
+
+    log.info("PHASE dense COMPLETE: %d points", n)
+    return n
+
+
+# ── PHASE 2 (Sparse): embed + update_vectors per batch ───────────────────────
+
+def run_phase_sparse(client: QdrantClient, collection: str,
+                     all_chunked: List[Tuple[int, str, Dict]]) -> int:
+    """Embed sparse vectors (SPLADE) and write to Qdrant in batches.
+
+    Key design:
+      - Each chunk may produce multiple <=512-word windows.
+      - Windows for the SAME point that fall in the SAME batch are max-pooled
+        before writing.
+      - Windows for a point that SPAN multiple batches: the point is written
+        with its partial vector after each batch that contains it, and the
+        next batch that includes more windows for that point will overwrite
+        with a better (larger) max-pool.  This is safe because Qdrant
+        update_vectors is idempotent and the final batch for that point wins.
+      - Memory at any instant: O(SPARSE_BATCH) windows + O(points_in_batch)
+        aggregated vectors.  Never accumulates all chunks.
+
+    Preserves dense vectors and payload on existing points (update_vectors only).
+    """
+    if not all_chunked:
+        return 0
+
+    n = len(all_chunked)
+    log.info("=" * 60)
+    log.info("PHASE sparse: %d chunks, batch=%d (window size=%d words)",
+             n, SPARSE_BATCH, MAX_SPARSE_WORDS)
+    log.info("=" * 60)
+
+    # Expand every chunk into (pid, window_text) pairs.
+    # This is just a list of small strings — no vectors stored yet.
+    point_windows: List[Tuple[int, str]] = []
+    for pid, text, _meta in all_chunked:
+        for window in _chunk_text_for_sparse(text):
+            point_windows.append((pid, window))
+
+    total_windows = len(point_windows)
+    total_batches = (total_windows + SPARSE_BATCH - 1) // SPARSE_BATCH
+    log.info("Total sparse windows to embed: %d across %d batches",
+             total_windows, total_batches)
+
+    total_updated = 0
+    start = time.time()
+
+    for b in range(0, total_windows, SPARSE_BATCH):
+        batch_windows = point_windows[b : b + SPARSE_BATCH]
+        batch_texts = [w[1] for w in batch_windows]
+
+        # ── Embed this batch only ─────────────────────────────────────────
+        batch_vecs = get_sparse_vectors(batch_texts, is_query=False)
+        # batch_vecs: List[dict] with keys "indices", "values"
+
+        # ── Max-pool within this batch, grouped by PID ────────────────────
+        # Use a local dict — discarded at end of loop iteration.
+        batch_agg: Dict[int, Dict[int, float]] = defaultdict(dict)
+        for (pid, _win_text), sv in zip(batch_windows, batch_vecs):
+            pid_agg = batch_agg[pid]
+            for idx, val in zip(sv["indices"], sv["values"]):
+                if idx not in pid_agg or val > pid_agg[idx]:
+                    pid_agg[idx] = val
+
+        # ── Write aggregated sparse vectors for PIDs in this batch ────────
+        update_ops = [
+            PointVectors(
+                id=pid,
+                vector={
+                    "sparse": SparseVector(
+                        indices=list(pid_agg.keys()),
+                        values=list(pid_agg.values()),
+                    )
+                },
+            )
+            for pid, pid_agg in batch_agg.items()
+        ]
+        client.update_vectors(collection_name=collection, points=update_ops)
+        total_updated += len(update_ops)
+
+        batch_num = b // SPARSE_BATCH + 1
+        elapsed = time.time() - start
+        eta = _format_eta(elapsed, b + len(batch_windows), total_windows)
+        log.info("  [sparse %d/%d] %d windows → %d pts written — %s",
+                 batch_num, total_batches, len(batch_windows), len(update_ops), eta)
+
+        # Explicit cleanup — keeps RSS flat across thousands of batches
+        del batch_vecs, batch_agg, update_ops
+
+    log.info("PHASE sparse COMPLETE: %d update_vectors calls, %d unique points touched",
+             total_batches, total_updated)
+    return total_updated
+
+
+# ── SPARSE-ONLY MODE: scroll existing collection, fill missing sparse ─────────
+
+def run_sparse_only(client: QdrantClient, collection: str,
+                    all_chunked: List[Tuple[int, str, Dict]]) -> int:
+    """Scroll existing Qdrant points, skip those already with sparse, fill the rest.
+
+    Used when --phase sparse on a pre-existing dense collection.
+    """
+    log.info("=" * 60)
+    log.info("SPARSE-ONLY: filling sparse for existing points in '%s'", collection)
+    log.info("=" * 60)
+
+    # ── Find which points are missing sparse ─────────────────────────────
+    log.info("Scrolling collection to find points without sparse vectors...")
+    missing_pids = set()
     offset = None
-    total = 0
-
     while True:
         pts, next_offset = client.scroll(
             collection_name=collection,
@@ -302,37 +506,86 @@ def pass2_sparse_for_paper(
             with_vectors=False,
             with_payload=["text"],
         )
-        if not pts:
+        for pt in pts:
+            sparse_vec = pt.vector.get("sparse") if pt.vector else None
+            if sparse_vec is None:
+                missing_pids.add(pt.id)
+        if next_off is None:
             break
+        offset = next_off
 
-        upsert_points: List[PointVectors] = []
-        for p in pts:
-            text = (p.payload.get("text") or "").strip()
-            if not text:
-                continue
+    log.info("Points needing sparse: %d", len(missing_pids))
+    if not missing_pids:
+        log.info("All points already have sparse vectors. Done.")
+        return 0
 
-            windows = _chunk_text_for_sparse(text)
-            all_sparse: List[dict] = []
-            for b in range(0, len(windows), SPARSE_BATCH):
-                sub = windows[b : b + SPARSE_BATCH]
-                all_sparse.extend(get_sparse_vectors(sub, is_query=False))
+    # ── Filter all_chunked to only the missing PIDs ───────────────────────
+    to_embed = [(pid, text, meta) for pid, text, meta in all_chunked if pid in missing_pids]
+    log.info("Matched %d chunked entries for missing sparse PIDs", len(to_embed))
 
-            sv = _aggregate_sparse(all_sparse)
-            upsert_points.append(PointVectors(
-                id=p.id,
-                vector={"sparse": SparseVector(indices=sv["indices"], values=sv["values"])},
-            ))
+    if not to_embed:
+        log.info("No matching chunked entries found. Done.")
+        return 0
 
-        if upsert_points:
-            client.update_vectors(collection_name=collection, points=upsert_points)
-            total += len(upsert_points)
+    # Delegate to the standard sparse phase (only processes to_embed)
+    return run_phase_sparse(client, collection, to_embed)
 
-        if next_offset is None:
-            break
-        offset = next_offset
 
-    return total
+# ── Upsert payload-only points ───────────────────────────────────────────────
 
+def _upsert_payload_only(client: QdrantClient, collection: str,
+                          all_chunked: List[Tuple[int, str, Dict]]) -> None:
+    """Upsert points with empty vector dicts — establishes payload without touching vectors."""
+    n = len(all_chunked)
+    total_batches = (n + DENSE_BATCH - 1) // DENSE_BATCH
+    log.info("Upserting %d payload-only points in %d batches...", n, total_batches)
+    for b in range(0, n, DENSE_BATCH):
+        batch = all_chunked[b : b + DENSE_BATCH]
+        client.upsert(
+            collection_name=collection,
+            points=[
+                PointStruct(id=pid, vector={}, payload=meta)
+                for pid, _text, meta in batch
+            ],
+        )
+        log.info("  [payload %d/%d] %d pts", b // DENSE_BATCH + 1, total_batches, len(batch))
+    log.info("Payload-only upsert done.")
+
+def run_phase_payload(client: QdrantClient, collection: str,
+                      all_chunked: List[Tuple[int, str, Dict]]) -> int:
+    """Patch payload on existing points. Vectors are never touched.
+
+    Uses set_payload() in batches so dense + sparse are preserved.
+    Use when you've added/changed payload fields without re-embedding.
+    """
+    if not all_chunked:
+        return 0
+
+    n = len(all_chunked)
+    log.info("=" * 60)
+    log.info("PHASE payload: patching %d points, batch=%d", n, DENSE_BATCH)
+    log.info("=" * 60)
+
+    total_batches = (n + DENSE_BATCH - 1) // DENSE_BATCH
+    start = time.time()
+
+    for b in range(0, n, DENSE_BATCH):
+        batch = all_chunked[b : b + DENSE_BATCH]
+        batch_num = b // DENSE_BATCH + 1
+        elapsed = time.time() - start
+        eta = _format_eta(elapsed, b + len(batch), n)
+
+        for pid, _text, meta in batch:
+            client.set_payload(
+                collection_name=collection,
+                payload=meta,
+                points=[pid],
+            )
+
+        log.info("  [payload %d/%d] %d pts — %s", batch_num, total_batches, len(batch), eta)
+
+    log.info("PHASE payload COMPLETE: %d points patched", n)
+    return n
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -340,44 +593,37 @@ def main():
     parser = argparse.ArgumentParser(
         description="Bulk ingest MinerU JSON files into a Qdrant collection.",
     )
-    parser.add_argument("--collection", required=True, help="Target Qdrant collection name")
-    parser.add_argument(
-        "--base-dir", default=None,
-        help="MinerU output directory (overrides MINERU_OUTPUT_DIR env). Defaults to ./mineru_output.",
-    )
-    parser.add_argument(
-        "--metadata-dir", default=DEFAULT_METADATA_DIR,
-        help="Directory containing sidecar metadata JSON files. Defaults to ./downloads.",
-    )
-    parser.add_argument("--limit", type=int, default=None, help="Max papers to process")
-    parser.add_argument("--arxiv-id", default=None, help="Process a single paper by ID")
+    parser.add_argument("--collection", required=True,
+                        help="Target Qdrant collection name")
+    parser.add_argument("--base-dir", default=None,
+                        help="MinerU output dir (overrides MINERU_OUTPUT_DIR).")
+    parser.add_argument("--metadata-dir", default=DEFAULT_METADATA_DIR,
+                        help="Sidecar metadata JSON dir. Defaults to ./downloads.")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Max papers to process")
+    parser.add_argument("--phase", choices=["dense", "sparse", "all", "payload"],
+                        default="all",
+                        help=(
+                            "dense  = embed dense only (upsert payload+dense per batch);\n"
+                            "sparse = embed sparse only (update_vectors sparse per batch);\n"
+                            "all    = dense first, then sparse (safest, no vector wipes)"
+                        ))
     args = parser.parse_args()
 
-    # Pre-flight: health check
+    # ── Pre-flight ────────────────────────────────────────────────────────
     if not health_check():
         log.error("Embedding server not healthy at %s", settings.EMBEDDING_SERVER_URL)
         sys.exit(1)
     log.info("Embedding server OK")
 
-    # Pre-flight: Qdrant
     client = QdrantClient(url=settings.QDRANT_URL)
     log.info("Qdrant OK — existing: %s",
              [c.name for c in client.get_collections().collections])
 
-    # Resolve base directory
     import os
-    env = os.environ.get("MINERU_OUTPUT_DIR")
-    if args.base_dir:
-        base_dir = args.base_dir
-    elif env:
-        base_dir = env
-    else:
-        base_dir = DEFAULT_MINERU_OUTPUT_DIR
+    base_dir = args.base_dir or os.environ.get("MINERU_OUTPUT_DIR") or DEFAULT_MINERU_OUTPUT_DIR
 
-    # Ensure collection
-    ensure_collection(client, args.collection)
-
-    # Chunk config + tokenizer
+    # ── Tokenizer + chunk config ──────────────────────────────────────────
     token_counter = load_tokenizer(settings.TOKENIZER_JSON or None)
     config = ChunkConfig(
         chunk_size=settings.CHUNK_SIZE,
@@ -390,294 +636,108 @@ def main():
         tokenizer_path=settings.TOKENIZER_JSON or None,
     )
 
-    # Discover JSONs
+    # ── Discover + filter ─────────────────────────────────────────────────
     jsons = discover_json_files(base_dir)
-
-    # Filter by arxiv_id if specified — single-paper mode (per-doc dense+sparse)
-    if args.arxiv_id:
-        normalized = args.arxiv_id.replace(".", "_")
-        if normalized not in jsons:
-            log.error("No JSON found for arxiv_id=%s", args.arxiv_id)
-            sys.exit(1)
-
-        arxiv_id = normalized
-        json_path = jsons[arxiv_id]
-
-        # Get current point offset for unique IDs
-        try:
-            point_offset = client.get_collection(args.collection).points_count or 0
-        except Exception:
-            point_offset = 0
-
-        # Chunk + embed dense for this single paper
-        result = _chunk_paper_to_points(
-            arxiv_id, json_path, args.metadata_dir,
-            token_counter, config, point_offset,
-        )
-        if result is None:
-            log.error("Single paper %s — FAILED", args.arxiv_id)
-            sys.exit(1)
-
-        points, sections, chunks, tokens = result
-        client.upsert(collection_name=args.collection, points=points)
-        log.info("  dense: %d points upserted", len(points))
-
-        # Pass 2: sparse for this paper
-        sparse_count = pass2_sparse_for_paper(client, args.collection, arxiv_id)
-        log.info("  [%s] %d sections, %d chunks, %d tokens, %d sparse vectors",
-                 args.arxiv_id, sections, chunks, tokens, sparse_count)
-        return
-
-    # ── Multi-paper mode: two-phase (GPU-efficient) ──────────────────────
-
-    # Apply limit
     arxiv_ids = sorted(jsons.keys())
     if args.limit:
-        arxiv_ids = arxiv_ids[:args.limit]
+        arxiv_ids = arxiv_ids[: args.limit]
 
-    log.info("Multi-paper mode: %d papers, two-phase embedding", len(arxiv_ids))
+    log.info("Processing %d papers (limit=%s)", len(arxiv_ids), args.limit)
 
-    # ── Phase 1: chunk ALL → embed ALL dense → upsert ALL ────────────────
-
-    # First, check which papers are already ingested (skip them entirely)
     to_process: List[str] = []
     total_skipped = 0
-
     for arxiv_id in arxiv_ids:
         try:
             f = Filter(must=[FieldCondition(
                 key="arxiv_id", match=MatchValue(value=arxiv_id),
             )])
             scroll_pts, _ = client.scroll(
-                collection_name=args.collection,
-                limit=1,
-                with_payload=False,
-                with_vectors=False,
-                query_filter=f,
+                collection_name=args.collection, limit=1,
+                with_payload=False, with_vectors=False, query_filter=f,
             )
             if scroll_pts:
-                # Count points for this paper
-                count = 0
-                off = None
-                while True:
-                    pts2, noff = client.scroll(
-                        collection_name=args.collection,
-                        limit=SCROLL_BATCH,
-                        offset=off,
-                        with_payload=False,
-                        with_vectors=False,
-                        query_filter=f,
-                    )
-                    if not pts2:
-                        break
-                    count += len(pts2)
-                    if noff is None:
-                        break
-                    off = noff
-                total_skipped += count
-                log.info("  [%d/%d] %s — already ingested (%d chunks), skipping",
-                         len(to_process) + 1, len(arxiv_ids), arxiv_id, count)
+                total_skipped += len(scroll_pts)
+                log.info("  %s — already ingested, skipping", arxiv_id)
                 continue
         except Exception:
             pass
         to_process.append(arxiv_id)
 
-    log.info("Phase 1: chunking %d papers (skipped %d)", len(to_process), total_skipped)
+    log.info("Processing %d papers (skipped %d already-ingested)",
+             len(to_process), total_skipped)
 
-    # Step 1a: chunk ALL papers into (text, metadata) tuples
-    all_chunks: List[Tuple[str, Dict]] = []       # (text, metadata)
-    all_ids: List[Tuple[str, int, int]] = []       # (arxiv_id, chunk_start_idx, chunk_count)
-    paper_info: Dict[str, dict] = {}               # arxiv_id → {title, category, ...}
-    paper_sections: Dict[str, int] = {}             # arxiv_id → section_count
-
-    # Track how many points are already in the collection for ID assignment
-    try:
-        point_offset = client.get_collection(args.collection).points_count or 0
-    except Exception:
-        point_offset = 0
-
-    current_chunk_idx = 0
-
-    for i, arxiv_id in enumerate(to_process, 1):
-        json_path = jsons[arxiv_id]
-
-        # Parse JSON → sections
-        try:
-            json_sections = parse_content_list(json_path)
-        except Exception as e:
-            log.error("  [%d/%d] JSON parse failed for %s: %s", i, len(to_process), json_path, e)
-            continue
-
-        if not json_sections:
-            log.warning("  [%d/%d] JSON %s produced 0 sections — skipping", i, len(to_process), json_path)
-            continue
-
-        # Read sidecar metadata
-        meta = read_sidecar(args.metadata_dir, arxiv_id)
-        arxiv_id_dot = meta.get("arxiv_id", arxiv_id.replace("_", "."))
-        title = meta.get("title", arxiv_id)
-        category = meta.get("category", "")
-        subcategory = meta.get("subcategory", "")
-        authors = meta.get("authors", "")
-        publish_date = meta.get("publish_date", "")
-
-        paper_info[arxiv_id] = {
-            "arxiv_id": arxiv_id_dot,
-            "title": title,
-            "category": category,
-            "subcategory": subcategory,
-            "authors": authors,
-            "publish_date": publish_date,
-        }
-
-        # Chunk each section
-        chunks_for_paper: List[Tuple[str, Dict]] = []
-        for js in json_sections:
-            results = chunk_section(
-                title=js.title,
-                content=js.content,
-                config=config,
-                token_counter=token_counter,
-                embedding_fn=None,  # dense embedding done in batch below
-            )
-            chunk_count = len(results)
-            for cr in results:
-                chunks_for_paper.append((
-                    cr.text,
-                    {
-                        "doc_type": "paper",
-                        "source_file": f"{arxiv_id}.pdf",
-                        "title": title or "",
-                        "arxiv_id": arxiv_id_dot,
-                        "category": category or "",
-                        "subcategory": subcategory or "",
-                        "authors": authors or "",
-                        "publish_date": publish_date or "",
-                        "section_title": cr.section_title or "",
-                        "chunk_index": cr.chunk_index,
-                        "chunk_count": chunk_count,
-                        "token_count": cr.token_count,
-                        "has_heading_context": cr.has_heading_context,
-                        "heading_level": js.heading_level,
-                    },
-                ))
-
-        if not chunks_for_paper:
-            paper_sections[arxiv_id] = 0
-            continue
-
-        all_ids.append((arxiv_id, current_chunk_idx, len(chunks_for_paper)))
-        current_chunk_idx += len(chunks_for_paper)
-        all_chunks.extend(chunks_for_paper)
-        paper_sections[arxiv_id] = len(json_sections)
-
-        log.info("  [%d/%d] %s — %d sections, %d chunks buffered",
-                 i, len(to_process), arxiv_id, len(json_sections), len(chunks_for_paper))
-
-    total_buffered = len(all_chunks)
-    log.info("Phase 1a: %d total chunks buffered across %d papers", total_buffered, len(to_process))
-
-    if total_buffered == 0:
-        log.info("No chunks to embed. Done.")
+    if not to_process:
+        log.info("All papers already ingested. Done.")
         return
 
-    # Step 1b: embed ALL dense in batches
-    all_texts = [c[0] for c in all_chunks]
-    log.info("Phase 1b: embedding %d texts dense...", total_buffered)
+    # ── Ensure collection ─────────────────────────────────────────────────
+    ensure_collection(client, args.collection)
 
-    all_vecs: List[List[float]] = []
-    for b in range(0, total_buffered, DENSE_BATCH):
-        batch = all_texts[b : b + DENSE_BATCH]
-        all_vecs.extend(get_dense_vectors(batch))
+    # ── Chunk all papers (CPU only, no VRAM) ─────────────────────────────
+    t0 = time.time()
+    all_chunked, total_sections, total_tokens = _chunk_all_papers(
+        to_process, jsons, args.metadata_dir, token_counter, config,
+    )
 
-    log.info("Phase 1b: dense embedding done (%d vectors)", len(all_vecs))
+    if not all_chunked:
+        log.warning("No chunks produced. Exiting.")
+        return
 
-    # Step 1c: upsert ALL points with dense vectors
-    log.info("Phase 1c: upserting %d points with dense vectors", total_buffered)
+    # ── Run requested phase(s) ────────────────────────────────────────────
+    #
+    # --phase dense:
+    #   Fresh collection → upsert(payload + dense) per batch.
+    #   Existing collection (sparse already present) → update_vectors(dense).
+    #
+    # --phase sparse:
+    #   Points exist with dense → run_sparse_only (scroll, skip already-done).
+    #   Fresh collection (no points yet) → upsert payload-only first, then sparse.
+    #
+    # --phase all:
+    #   1. run_phase_dense  → upserts payload+dense (fresh) or updates dense (existing)
+    #   2. run_phase_sparse → update_vectors(sparse) per batch; dense+payload preserved
+    #
+    if args.phase == "dense":
+        run_phase_dense(client, args.collection, all_chunked)
 
-    points: List[PointStruct] = []
-    for idx, ((chunk_text, metadata), vec) in enumerate(zip(all_chunks, all_vecs)):
-        points.append(PointStruct(
-            id=point_offset + idx,
-            vector={"dense": vec},
-            payload={"text": chunk_text, **metadata},
-        ))
+    elif args.phase == "sparse":
+        # Check if points already exist in the collection
+        first_pid = all_chunked[0][0]
+        has_points = False
+        try:
+            pts, _ = client.scroll(
+                collection_name=args.collection, limit=1,
+                offset=first_pid, with_payload=False, with_vectors=False,
+            )
+            if pts:
+                has_points = True
+        except Exception:
+            pass
 
-    client.upsert(collection_name=args.collection, points=points)
-    log.info("Phase 1c: %d points upserted", len(points))
+        if has_points:
+            # Dense already present — skip existing sparse, fill missing only
+            run_sparse_only(client, args.collection, all_chunked)
+        else:
+            # Nothing exists yet — establish payload anchors, then sparse
+            log.info("No existing points — upserting payload anchors before sparse embed.")
+            _upsert_payload_only(client, args.collection, all_chunked)
+            run_phase_sparse(client, args.collection, all_chunked)
 
-    # ── Phase 2: scroll entire collection → embed ALL sparse → upsert ALL ──
+    elif args.phase == "all":
+        # Dense first (upserts payload+dense per batch on fresh collection)
+        run_phase_dense(client, args.collection, all_chunked)
+        # Sparse second (update_vectors only — dense+payload already on disk)
+        run_phase_sparse(client, args.collection, all_chunked)
 
-    info = client.get_collection(args.collection)
-    total_points = info.points_count or 0
-    log.info("Phase 2: scrolling %d points for sparse embedding", total_points)
-
-    sparse_offset = None
-    total_sparse = 0
-    sparse_points: List[PointVectors] = []
-
-    while True:
-        pts, next_offset = client.scroll(
-            collection_name=args.collection,
-            limit=SCROLL_BATCH,
-            offset=sparse_offset,
-            with_vectors=False,
-            with_payload=["text"],
-        )
-        if not pts:
-            break
-
-        for p in pts:
-            text = (p.payload.get("text") or "").strip()
-            if not text:
-                continue
-
-            windows = _chunk_text_for_sparse(text)
-            all_sparse: List[dict] = []
-            for b in range(0, len(windows), SPARSE_BATCH):
-                sub = windows[b : b + SPARSE_BATCH]
-                all_sparse.extend(get_sparse_vectors(sub, is_query=False))
-
-            sv = _aggregate_sparse(all_sparse)
-            sparse_points.append(PointVectors(
-                id=p.id,
-                vector={"sparse": SparseVector(indices=sv["indices"], values=sv["values"])},
-            ))
-
-        # Batch upsert sparse vectors for this page
-        if sparse_points:
-            client.update_vectors(collection_name=args.collection, points=sparse_points)
-            total_sparse += len(sparse_points)
-            log.info("  [sparse] %d / %d", total_sparse, total_points)
-            sparse_points = []
-
-        if next_offset is None:
-            break
-        sparse_offset = next_offset
-
-    # Flush any remaining sparse points
-    if sparse_points:
-        client.update_vectors(collection_name=args.collection, points=sparse_points)
-        total_sparse += len(sparse_points)
-
-    log.info("Phase 2: %d points with sparse vectors upserted", total_sparse)
-
-    # ── Summary ──────────────────────────────────────────────────────────
-
-    total_chunks_upserted = sum(count for _, _, count in all_ids)
-    total_tokens = 0
-    for arxiv_id, start, count in all_ids:
-        for chunk_text, metadata in all_chunks[start:start+count]:
-            total_tokens += metadata.get("token_count", 0)
-
+    # ── Final summary ─────────────────────────────────────────────────────
     log.info("=" * 60)
-    log.info("SUMMARY:")
-    log.info("  Papers processed: %d", len(to_process))
-    log.info("  Papers skipped:   %d", total_skipped)
-    log.info("  Total chunks:     %d", total_chunks_upserted)
-    log.info("  Total tokens:     %d", total_tokens)
-    log.info("  Dense points:     %d", total_buffered)
-    log.info("  Sparse vectors:   %d", total_sparse)
+    log.info("FINAL SUMMARY:")
+    log.info("  Papers processed:     %d", len(to_process))
+    log.info("  Papers skipped:       %d", total_skipped)
+    log.info("  Total sections:       %d", total_sections)
+    log.info("  Total chunks:         %d", len(all_chunked))
+    log.info("  Total tokens:         %d", total_tokens)
+    log.info("  Total time:           %.1fs", time.time() - t0)
     log.info("=" * 60)
 
 

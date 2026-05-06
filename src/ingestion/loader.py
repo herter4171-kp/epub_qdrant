@@ -56,6 +56,8 @@ class DocumentLoader(ABC):
             return EpubLoader()
         if ext == ".pdf":
             return PdfLoader()
+        if ext == ".json":
+            return PdfLoader()
         raise ValueError(f"No loader for extension '{ext}'")
 
     @staticmethod

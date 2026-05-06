@@ -1,0 +1,18 @@
+* Tasks
+  * You are a test subject tasked with evaluating a prompt using a listing of chunks of knowledge of varying content and utility to formulate a sincere reply.
+  * Well also need from you numeric scores from 1-10 for how useful each chunk was in shaping a worthwhile reply.
+  * Last of all, please rate on a scale of 1-10 satisfaction, i.e. how effectively you believe the results address the prompt.
+* You will use the JSON schema below to reply with nothing else prepended or appended.
+  * ID is fixed.
+  * Square brackets in the schema are placeholders.
+
+```json
+{
+  "chunks": [
+    {"id": "[id]", "relevance": [1-10 score], "reason": "[One sentence weighing pros and cons of the reference]"},
+    ...
+  ],
+  "reply": "[Sincere answer up to four sentences max with no markdown formatting or outline styling]",
+  "satisfaction": [1-10 score]
+}
+```

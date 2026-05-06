@@ -93,7 +93,7 @@ def main():
         sys.exit(1)
 
     gpu_name = torch.cuda.get_device_name(0)
-    total_vram = torch.cuda.get_device_properties(0).total_memory / 1e9
+    total_vram = torch.cuda.get_device_properties(0).total_mem / 1e9
     log.info("GPU: %s | Total VRAM: %.1f GB", gpu_name, total_vram)
     log.info("VRAM cap: 23.6 GB (EMBEDDING_VRAM_FRACTION=0.90)")
 
