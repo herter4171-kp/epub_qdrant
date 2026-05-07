@@ -27,6 +27,12 @@ dependencies = [
     "matplotlib>=3.8",
     "openai>=1.40",
     "scipy>=1.17.1",
+    "torch>=2.3.0",
+    "torchvision",
+    "torchaudio",
+    "sentence-transformers",
+    "accelerate",
+    "sae-lens==6.43.0",
 ]
 
 [project.scripts]

@@ -70,11 +70,11 @@ class SpladeExtractor:
             sparse_vecs = (vecs * mask).max(dim=1).values
             # sparse_vecs: [batch, vocab_size]
 
-        # Free GPU memory
-        del inputs, output, vecs, mask, sparse_vecs
-        torch.cuda.empty_cache()
+            # Free GPU memory (don't delete sparse_vecs - we need to return it)
+            del inputs, output, vecs, mask
+            torch.cuda.empty_cache()
 
-        return sparse_vecs.cpu().float()
+            return sparse_vecs.cpu().float()
 
     def extract_all(self, texts: List[str]) -> "torch.Tensor":
         """Process all texts in batches, return concatenated results.
@@ -86,11 +86,24 @@ class SpladeExtractor:
             Tensor of shape (N, 30522) with float32 dtype.
         """
         import torch
+        import time
+        total = len(texts)
         all_batches = []
+        start_time = time.time()
+        last_log_time = start_time
+        
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i:i + self.batch_size]
             batch_vecs = self.extract_batch(batch)
             all_batches.append(batch_vecs)
+            
+            # Log progress every batch
+            processed = i + len(batch)
+            elapsed = time.time() - start_time
+            logger.info(
+                "Extracted %d/%d vectors (%.1f%%) in %.1f seconds",
+                processed, total, 100.0 * processed / total, elapsed
+            )
 
         return torch.cat(all_batches, dim=0)
 

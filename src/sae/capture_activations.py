@@ -70,20 +70,11 @@ def run(collection_name: str, output_dir: str = OUTPUT_DIR) -> Tuple[np.ndarray,
         f"Expected 30522 dims, got {activations.shape[1]}"
     logger.info("Activation shape: %s", activations.shape)
     
-    # 3. Save as memmap
-    memmap_path = os.path.join(output_dir, "activations.npy")
+    # 3. Save as numpy array (simpler, more reliable than memmap write)
     activations_np = activations.numpy()
-    activations_memmap = np.memmap(
-        memmap_path,
-        dtype='float32',
-        mode='w+',
-        shape=activations_np.shape,
-    )
-    activations_memmap[:] = activations_np
-    activations_memmap.flush()
-    del activations_memmap  # Flush to disk
-    logger.info("Saved activations.npy (%.2f MB)", 
-                os.path.getsize(memmap_path) / 1e6)
+    activations_path = os.path.join(output_dir, "activations.npy")
+    np.save(activations_path, activations_np)
+    logger.info("Saved activations.npy (%.2f MB)", os.path.getsize(activations_path) / 1e6)
     
     # 4. Compute corpus mean
     logger.info("Computing corpus mean...")
