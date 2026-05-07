@@ -10,6 +10,9 @@ import logging
 import os
 import shutil
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -103,12 +106,164 @@ _root_logger.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def sweep_grid(topk: int, step: int) -> list:
-    """Generate sparse_k sweep values."""
-    grid = list(range(0, topk + 1, step))
-    if grid[-1] != topk:
-        grid.append(topk)
-    return grid
+@dataclass
+class _CaseResult:
+    """Result of running one (prompt, sparse_k) case."""
+    prompt_index: int
+    prompt_text: str
+    sparse_k: int
+    sparse_frac: str
+    done: int
+    total_configs: int
+    merged: int
+    ok_n: int
+    total_judges: int
+    retrieval_path: str
+    critique_path: str
+    error: str = ""
+
+
+def _run_single_case(
+    prompt,
+    sparse_k,
+    sparse_frac,
+    dense_k,
+    embeddings,
+    config,
+    system_prompt,
+    judges_per_case,
+    done,
+    total_configs,
+    failures_path,
+) -> _CaseResult:
+    """Run one (prompt, sparse_k) case: retrieve + critique."""
+    prefix = _c(
+        f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}]",
+        _ANSI_CYAN,
+    )
+    status_parts: list = []
+
+    try:
+        retrieval = retrieve(
+            prompt=prompt,
+            embeddings=embeddings,
+            dense_k=dense_k,
+            sparse_k=sparse_k,
+            qdrant_url=config.qdrant_url,
+            dense_collection=config.dense_collection,
+            sparse_collection=config.sparse_collection,
+            dense_vector_name=config.dense_vector_name,
+            topk=config.topk,
+        )
+        retrieval_path = write_retrieval(retrieval, config._run_dir)
+        status_parts.append(f"merged={len(retrieval.merged)} (d={dense_k} s={sparse_k})")
+        status_parts.append(f"wrote {os.path.basename(retrieval_path)}")
+    except Exception as e:
+        logger.error("Retrieval failed for prompt %d sk=%d: %s", prompt.index, sparse_k, e)
+        failures = []
+        failures.append({
+            "prompt_index": prompt.index,
+            "prompt_text": prompt.text,
+            "sparse_k": sparse_k,
+            "sparse_fraction": sparse_frac,
+            "error": str(e),
+        })
+        with open(failures_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"prompt_index": prompt.index, "sparse_k": sparse_k,
+                                "error": str(e)}) + "\n")
+        status_parts.append(_c("RETRIEVAL FAIL", _ANSI_RED))
+        print(f"{prefix} " + " | ".join(status_parts))
+        return _CaseResult(
+            prompt_index=prompt.index,
+            prompt_text=prompt.text,
+            sparse_k=sparse_k,
+            sparse_frac=sparse_frac,
+            done=done,
+            total_configs=total_configs,
+            merged=0,
+            ok_n=0,
+            total_judges=0,
+            retrieval_path=retrieval_path,
+            critique_path="",
+            error=str(e),
+        )
+
+    # One critique call runs judges_per_case judgements internally.
+    try:
+        c = critique_fn(
+            retrieval_set=retrieval,
+            system_prompt=system_prompt,
+            judge_base_url=config.judge_base_url,
+            judge_model=config.judge_model,
+            judge_api_key=config.judge_api_key,
+            judge_timeout_seconds=config.judge_timeout_seconds,
+            judge_per_chunk_timeout_seconds=config.judge_per_chunk_timeout_seconds,
+            judge_max_tokens=config.judge_max_tokens,
+            judge_attempts=config.judge_attempts,
+            judges_per_case=judges_per_case,
+            case_timeout_seconds=config.case_timeout_seconds,
+            turbo_submit=config.turbo_submit,
+        )
+        critique_path = write_critique(c, config._run_dir)
+
+        outs = c.judge_outputs or []
+        ok_n = sum(1 for jo in outs if jo and jo.parse_ok)
+        bad_n = len(outs) - ok_n
+        if ok_n == 0:
+            first_err = next((jo.error for jo in outs if jo and jo.error), "no parse")
+            status_parts.append(_c(f"judges 0/{len(outs)} (last: {first_err})", _ANSI_RED))
+        elif bad_n > 0:
+            status_parts.append(_c(f"judges {ok_n}/{len(outs)}", _ANSI_YELLOW))
+        else:
+            status_parts.append(_c(f"judges {ok_n}/{len(outs)} ok", _ANSI_GREEN))
+
+        status_parts.append(f"wrote {os.path.basename(critique_path)}")
+        print(f"{prefix} " + " | ".join(status_parts))
+
+        return _CaseResult(
+            prompt_index=prompt.index,
+            prompt_text=prompt.text,
+            sparse_k=sparse_k,
+            sparse_frac=sparse_frac,
+            done=done,
+            total_configs=total_configs,
+            merged=len(retrieval.merged),
+            ok_n=ok_n,
+            total_judges=len(outs),
+            retrieval_path=retrieval_path,
+            critique_path=critique_path,
+        )
+
+    except Exception as e:
+        logger.error("Critique failed for prompt %d sk=%d: %s",
+                     prompt.index, sparse_k, e)
+        failures = []
+        failures.append({
+            "prompt_index": prompt.index,
+            "prompt_text": prompt.text,
+            "sparse_k": sparse_k,
+            "sparse_fraction": sparse_frac,
+            "error": str(e),
+        })
+        with open(failures_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"prompt_index": prompt.index, "sparse_k": sparse_k,
+                                "error": str(e)}) + "\n")
+        status_parts.append(_c(f"CRITIQUE FAIL: {e}", _ANSI_RED))
+        print(f"{prefix} " + " | ".join(status_parts))
+        return _CaseResult(
+            prompt_index=prompt.index,
+            prompt_text=prompt.text,
+            sparse_k=sparse_k,
+            sparse_frac=sparse_frac,
+            done=done,
+            total_configs=total_configs,
+            merged=len(retrieval.merged) if retrieval else 0,
+            ok_n=0,
+            total_judges=0,
+            retrieval_path="",
+            critique_path="",
+            error=str(e),
+        )
 
 
 def run_eval(argv: list = None) -> None:
@@ -149,15 +304,21 @@ def run_eval(argv: list = None) -> None:
     sparse_k_values = sweep_grid(config.topk, config.sparse_step)
     judges_per_case = config.judges_per_case
     total_configs = len(prompts) * len(sparse_k_values)
-    done = 0
-    missing = 0
-    failures = []
+
+    # Store run_dir on config for _run_single_case to use
+    config._run_dir = run_dir  # type: ignore[attr-defined]
+
+    # Build list of all cases to run
+    cases = []
+    for prompt in prompts:
+        for sparse_k in sparse_k_values:
+            dense_k = config.topk - sparse_k
+            sparse_frac = f"{sparse_k / config.topk:.2f}"
+            cases.append((prompt, sparse_k, sparse_frac, dense_k))
 
     # Embedding cache: (text, embed_url) -> {"dense": [...], "sparse": {...}}
     embed_cache = {}
-
     for prompt in prompts:
-        # Embed once per prompt (cached for all sparse_k values)
         cache_key = (prompt.text, config.embed_url)
         if cache_key not in embed_cache:
             texts = [prompt.text]
@@ -167,100 +328,66 @@ def run_eval(argv: list = None) -> None:
                 "dense": dense_vecs[0] if dense_vecs else [],
                 "sparse": sparse_vecs[0] if sparse_vecs else {"indices": [], "values": []},
             }
-        embeddings = embed_cache[cache_key]
 
-        for sparse_k in sparse_k_values:
-            done += 1
-            dense_k = config.topk - sparse_k
-            sparse_frac = f"{sparse_k / config.topk:.2f}"
-            status_parts: list = []
-            prefix = _c(
-                f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}]",
-                _ANSI_CYAN,
-            )
+    # Run cases in batches
+    case_batch_size = config.case_batch_size
+    all_results: list[_CaseResult] = []
+    done = 0
+    missing = 0
 
-            # Retrieve once per (prompt, sparse_k); reused across all judgements.
-            try:
-                retrieval = retrieve(
+    if case_batch_size > 0 and len(cases) > 1:
+        # Batch mode: submit cases in parallel
+        max_workers = min(case_batch_size, len(cases))
+        if max_workers < 1:
+            max_workers = 1
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for idx, (prompt, sparse_k, sparse_frac, dense_k) in enumerate(cases):
+                embeddings = embed_cache[(prompt.text, config.embed_url)]
+                future = executor.submit(
+                    _run_single_case,
                     prompt=prompt,
-                    embeddings=embeddings,
-                    dense_k=dense_k,
                     sparse_k=sparse_k,
-                    qdrant_url=config.qdrant_url,
-                    dense_collection=config.dense_collection,
-                    sparse_collection=config.sparse_collection,
-                    dense_vector_name=config.dense_vector_name,
-                    topk=config.topk,
-                )
-                retrieval_path = write_retrieval(retrieval, run_dir)
-                status_parts.append(f"merged={len(retrieval.merged)} (d={dense_k} s={sparse_k})")
-                status_parts.append(f"wrote {os.path.basename(retrieval_path)}")
-            except Exception as e:
-                logger.error("Retrieval failed for prompt %d sk=%d: %s", prompt.index, sparse_k, e)
-                failures.append({
-                    "prompt_index": prompt.index,
-                    "prompt_text": prompt.text,
-                    "sparse_k": sparse_k,
-                    "sparse_fraction": sparse_frac,
-                    "error": str(e),
-                })
-                with open(failures_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps({"prompt_index": prompt.index, "sparse_k": sparse_k,
-                                        "error": str(e)}) + "\n")
-                missing += 1
-                status_parts.append(_c("RETRIEVAL FAIL", _ANSI_RED))
-                print(f"{prefix} " + " | ".join(status_parts))
-                continue
-
-            # One critique call runs judges_per_case judgements internally.
-            try:
-                c = critique_fn(
-                    retrieval_set=retrieval,
+                    sparse_frac=sparse_frac,
+                    dense_k=dense_k,
+                    embeddings=embeddings,
+                    config=config,
                     system_prompt=system_prompt,
-                    judge_base_url=config.judge_base_url,
-                    judge_model=config.judge_model,
-                    judge_api_key=config.judge_api_key,
-                    judge_timeout_seconds=config.judge_timeout_seconds,
-                    judge_per_chunk_timeout_seconds=config.judge_per_chunk_timeout_seconds,
-                    judge_max_tokens=config.judge_max_tokens,
-                    judge_attempts=config.judge_attempts,
                     judges_per_case=judges_per_case,
-                    case_timeout_seconds=config.case_timeout_seconds,
-                    turbo_submit=config.turbo_submit,
+                    done=idx + 1,
+                    total_configs=total_configs,
+                    failures_path=failures_path,
                 )
-                critique_path = write_critique(c, run_dir)
+                futures.append(future)
 
-                outs = c.judge_outputs or []
-                ok_n = sum(1 for jo in outs if jo and jo.parse_ok)
-                bad_n = len(outs) - ok_n
-                if ok_n == 0:
-                    first_err = next((jo.error for jo in outs if jo and jo.error), "no parse")
-                    status_parts.append(_c(f"judges 0/{len(outs)} (last: {first_err})", _ANSI_RED))
+            # Collect results as they complete
+            for future in futures:
+                result = future.result()
+                all_results.append(result)
+                if result.ok_n == 0:
                     missing += 1
-                elif bad_n > 0:
-                    status_parts.append(_c(f"judges {ok_n}/{len(outs)}", _ANSI_YELLOW))
-                else:
-                    status_parts.append(_c(f"judges {ok_n}/{len(outs)} ok", _ANSI_GREEN))
-
-                status_parts.append(f"wrote {os.path.basename(critique_path)}")
-                print(f"{prefix} " + " | ".join(status_parts))
-
-            except Exception as e:
-                logger.error("Critique failed for prompt %d sk=%d: %s",
-                             prompt.index, sparse_k, e)
-                failures.append({
-                    "prompt_index": prompt.index,
-                    "prompt_text": prompt.text,
-                    "sparse_k": sparse_k,
-                    "sparse_fraction": sparse_frac,
-                    "error": str(e),
-                })
-                with open(failures_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps({"prompt_index": prompt.index, "sparse_k": sparse_k,
-                                        "error": str(e)}) + "\n")
+    else:
+        # Serial mode (original behavior)
+        for idx, (prompt, sparse_k, sparse_frac, dense_k) in enumerate(cases):
+            done += 1
+            embeddings = embed_cache[(prompt.text, config.embed_url)]
+            result = _run_single_case(
+                prompt=prompt,
+                sparse_k=sparse_k,
+                sparse_frac=sparse_frac,
+                dense_k=dense_k,
+                embeddings=embeddings,
+                config=config,
+                system_prompt=system_prompt,
+                judges_per_case=judges_per_case,
+                done=done,
+                total_configs=total_configs,
+                failures_path=failures_path,
+            )
+            all_results.append(result)
+            if result.ok_n == 0:
                 missing += 1
-                status_parts.append(_c(f"CRITIQUE FAIL: {e}", _ANSI_RED))
-                print(f"{prefix} " + " | ".join(status_parts))
 
     # Report
     print(

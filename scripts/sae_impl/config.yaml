@@ -1,0 +1,27 @@
+# SAE Configuration for Phase 0
+# Derived from SPLADE activation analysis on sparse-only-256len collection
+
+collection: "sparse-only-256len"
+points_count: 189216
+
+# SAE architecture parameters
+d_in: 30522           # Input dimension (BERT vocabulary size)
+expansion_factor: 4   # Expansion factor for SAE latent space
+d_sae: 122088         # SAE latent dimension (d_in × expansion_factor)
+dense_dim: 768        # Dense vector dimension
+
+# K value from nonzero activation analysis
+K: 165                # Number of nonzero activations per vector (mean)
+
+# Storage budget
+# N × K × 8 bytes = 189216 × 165 × 8 = 248,757,760 bytes (~237 MB)
+# Expected sparse index size: 189216 × 165 × 8 bytes
+
+# SPLADE statistics (from nonzero activation analysis)
+splade_stats:
+  mean: 165.49
+  median: 167.0
+  p10: 100.0
+  p90: 227.0
+  min: 16
+  max: 360

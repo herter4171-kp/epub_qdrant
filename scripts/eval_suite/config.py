@@ -37,6 +37,7 @@ class ResolvedConfig:
     judges_per_case: int
     case_timeout_seconds: float
     turbo_submit: int  # batch size for parallel judge submissions (0 = serial)
+    case_batch_size: int  # batch size for parallel case submissions (0 = serial)
 
     def to_snapshot(self) -> ConfigSnapshot:
         return ConfigSnapshot(
@@ -111,6 +112,10 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
                         help="Batch size for parallel judge LLM submissions. When > 0, "
                              "judges are submitted in batches of this size using asyncio. "
                              "Default 0 (serial).")
+    parser.add_argument("--case-batch-size", type=int, required=False, default=0,
+                        help="Batch size for parallel case submissions. When > 0, "
+                             "(prompt, sparse_k) cases are submitted in batches of this size "
+                             "using ThreadPoolExecutor. Default 0 (serial).")
     args = parser.parse_args(argv)
 
     topk = args.topk or int(os.environ.get("EVAL_TOPK", 0))
@@ -200,6 +205,10 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
     if turbo_submit < 0:
         parser.error(f"--turbo-submit must be >= 0, got {turbo_submit}")
 
+    case_batch_size = args.case_batch_size if args.case_batch_size is not None else 0
+    if case_batch_size < 0:
+        parser.error(f"--case-batch-size must be >= 0, got {case_batch_size}")
+
     if judge_timeout_seconds <= 0:
         parser.error(f"--judge-timeout-seconds must be > 0, got {judge_timeout_seconds}")
     if judge_per_chunk_timeout_seconds <= 0:
@@ -238,4 +247,5 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         judges_per_case=judges_per_case,
         case_timeout_seconds=case_timeout_seconds,
         turbo_submit=turbo_submit,
+        case_batch_size=case_batch_size,
     )
