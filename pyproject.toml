@@ -49,3 +49,15 @@ mineru = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.hatch.envs.default]
+# This tells hatch to pass the extra index to the installer
+pip-compile-args = ["--extra-index-url", "https://download.pytorch.org/whl/cu128"]
+# Or if using the uv-native hatch plugin:
+installer = "uv"
+
+[tool.hatch.envs.default.overrides]
+# This ensures that even if a version exists on PyPI, it prioritizes the CUDA build
+dependencies = [
+  "torch>=2.3.0",
+]

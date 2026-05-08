@@ -15,10 +15,12 @@ Install:
 
 import logging
 import os
+import sys
 from collections.abc import Iterator
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +39,16 @@ D_SAE = D_IN * EXPANSION_FACTOR
 K = 165                 # top-k active features per vector
 
 # Training
-BATCH_SIZE = 256        # 256–512 is comfortable on an RTX 5090 at float32
+BATCH_SIZE = 2048       # 256–512 is comfortable on an RTX 5090 at float32, 2048 dgx spark
 LEARNING_RATE = 2e-4
-EPOCHS = 5
+EPOCHS = 20
 SEED = 42
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # SAELens 6.x trainer knobs
 LR_WARM_UP_STEPS = 500
 LR_DECAY_STEPS = 0
-N_CHECKPOINTS = 3       # intermediate checkpoints
+N_CHECKPOINTS = EPOCHS       # intermediate checkpoints
 LOG_TO_WANDB = False    # flip to True if you want W&B logging
 
 
@@ -70,6 +72,7 @@ class SpladeActivationProvider:
         epochs: int,
         device: str = "cuda",
         seed: int = 42,
+        epoch_file: str = "",
     ):
         self.activations = activations          # (N, D_IN)
         self.batch_size = batch_size
@@ -78,18 +81,54 @@ class SpladeActivationProvider:
         self.rng = np.random.default_rng(seed)
         self.n_samples = len(activations)
         self.total_samples = epochs * self.n_samples
+        self.epoch_file = epoch_file
 
     def __iter__(self) -> Iterator[torch.Tensor]:
         samples_yielded = 0
-        for _ in range(self.epochs):
+        total_batches = (self.n_samples - self.batch_size + 1) // self.batch_size
+        for epoch in range(self.epochs):
+            logger.info(
+                "Epoch %d/%d: permuting %d sample indices (activations shape=%s, dtype=%s)...",
+                epoch + 1, self.epochs, self.n_samples,
+                self.activations.shape, self.activations.dtype,
+            )
             idx = self.rng.permutation(self.n_samples)
-            shuffled = self.activations[idx]
+            logger.info(
+                "Epoch %d: ready, yielding batches of %d (per-batch fancy indexing)...",
+                epoch + 1, self.batch_size,
+            )
+            pbar = tqdm(
+                total=total_batches,
+                desc=f"Epoch {epoch + 1}",
+                unit="batch",
+                leave=False,
+                bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            )
             for start in range(0, self.n_samples - self.batch_size + 1, self.batch_size):
-                batch = shuffled[start : start + self.batch_size]
+                batch_idx = idx[start : start + self.batch_size]
+                batch = np.ascontiguousarray(self.activations[batch_idx])
                 yield torch.from_numpy(batch).to(self.device, non_blocking=True)
+                del batch
                 samples_yielded += self.batch_size
+                pbar.update(1)
+                # Log progress every 10 batches
+                if (samples_yielded // self.batch_size) % 10 == 0:
+                    logger.info(
+                        "Epoch %d: %d/%d batches done (%.1f%%)",
+                        epoch + 1,
+                        samples_yielded // self.batch_size,
+                        total_batches,
+                        100.0 * samples_yielded / self.total_samples,
+                    )
                 if samples_yielded >= self.total_samples:
+                    pbar.close()
                     return
+            # Save epoch progress for resume (once per epoch)
+            if self.epoch_file:
+                with open(self.epoch_file, "w") as f:
+                    f.write(str(epoch + 1))
+                logger.info("Saved epoch %d progress to %s", epoch + 1, self.epoch_file)
+            pbar.close()
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +182,7 @@ def build_sae(corpus_mean: np.ndarray | None = None):
 def build_trainer_config(total_samples: int):
     from sae_lens.config import LoggingConfig, SAETrainerConfig
 
+    # If MSE loss plateaus above 60 by step 900, consider: normalize_activations="layer_norm"
     return SAETrainerConfig(
         total_training_samples=total_samples,
         train_batch_size_samples=BATCH_SIZE,
@@ -173,7 +213,7 @@ def build_trainer_config(total_samples: int):
 # Main training entry point
 # ---------------------------------------------------------------------------
 
-def run_training():
+def run_training(resume: bool = False):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -185,9 +225,33 @@ def run_training():
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
 
+    # Resume: load epoch progress from file
+    epoch_file = os.path.join(OUTPUT_DIR, "epoch.txt")
+    if resume and os.path.exists(epoch_file):
+        with open(epoch_file) as f:
+            completed_epochs = int(f.read().strip())
+        logger.info("Resuming from epoch %d (completed epochs: %d)",
+                    completed_epochs + 1, completed_epochs)
+        SEED_OFFSET = completed_epochs
+    else:
+        SEED_OFFSET = 0
+
+    def save_epoch(epoch_num):
+        with open(epoch_file, "w") as f:
+            f.write(str(epoch_num))
+        logger.info("Saved epoch %d progress to %s", epoch_num, epoch_file)
+
     # 1. Load data
     logger.info("Loading activations from %s", ACTIVATIONS_PATH)
-    activations = np.load(ACTIVATIONS_PATH).astype(np.float32)  # (N, 30522)
+    activations = np.load(ACTIVATIONS_PATH, mmap_mode='r')  # (N, 30522)
+    if activations.dtype != np.float32:
+        raise TypeError(
+            f"Expected float32 activations on disk, got {activations.dtype}. "
+            "Convert the .npy once offline rather than casting here (an in-memory "
+            "astype would materialize the entire ~22 GB array)."
+        )
+    logger.info("  activations shape=%s, dtype=%s, nbytes=%.1f GB, mmap_mode=%s",
+                activations.shape, activations.dtype, activations.nbytes / 1e9, "r")
     assert activations.ndim == 2 and activations.shape[1] == D_IN, (
         f"Expected (N, {D_IN}), got {activations.shape}"
     )
@@ -203,12 +267,14 @@ def run_training():
         logger.info("Corpus mean loaded: shape=%s", corpus_mean.shape)
 
     # 3. Data iterator  — v6 contract: Iterator[Tensor]
+    epoch_file = os.path.join(OUTPUT_DIR, "epoch.txt")
     data_provider = SpladeActivationProvider(
         activations=activations,
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
         device=DEVICE,
-        seed=SEED,
+        seed=SEED + SEED_OFFSET,
+        epoch_file=epoch_file,
     )
 
     # 4. Build SAE
@@ -228,13 +294,16 @@ def run_training():
     logger.info("Starting training (%d steps)…", trainer_cfg.total_training_steps)
     trainer.fit()
 
-    # 7. Save
+    # 7. Save final epoch progress
+    save_epoch(EPOCHS)
+
+    # 8. Save
     final_path = os.path.join(OUTPUT_DIR, "sae_final")
     os.makedirs(final_path, exist_ok=True)
     sae.save_model(final_path)
     logger.info("Saved SAE to %s", final_path)
 
-    # 8. Export TorchScript encoder for inference (no sae-lens dep at serve time)
+    # 9. Export TorchScript encoder for inference (no sae-lens dep at serve time)
     example = torch.randn(1, D_IN, device=DEVICE)
     with torch.no_grad():
         ts = torch.jit.trace(sae.encode, example)
@@ -268,7 +337,11 @@ def run_ddp_training():
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(local_rank)
 
-    activations = np.load(ACTIVATIONS_PATH).astype(np.float32)
+    activations = np.load(ACTIVATIONS_PATH, mmap_mode='r')
+    if activations.dtype != np.float32:
+        raise TypeError(
+            f"Expected float32 activations on disk, got {activations.dtype}."
+        )
     # Shard: rank r owns rows [r::world_size]
     shard = activations[rank::world_size]
 
@@ -320,7 +393,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(message)s")
 
-    if "--ddp" in sys.argv:
+    if "--resume" in sys.argv:
+        run_training(resume=True)
+    elif "--ddp" in sys.argv:
         run_ddp_training()
     else:
         run_training()
