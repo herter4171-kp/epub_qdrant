@@ -136,6 +136,20 @@ async def embed_sparse(req: SparseEmbedRequest):
     return SparseEmbedResponse(vectors=vectors)
 
 
+@app.post("/embed_sae", response_model=SparseEmbedResponse)
+async def embed_sae(req: SparseEmbedRequest):
+    """SPLADE → SAE sparse vectors. Output dim: 61044, always 165 non-zeros."""
+    if len(req.texts) > MAX_TEXTS:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_TEXTS} texts per request")
+    if not req.texts:
+        return SparseEmbedResponse(vectors=[])
+    if _sparse is None:
+        raise HTTPException(status_code=503, detail="Sparse model not loaded")
+    raw = await _sparse.encode_sae_async(req.texts, is_query=req.is_query)
+    vectors = [SparseVector(**v) for v in raw]
+    return SparseEmbedResponse(vectors=vectors)
+
+
 @app.post("/rewrite", response_model=RewriteResponse)
 async def rewrite_query(req: RewriteRequest):
     """Reformulate a user query into a precise technical search query.
@@ -156,6 +170,7 @@ def health():
         status="ok" if ok else "error",
         dense=_dense is not None,
         sparse=_sparse is not None,
+        sae=hasattr(_sparse, "sae") if _sparse else False,
     )
 
 

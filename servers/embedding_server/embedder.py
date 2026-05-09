@@ -37,6 +37,12 @@ IT_MODEL_LOCAL_PATH = "/tank/huggingface/gemma-3-270m-it"
 IT_MAX_NEW_TOKENS = 512
 IT_TEMPERATURE = float(os.getenv("IT_TEMPERATURE", "0.05"))
 
+# SAE checkpoint
+SAE_CHECKPOINT = "/tank/sae-splade/sae_data_good_2x/901120/sae_weights.safetensors"
+SAE_DEC_NORMS = "sae_data/dec_norms.pt"
+SAE_D_SAE = 61044
+SAE_K = 165
+
 _PROMPT_FILE = Path(__file__).parent / "rewrite_prompt.txt"
 
 
@@ -70,6 +76,7 @@ class SparseEmbedder:
     def __init__(self, internal_batch_size: int = INTERNAL_BATCH_SIZE):
         self.internal_batch_size = internal_batch_size
         self._load_model()
+        self.sae = SAEEncoder()
 
     def _load_model(self):
         from transformers import AutoModelForMaskedLM
@@ -154,6 +161,95 @@ class SparseEmbedder:
             _executor,
             lambda: self.encode(texts, is_query),
         )
+
+    def encode_sae(self, texts: List[str], is_query: bool = False) -> List[Dict]:
+        """Encode texts through SPLADE → SAE. Returns 61044-dim sparse vectors."""
+        all_results = []
+        for i in range(0, len(texts), self.internal_batch_size):
+            batch = texts[i : i + self.internal_batch_size]
+            all_results.extend(self._encode_sae_batch(batch, is_query))
+        return all_results
+
+    def _encode_sae_batch(self, texts: List[str], is_query: bool = False) -> List[Dict]:
+        """One micro-batch: SPLADE pool → SAE encoder → topk sparse."""
+        max_length = SPLADE_MAX_QUERY_LENGTH if is_query else SPLADE_MAX_DOC_LENGTH
+
+        inputs = self.tokenizer(
+            texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_length,
+        ).to("cuda")
+
+        with torch.no_grad():
+            output = self.model(**inputs)
+            vecs = torch.log1p(torch.relu(output.logits))
+            mask = inputs["attention_mask"].unsqueeze(-1).to(vecs.dtype)
+            sparse_vecs = (vecs * mask).max(dim=1).values   # [batch, 30522]
+
+        top_indices, values = self.sae.encode(sparse_vecs)  # [batch, 165] each
+
+        results = []
+        for idx, val in zip(top_indices, values):
+            results.append({
+                "indices": idx.cpu().tolist(),
+                "values":  val.cpu().tolist(),
+            })
+
+        del inputs, output, vecs, mask, sparse_vecs, top_indices, values
+        torch.cuda.empty_cache()
+
+        return results
+
+    async def encode_sae_async(self, texts: List[str], is_query: bool = False) -> List[Dict]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _executor,
+            lambda: self.encode_sae(texts, is_query),
+        )
+
+
+# ── SAEEncoder ────────────────────────────────────────────────────────────────
+
+class SAEEncoder:
+    """Encoder-only wrapper for the trained TopK SAE.
+
+    Loads W_enc, b_enc, b_dec, and dec_norms (W_dec row norms).
+    W_dec itself is NOT loaded — saves ~7.4 GB VRAM.
+
+    Input:  SPLADE activations tensor, shape [batch, 30522], on CUDA, float32
+    Output: (indices, values) each shape [batch, SAE_K], on CUDA
+    """
+
+    def __init__(self):
+        from safetensors import safe_open
+        logger.info("Loading SAE encoder from %s", SAE_CHECKPOINT)
+        with safe_open(SAE_CHECKPOINT, framework="pt") as f:
+            # Cast to fp16 to cut VRAM from 7.4 GB → 3.7 GB
+            self.W_enc = f.get_tensor("W_enc").to(torch.float16).cuda()  # (30522, 61044)
+            self.b_enc = f.get_tensor("b_enc").to(torch.float16).cuda()  # (61044,)
+            self.b_dec = f.get_tensor("b_dec").to(torch.float16).cuda()  # (30522,)
+
+        self.dec_norms = torch.load(SAE_DEC_NORMS, weights_only=True) \
+                              .to(torch.float16).cuda()                  # (61044,)
+
+        allocated = torch.cuda.memory_allocated() / 1e9
+        logger.info("SAE encoder loaded. VRAM allocated: %.2f GB", allocated)
+
+    @torch.no_grad()
+    def encode(self, x: torch.Tensor) -> tuple:
+        """
+        x: SPLADE activations [batch, 30522] float32 on CUDA
+        returns: (top_indices [batch, 165], values [batch, 165]) — both on CUDA
+        """
+        x16 = x.to(torch.float16)
+        x_centered  = x16 - self.b_dec                          # [batch, 30522]
+        hidden_pre  = x_centered @ self.W_enc + self.b_enc      # [batch, 61044]
+        hidden_pre  = hidden_pre * self.dec_norms                # [batch, 61044]
+        top_values, top_indices = hidden_pre.topk(SAE_K, dim=-1) # [batch, 165] each
+        values = top_values.relu().to(torch.float32)
+        return top_indices, values
 
 
 # ── QueryRewriter ─────────────────────────────────────────────────────────────
