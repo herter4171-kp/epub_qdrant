@@ -40,10 +40,12 @@ _CASE_TIMEOUT_SECONDS = 600.0
 
 # Char-level loop detection: tail substring repeats N+ times in lookback window.
 # Constraint: lookback must be >= tail * threshold for detection to be possible.
+# Set _LOOP_ABORT_ENABLED = False to disable loop-triggered aborts (server
+# thinking_budget caps runaway thinking more reliably than heuristics).
+_LOOP_ABORT_ENABLED = False
 _LOOP_TAIL_CHARS = 400
 _LOOP_LOOKBACK_CHARS = 2000          # must be > tail * threshold (400*4=1600)
 _LOOP_REPEAT_THRESHOLD = 4
-_MAX_THINKING_CHARS = 8000           # hard bail-out regardless of loop detection
 # Line-level loop detection: last K lines == K lines before that, K >= 2.
 _LOOP_LINE_TAIL = 20
 _LOOP_LINE_MIN_BLOCK = 2
@@ -186,10 +188,7 @@ def _drain_stream(
 
             if kind == "think":
                 thinking += delta
-                if len(thinking) >= _MAX_THINKING_CHARS:
-                    abort_reason = f"thinking exceeded {_MAX_THINKING_CHARS} chars — aborting"
-                    break
-                if len(thinking) > _LOOP_LOOKBACK_CHARS:
+                if _LOOP_ABORT_ENABLED and len(thinking) > _LOOP_LOOKBACK_CHARS:
                     if _is_thinking_loop(thinking):
                         abort_reason = "thinking-loop detected in reasoning stream — char tail repeats"
                         break
