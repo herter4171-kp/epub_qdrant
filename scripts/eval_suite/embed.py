@@ -48,3 +48,30 @@ def sparse_embed(url: str, texts: List[str], batch_size: int = 256) -> List[Dict
         resp.raise_for_status()
         results.extend(resp.json()["vectors"])
     return results
+
+
+def sparse_embed_sae(url: str, texts: List[str], batch_size: int = 256) -> List[Dict]:
+    """Embed texts → SAE sparse vectors (indices, values). Batched.
+
+    Calls POST /embed_sae which runs SPLADE → SAE encoder → topk.
+    Output: 61044-dim sparse vectors with 165 non-zeros.
+    """
+    if not texts:
+        return []
+    sess = _session(url)
+    results: List[Dict] = []
+    for i in range(0, len(texts), batch_size):
+        chunk = texts[i:i + batch_size]
+        resp = sess.post(f"{url}/embed_sae", json={"texts": chunk, "is_query": True},
+                         timeout=(10, 300))
+        resp.raise_for_status()
+        data = resp.json()["vectors"]
+        # Convert SparseVector models to dicts
+        for v in data:
+            if hasattr(v, "model_dump"):
+                results.append(v.model_dump())
+            elif hasattr(v, "dict"):
+                results.append(v.dict())
+            else:
+                results.append(dict(v))
+    return results

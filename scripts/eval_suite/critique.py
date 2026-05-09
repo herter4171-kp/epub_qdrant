@@ -19,6 +19,7 @@ from .schemas import Critique, CritiqueChunk, JudgeOutput, RetrievalSet
 logger = logging.getLogger(__name__)
 
 _ANSI_DIM_GREY = "\033[90m\033[2m"
+_ANSI_DIM_YELLOW = "\033[33m\033[2m"
 _ANSI_RESET = "\033[0m"
 _ANSI_CLEAR_LINE = "\r\033[2K"
 _LIVE_PREVIEW_CHARS = 60
@@ -38,9 +39,11 @@ _JUDGE_ATTEMPTS = 3
 _CASE_TIMEOUT_SECONDS = 600.0
 
 # Char-level loop detection: tail substring repeats N+ times in lookback window.
-_LOOP_TAIL_CHARS = 200
-_LOOP_LOOKBACK_CHARS = 1200
+# Constraint: lookback must be >= tail * threshold for detection to be possible.
+_LOOP_TAIL_CHARS = 400
+_LOOP_LOOKBACK_CHARS = 2000          # must be > tail * threshold (400*4=1600)
 _LOOP_REPEAT_THRESHOLD = 4
+_MAX_THINKING_CHARS = 8000           # hard bail-out regardless of loop detection
 # Line-level loop detection: last K lines == K lines before that, K >= 2.
 _LOOP_LINE_TAIL = 20
 _LOOP_LINE_MIN_BLOCK = 2
@@ -127,12 +130,19 @@ def _drain_stream(
         try:
             for chunk in stream:
                 try:
-                    delta = chunk.choices[0].delta.content or ""
+                    d = chunk.choices[0].delta
+                    content_delta = d.content or ""
+                    # reasoning_content carries thinking tokens on models that
+                    # separate them (e.g. QwQ / qwen-reasoning via litellm).
+                    think_delta = getattr(d, "reasoning_content", None) or ""
                 except (AttributeError, IndexError):
-                    delta = ""
-                if delta:
-                    q.put(delta)
-        except Exception as exc:  # bubble to main thread
+                    content_delta = think_delta = ""
+                if content_delta:
+                    q.put(("content", content_delta))
+                elif think_delta:
+                    # Keep watchdog alive; prefix so caller can strip/store.
+                    q.put(("think", think_delta))
+        except Exception as exc:
             q.put(("__error__", exc))
         finally:
             q.put(_STREAM_SENTINEL)
@@ -141,6 +151,7 @@ def _drain_stream(
     t.start()
 
     content = ""
+    thinking = ""
     last_render = 0.0
     refresh_period = 1.0 / _LIVE_REFRESH_HZ
     deadline = time.monotonic() + total_timeout
@@ -166,18 +177,36 @@ def _drain_stream(
                 break
             if item is _STREAM_SENTINEL:
                 break
-            if isinstance(item, tuple) and item and item[0] == "__error__":
+            if isinstance(item, tuple) and item[0] == "__error__":
                 raise item[1]
-            delta = item if isinstance(item, str) else ""
+
+            kind, delta = item if isinstance(item, tuple) else ("content", item)
             if not delta:
                 continue
+
+            if kind == "think":
+                thinking += delta
+                if len(thinking) >= _MAX_THINKING_CHARS:
+                    abort_reason = f"thinking exceeded {_MAX_THINKING_CHARS} chars — aborting"
+                    break
+                if len(thinking) > _LOOP_LOOKBACK_CHARS:
+                    if _is_thinking_loop(thinking):
+                        abort_reason = "thinking-loop detected in reasoning stream — char tail repeats"
+                        break
+                    if "\n" in delta and _is_line_loop(thinking):
+                        abort_reason = "thinking-loop detected in reasoning stream — line block repeats"
+                        break
+                if use_tty and any(c in delta for c in ".?!"):
+                    tail = (thinking.splitlines()[-1] if thinking.splitlines() else delta).strip()
+                    tail = tail[-_LIVE_PREVIEW_CHARS:]
+                    sys.stderr.write(
+                        f"{_ANSI_CLEAR_LINE}{_ANSI_DIM_YELLOW}{label} [think {len(thinking):>5}c]: "
+                        f"{tail}{_ANSI_RESET}"
+                    )
+                    sys.stderr.flush()
+                continue
+
             content += delta
-            if _is_thinking_loop(content):
-                abort_reason = "thinking-loop detected — char tail repeats"
-                break
-            if "\n" in delta and _is_line_loop(content):
-                abort_reason = "thinking-loop detected — line block repeats"
-                break
             if not use_tty:
                 continue
             now2 = time.monotonic()
@@ -235,6 +264,7 @@ def _stream_judge(
             messages=messages,
             stream=True,
             max_tokens=max_tokens,
+            temperature=0,
             extra_body={"enable_thinking": False},
         )
     except TypeError:
@@ -276,6 +306,14 @@ def _validate_parsed(parsed, issued_ids: set, expected_chunks: int):
     """Return (parse_ok, error_str_or_None). Walks the schema once."""
     if not isinstance(parsed, dict) or "chunks" not in parsed:
         return False, "missing 'chunks' key in parsed JSON"
+    # Deduplicate by id (keep first occurrence) before counting — the judge
+    # occasionally rates the same chunk twice, which is recoverable.
+    seen_dedup: dict = {}
+    for entry in parsed["chunks"]:
+        eid = entry.get("id")
+        if isinstance(eid, str) and eid not in seen_dedup:
+            seen_dedup[eid] = entry
+    parsed["chunks"] = list(seen_dedup.values())
     actual_len = len(parsed["chunks"])
     if actual_len != expected_chunks:
         return False, (
@@ -288,8 +326,6 @@ def _validate_parsed(parsed, issued_ids: set, expected_chunks: int):
             return False, f"id is not str in entry: {entry}"
         if eid not in issued_ids:
             return False, f"unknown id {eid!r} in entry: {entry}"
-        if eid in seen_ids:
-            return False, f"duplicate id {eid!r} in entry: {entry}"
         seen_ids.add(eid)
         rel = entry.get("relevance")
         if not isinstance(rel, int) or rel < 1 or rel > 10:
@@ -328,6 +364,9 @@ def _run_one_judgement(
     If ``case_deadline`` (monotonic) is provided and reached mid-attempt,
     abort early and return a wallclock-exceeded JudgeOutput.
     """
+    _RETRY_BASE = 1.0   # seconds
+    _RETRY_MAX  = 10.0  # seconds
+
     last_content = ""
     last_error: Optional[str] = None
     last_parsed = None
@@ -341,6 +380,14 @@ def _run_one_judgement(
                 retried=attempt > 1,
                 error="case_wallclock_exceeded",
             )
+        if attempt > 1:
+            raw_delay = _RETRY_BASE * 2 ** (attempt - 2)
+            delay = min(raw_delay, _RETRY_MAX)
+            logger.info("judge retry %d/%d — waiting %.1fs", attempt, judge_attempts, delay)
+            time.sleep(delay)
+            if raw_delay >= _RETRY_MAX:
+                # Already waited the maximum — one shot at recovery, no more.
+                break
         attempt_label = label if attempt == 1 else f"{label} attempt {attempt}/{judge_attempts}"
         try:
             content = _stream_judge(

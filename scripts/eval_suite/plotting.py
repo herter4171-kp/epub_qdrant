@@ -80,18 +80,19 @@ def _get_avg_relevance_by_source(critique: Dict) -> Tuple[float, float]:
     source. Older legacy: id may be the 1-based rank.
     """
     chunks_meta = critique.get("chunks") or []
-    docket_to_source: Dict[str, str] = {}
-    rank_to_source: Dict[int, str] = {}
+    docket_to_sources: Dict[str, List[str]] = {}
+    rank_to_sources: Dict[int, List[str]] = {}
     for c in chunks_meta:
         if not isinstance(c, dict):
             continue
-        src = c.get("source", "")
+        # Prefer the multi-source list; fall back to the single source string.
+        srcs = c.get("sources") or ([c.get("source", "")] if c.get("source") else [])
         did = c.get("docket_id") or c.get("judge_id")
         if isinstance(did, str) and did:
-            docket_to_source[did] = src
+            docket_to_sources[did] = srcs
         rank = c.get("rank")
         if isinstance(rank, int):
-            rank_to_source[rank] = src
+            rank_to_sources[rank] = srcs
 
     dense_vals: List[float] = []
     sparse_vals: List[float] = []
@@ -108,14 +109,16 @@ def _get_avg_relevance_by_source(critique: Dict) -> Tuple[float, float]:
             rid = ch.get("id")
             if not isinstance(r, (int, float)) or not (1 <= r <= 10):
                 continue
-            src = ""
+            srcs: List[str] = []
             if isinstance(rid, str):
-                src = docket_to_source.get(rid, "")
+                srcs = docket_to_sources.get(rid, [])
             elif isinstance(rid, (int, float)):
-                src = rank_to_source.get(int(rid), "")
-            if src == "dense":
+                srcs = rank_to_sources.get(int(rid), [])
+            # Attribute to every source that retrieved this chunk so dual hits
+            # don't unfairly credit only the first-seen path.
+            if "dense" in srcs:
                 dense_vals.append(float(r))
-            elif src in ("sparse", "sparse_resolved"):
+            if any(s in ("sparse", "sparse_resolved") for s in srcs):
                 sparse_vals.append(float(r))
     d = float(np.mean(dense_vals)) if dense_vals else float("nan")
     s = float(np.mean(sparse_vals)) if sparse_vals else float("nan")

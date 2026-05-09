@@ -27,7 +27,7 @@ if _parent_dir not in sys.path:
 try:
     from .config import resolve_config
     from .prompts import load_prompts
-    from .embed import dense_embed, sparse_embed
+    from .embed import dense_embed, sparse_embed, sparse_embed_sae
     from .retrieve import retrieve
     from .critique import critique as critique_fn
     from .persist import (
@@ -41,7 +41,7 @@ try:
 except ImportError:
     from eval_suite.config import resolve_config
     from eval_suite.prompts import load_prompts
-    from eval_suite.embed import dense_embed, sparse_embed
+    from eval_suite.embed import dense_embed, sparse_embed, sparse_embed_sae
     from eval_suite.retrieve import retrieve
     from eval_suite.critique import critique as critique_fn
     from eval_suite.persist import (
@@ -141,24 +141,39 @@ def _run_single_case(
         f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}]",
         _ANSI_CYAN,
     )
-    status_parts: list = []
+    _RETRIEVAL_ATTEMPTS = 2
+    _RETRIEVAL_RETRY_DELAY = 1.0  # seconds
 
-    try:
-        retrieval = retrieve(
-            prompt=prompt,
-            embeddings=embeddings,
-            dense_k=dense_k,
-            sparse_k=sparse_k,
-            qdrant_url=config.qdrant_url,
-            dense_collection=config.dense_collection,
-            sparse_collection=config.sparse_collection,
-            dense_vector_name=config.dense_vector_name,
-            topk=config.topk,
-        )
-        retrieval_path = write_retrieval(retrieval, config._run_dir)
-        status_parts.append(f"merged={len(retrieval.merged)} (d={dense_k} s={sparse_k})")
-        status_parts.append(f"wrote {os.path.basename(retrieval_path)}")
-    except Exception as e:
+    status_parts: list = []
+    retrieval_path = ""
+
+    last_retrieval_exc: Exception | None = None
+    for _attempt in range(_RETRIEVAL_ATTEMPTS):
+        try:
+            retrieval = retrieve(
+                prompt=prompt,
+                embeddings=embeddings,
+                dense_k=dense_k,
+                sparse_k=sparse_k,
+                qdrant_url=config.qdrant_url,
+                dense_collection=config.dense_collection,
+                sparse_collection=config.sparse_collection,
+                dense_vector_name=config.dense_vector_name,
+                topk=config.topk,
+            )
+            last_retrieval_exc = None
+            break
+        except Exception as e:
+            last_retrieval_exc = e
+            if _attempt < _RETRIEVAL_ATTEMPTS - 1:
+                logger.warning(
+                    "Retrieval attempt %d/%d failed for prompt %d sk=%d: %s — retrying in %.1fs",
+                    _attempt + 1, _RETRIEVAL_ATTEMPTS, prompt.index, sparse_k, e, _RETRIEVAL_RETRY_DELAY,
+                )
+                time.sleep(_RETRIEVAL_RETRY_DELAY)
+
+    if last_retrieval_exc is not None:
+        e = last_retrieval_exc
         logger.error("Retrieval failed for prompt %d sk=%d: %s", prompt.index, sparse_k, e)
         failures = []
         failures.append({
@@ -266,6 +281,11 @@ def _run_single_case(
         )
 
 
+def sweep_grid(topk: int, sparse_step: int) -> list:
+    """Generate sparse_k values: 0, sparse_step, 2*sparse_step, ..., up to topk."""
+    return list(range(0, topk + 1, sparse_step))
+
+
 def run_eval(argv: list = None) -> None:
     """Main entry point."""
     if argv is None:
@@ -306,7 +326,7 @@ def run_eval(argv: list = None) -> None:
     total_configs = len(prompts) * len(sparse_k_values)
 
     # Store run_dir on config for _run_single_case to use
-    config._run_dir = run_dir  # type: ignore[attr-defined]
+    object.__setattr__(config, '_run_dir', run_dir)
 
     # Build list of all cases to run
     cases = []
@@ -323,7 +343,10 @@ def run_eval(argv: list = None) -> None:
         if cache_key not in embed_cache:
             texts = [prompt.text]
             dense_vecs = dense_embed(config.embed_url, texts)
-            sparse_vecs = sparse_embed(config.embed_url, texts)
+            if config.sparse_only:
+                sparse_vecs = sparse_embed_sae(config.embed_url, texts)
+            else:
+                sparse_vecs = sparse_embed(config.embed_url, texts)
             embed_cache[cache_key] = {
                 "dense": dense_vecs[0] if dense_vecs else [],
                 "sparse": sparse_vecs[0] if sparse_vecs else {"indices": [], "values": []},

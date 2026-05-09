@@ -38,6 +38,8 @@ class ResolvedConfig:
     case_timeout_seconds: float
     turbo_submit: int  # batch size for parallel judge submissions (0 = serial)
     case_batch_size: int  # batch size for parallel case submissions (0 = serial)
+    sparse_only: bool  # use /embed_sae (True) vs /embed_sparse (False)
+    _run_dir: str = ""  # set at runtime, not part of snapshot
 
     def to_snapshot(self) -> ConfigSnapshot:
         return ConfigSnapshot(
@@ -62,6 +64,7 @@ class ResolvedConfig:
             judges_per_case=self.judges_per_case,
             case_timeout_seconds=self.case_timeout_seconds,
             turbo_submit=self.turbo_submit,
+            sparse_only=self.sparse_only,
         )
 
 
@@ -116,6 +119,9 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
                         help="Batch size for parallel case submissions. When > 0, "
                              "(prompt, sparse_k) cases are submitted in batches of this size "
                              "using ThreadPoolExecutor. Default 0 (serial).")
+    parser.add_argument("--sparse-only", action="store_true", default=True,
+                        help="Use SAE sparse vectors (/embed_sae) for sparse retrieval. "
+                             "Default True. Use --no-sparse-only to fall back to /embed_sparse.")
     args = parser.parse_args(argv)
 
     topk = args.topk or int(os.environ.get("EVAL_TOPK", 0))
@@ -209,6 +215,8 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
     if case_batch_size < 0:
         parser.error(f"--case-batch-size must be >= 0, got {case_batch_size}")
 
+    sparse_only = args.sparse_only
+
     if judge_timeout_seconds <= 0:
         parser.error(f"--judge-timeout-seconds must be > 0, got {judge_timeout_seconds}")
     if judge_per_chunk_timeout_seconds <= 0:
@@ -248,4 +256,5 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         case_timeout_seconds=case_timeout_seconds,
         turbo_submit=turbo_submit,
         case_batch_size=case_batch_size,
+        sparse_only=sparse_only,
     )

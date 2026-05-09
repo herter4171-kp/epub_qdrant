@@ -118,12 +118,14 @@ def main():
 
         points = []
         for point_id, vec in zip(batch_ids, sparse_vecs):
+            pid = int(point_id)
             points.append(PointStruct(
-                id=int(point_id),
+                id=pid,
                 vector={"sparse": SparseVector(
                     indices=vec["indices"],
                     values=vec["values"],
                 )},
+                payload={"dense_chunk_ids": [pid]},
             ))
 
         client.upsert(collection_name=args.collection, points=points)

@@ -16,10 +16,11 @@ class Prompt:
 class MergedChunk:
     rank: int
     id: Any  # dense point id, or "+"-joined composite for combined sparse_resolved
-    source: str  # "dense" or "sparse_resolved"
+    source: str  # "dense" or "sparse_resolved" (first retriever; see sources for all)
     token_count: int
     text: str
-    title: str = ""                            # publication title from payload
+    title: str = ""
+    sources: List[str] = field(default_factory=list)  # all retrievers that found this chunk                            # publication title from payload
     docket_id: str = ""                        # opaque per-result token shown to judge
     constituent_ids: List[Any] = field(default_factory=list)  # dense ids combined into this chunk
     originating_sparse_id: Any = None          # sparse point id that resolved here (None for direct dense)
@@ -152,6 +153,7 @@ class ConfigSnapshot:
     judges_per_case: int = 1
     case_timeout_seconds: float = 600.0
     turbo_submit: int = 0  # batch size for parallel judge submissions (0 = serial)
+    sparse_only: bool = True  # use /embed_sae (True) vs /embed_sparse (False)
     prompts: List[str] = field(default_factory=list)
     system_prompt: str = ""
 
