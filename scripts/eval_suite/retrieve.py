@@ -94,6 +94,7 @@ def _query_sparse_and_resolve(
     ).points
 
     sparse_raw: List[Dict[str, Any]] = []
+    sparse_resolved: List[Dict[str, Any]] = []
     ids_to_fetch: set = set()
     hit_id_lists: List[Tuple[Any, float, List[Any]]] = []
 
@@ -108,10 +109,16 @@ def _query_sparse_and_resolve(
             "dense_chunk_ids": coerced,
         })
         if not coerced:
-            logger.warning(
-                "sparse hit id=%s has empty dense_chunk_ids — dropping from merged set",
-                p.id,
-            )
+            # Use the sparse hit's own text as the resolved chunk
+            sparse_resolved.append({
+                "id": p.id,
+                "score": p.score if p.score else 0.0,
+                "token_count": p.payload.get("token_count", 0),
+                "text": p.payload.get("text", ""),
+                "title": p.payload.get("section_title", ""),
+                "constituent_ids": [],
+                "originating_sparse_id": p.id,
+            })
             continue
         for i in coerced:
             ids_to_fetch.add(i)
@@ -193,11 +200,16 @@ def retrieve(
     )
 
     seen_ids: set = set()
+    id_to_chunk: Dict[Any, MergedChunk] = {}
     merged: List[MergedChunk] = []
 
     def _add(item: Dict[str, Any], source: str) -> None:
         ident = item["id"]
         if ident in seen_ids:
+            # Already present — just record this additional source so relevance
+            # scores are attributed to both paths.
+            if ident in id_to_chunk and source not in id_to_chunk[ident].sources:
+                id_to_chunk[ident].sources.append(source)
             return
         # For combined (composite-id) entries, also dedupe if any constituent
         # already covered by a direct dense hit.
@@ -207,17 +219,20 @@ def retrieve(
         seen_ids.add(ident)
         for c in constituents:
             seen_ids.add(c)
-        merged.append(MergedChunk(
+        chunk = MergedChunk(
             rank=0,
             id=ident,
             source=source,
+            sources=[source],
             token_count=item.get("token_count", 0),
             text=item.get("text", ""),
             title=item.get("title", ""),
             docket_id="",
             constituent_ids=list(constituents),
             originating_sparse_id=item.get("originating_sparse_id"),
-        ))
+        )
+        id_to_chunk[ident] = chunk
+        merged.append(chunk)
 
     for item in dense_raw:
         _add(item, "dense")

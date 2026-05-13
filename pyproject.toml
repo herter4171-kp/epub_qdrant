@@ -27,6 +27,12 @@ dependencies = [
     "matplotlib>=3.8",
     "openai>=1.40",
     "scipy>=1.17.1",
+    "torch>=2.3.0",
+    "torchvision",
+    "torchaudio",
+    "sentence-transformers",
+    "accelerate",
+    "sae-lens==6.43.0",
 ]
 
 [project.scripts]
@@ -43,3 +49,15 @@ mineru = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.hatch.envs.default]
+# This tells hatch to pass the extra index to the installer
+pip-compile-args = ["--extra-index-url", "https://download.pytorch.org/whl/cu128"]
+# Or if using the uv-native hatch plugin:
+installer = "uv"
+
+[tool.hatch.envs.default.overrides]
+# This ensures that even if a version exists on PyPI, it prioritizes the CUDA build
+dependencies = [
+  "torch>=2.3.0",
+]

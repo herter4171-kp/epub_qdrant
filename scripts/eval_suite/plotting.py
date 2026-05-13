@@ -72,6 +72,80 @@ def _get_avg_relevance(critique: Dict) -> float:
     return float(np.mean(vals))
 
 
+def _get_mass_metrics(critique: Dict) -> Tuple[float, float]:
+    """Return (sparse_mass, dense_mass) averaged across judge outputs.
+
+    sparse_mass = mean(sum of relevance% for sparse/sparse_resolved chunks / 100)
+    dense_mass  = mean(sum of relevance% for dense chunks / 100)
+    """
+    chunks_meta = critique.get("chunks") or []
+    docket_to_source: Dict[str, str] = {}
+    for ch in chunks_meta:
+        if not isinstance(ch, dict):
+            continue
+        did = ch.get("docket_id") or ch.get("judge_id")
+        src = ch.get("source", "")
+        if isinstance(did, str) and did:
+            docket_to_source[did] = src
+
+    sparse_masses: List[float] = []
+    dense_masses: List[float] = []
+    for jo in _iter_judge_outputs(critique):
+        if not jo.get("parse_ok"):
+            continue
+        parsed = jo.get("parsed", {})
+        if not isinstance(parsed, dict):
+            continue
+        chunks = parsed.get("chunks") or []
+        if not chunks:
+            continue
+        run_sparse = 0.0
+        run_dense = 0.0
+        for ch in chunks:
+            if not isinstance(ch, dict):
+                continue
+            r = ch.get("relevance")
+            if not isinstance(r, (int, float)):
+                continue
+            cid = ch.get("id")
+            src = docket_to_source.get(cid, "") if isinstance(cid, str) else ""
+            if src in ("sparse", "sparse_resolved"):
+                run_sparse += r
+            elif src == "dense":
+                run_dense += r
+        sparse_masses.append(run_sparse / 100.0)
+        dense_masses.append(run_dense / 100.0)
+
+    if not sparse_masses:
+        return float("nan"), float("nan")
+    return float(np.mean(sparse_masses)), float(np.mean(dense_masses))
+
+
+def _get_sparse_lift(critique: Dict) -> float:
+    """sparse_mass / sparse_fraction. NaN when sparse_fraction is 0 or 1."""
+    try:
+        sf = float(critique.get("sparse_fraction", 0))
+    except (ValueError, TypeError):
+        return float("nan")
+    if sf <= 0.0 or sf >= 1.0:
+        return float("nan")
+    sparse_mass, _ = _get_mass_metrics(critique)
+    if np.isnan(sparse_mass):
+        return float("nan")
+    return sparse_mass / sf
+
+
+def _get_sparse_satisfaction_component(critique: Dict) -> float:
+    """satisfaction * sparse_mass."""
+    sat = _get_satisfaction(critique)
+    if sat < 1:
+        return float("nan")
+    sparse_mass, _ = _get_mass_metrics(critique)
+    if np.isnan(sparse_mass):
+        return float("nan")
+    return sat * sparse_mass
+
+
 def _get_avg_relevance_by_source(critique: Dict) -> Tuple[float, float]:
     """Return (avg_relevance_dense, avg_relevance_sparse). NaN if absent.
 
@@ -80,18 +154,19 @@ def _get_avg_relevance_by_source(critique: Dict) -> Tuple[float, float]:
     source. Older legacy: id may be the 1-based rank.
     """
     chunks_meta = critique.get("chunks") or []
-    docket_to_source: Dict[str, str] = {}
-    rank_to_source: Dict[int, str] = {}
+    docket_to_sources: Dict[str, List[str]] = {}
+    rank_to_sources: Dict[int, List[str]] = {}
     for c in chunks_meta:
         if not isinstance(c, dict):
             continue
-        src = c.get("source", "")
+        # Prefer the multi-source list; fall back to the single source string.
+        srcs = c.get("sources") or ([c.get("source", "")] if c.get("source") else [])
         did = c.get("docket_id") or c.get("judge_id")
         if isinstance(did, str) and did:
-            docket_to_source[did] = src
+            docket_to_sources[did] = srcs
         rank = c.get("rank")
         if isinstance(rank, int):
-            rank_to_source[rank] = src
+            rank_to_sources[rank] = srcs
 
     dense_vals: List[float] = []
     sparse_vals: List[float] = []
@@ -108,14 +183,16 @@ def _get_avg_relevance_by_source(critique: Dict) -> Tuple[float, float]:
             rid = ch.get("id")
             if not isinstance(r, (int, float)) or not (1 <= r <= 10):
                 continue
-            src = ""
+            srcs: List[str] = []
             if isinstance(rid, str):
-                src = docket_to_source.get(rid, "")
+                srcs = docket_to_sources.get(rid, [])
             elif isinstance(rid, (int, float)):
-                src = rank_to_source.get(int(rid), "")
-            if src == "dense":
+                srcs = rank_to_sources.get(int(rid), [])
+            # Attribute to every source that retrieved this chunk so dual hits
+            # don't unfairly credit only the first-seen path.
+            if "dense" in srcs:
                 dense_vals.append(float(r))
-            elif src in ("sparse", "sparse_resolved"):
+            if any(s in ("sparse", "sparse_resolved") for s in srcs):
                 sparse_vals.append(float(r))
     d = float(np.mean(dense_vals)) if dense_vals else float("nan")
     s = float(np.mean(sparse_vals)) if sparse_vals else float("nan")
@@ -224,41 +301,38 @@ def aggregate_contour(
     all_critiques: List[Dict[str, Any]],
     all_sparse_fractions: List[str],
     n_prompts: int,
+    suffix: str = "",
 ) -> str:
-    """Aggregate smoothed heatmap over scattered (frac, rel, sat) points.
+    """Aggregate smoothed heatmap over scattered (frac, sparse_lift, sat) points.
 
-    X-axis: sparse fraction
-    Y-axis: avg relevance (1-10)
+    X-axis: sparse fraction (excludes 0 and 1)
+    Y-axis: sparse_lift = sparse_mass / sparse_fraction, clipped to [0, 1]
     Color: satisfaction, color scale forced to 1-10
 
-    This version:
-      - aggregates duplicate (frac, rel) points
+    Smoothing:
       - builds a dense grid
-      - uses anisotropic Gaussian kernel smoothing directly on the grid
+      - uses anisotropic Gaussian kernel smoothing
       - masks outside the convex hull
       - overlays raw points so actual observations remain visible
     """
-    from collections import defaultdict
-
     import matplotlib.tri as mtri
 
     raw_points: List[Tuple[float, float, float]] = []
 
     for c in all_critiques:
-        sat = _get_satisfaction(c)
-        if sat < 1:
-            continue
-
-        rel = _get_avg_relevance(c)
-        if np.isnan(rel):
-            continue
-
         try:
             frac = float(_norm_frac(c.get("sparse_fraction", "")))
         except (ValueError, TypeError):
             continue
-
-        raw_points.append((frac, rel, float(sat)))
+        if frac <= 0.0 or frac >= 1.0:
+            continue
+        sat = _get_satisfaction(c)
+        if sat < 1:
+            continue
+        lift = _get_sparse_lift(c)
+        if np.isnan(lift):
+            continue
+        raw_points.append((frac, min(lift, 2.0), float(sat)))
 
     fig, ax = plt.subplots(figsize=(10, 8))
     cmap = plt.get_cmap("turbo")
@@ -275,39 +349,25 @@ def aggregate_contour(
 
         if unique_x >= 2 and unique_y >= 2:
             try:
-                # Aggregate duplicate coordinate pairs before smoothing.
-                buckets: Dict[Tuple[float, float], List[float]] = defaultdict(list)
-                for x, y, z in zip(xs, ys, zs):
-                    buckets[(round(float(x), 6), round(float(y), 6))].append(float(z))
-
-                pts = np.array([[x, y] for (x, y) in buckets.keys()], dtype=float)
-                vals = np.array([np.mean(v) for v in buckets.values()], dtype=float)
+                pts = np.column_stack([xs, ys])
+                vals = zs
 
                 if len(pts) >= 3 and len(np.unique(pts[:, 0])) >= 2 and len(np.unique(pts[:, 1])) >= 2:
                     x_min, x_max = float(pts[:, 0].min()), float(pts[:, 0].max())
-                    y_min, y_max = 0.5, 10.5
+                    y_min, y_max = 0.0, 2.0
 
-                    # Dense regular grid for rendering.
                     grid_nx = 300
                     grid_ny = 300
                     xg = np.linspace(x_min, x_max, grid_nx)
                     yg = np.linspace(y_min, y_max, grid_ny)
                     X, Y = np.meshgrid(xg, yg)
 
-                    # Kernel bandwidths:
-                    # - Lower bw_x => less sideways bleed across sparse-fraction columns
-                    # - Higher bw_y => more vertical smoothing
-                    #
-                    # Starting point:
-                    #   bw_x = 0.06 to 0.10 usually works well if your columns are around 0.16 apart
-                    #   bw_y = 0.35 to 0.60 depending on how much vertical smoothing you want
                     bw_x = 0.07
-                    bw_y = 0.45
+                    bw_y = 0.08
 
                     Z_num = np.zeros_like(X, dtype=float)
                     Z_den = np.zeros_like(X, dtype=float)
 
-                    # Gaussian kernel smoother
                     for px, py, pz in zip(pts[:, 0], pts[:, 1], vals):
                         w = np.exp(
                             -0.5 * (
@@ -321,8 +381,11 @@ def aggregate_contour(
                     with np.errstate(invalid="ignore", divide="ignore"):
                         Z_smooth = Z_num / Z_den
 
-                    # Mask outside convex hull so corners are not hallucinated.
-                    tri = mtri.Triangulation(pts[:, 0], pts[:, 1])
+                    # Mask outside convex hull. Add tiny fixed-seed jitter so
+                    # duplicate (x, y) coordinates don't crash Triangulation.
+                    rng = np.random.default_rng(0)
+                    jitter = rng.uniform(-1e-4, 1e-4, len(pts))
+                    tri = mtri.Triangulation(pts[:, 0], pts[:, 1] + jitter)
                     finder = tri.get_trifinder()
                     outside_hull = finder(X, Y) == -1
 
@@ -342,13 +405,12 @@ def aggregate_contour(
                     )
 
                     cbar = plt.colorbar(im, ax=ax, ticks=range(1, 11))
-                    cbar.set_label("Mean satisfaction (1-10)")
+                    cbar.set_label("Satisfaction")
                     rendered_surface = True
 
             except Exception as e:  # noqa: BLE001
                 print(f"Smoothed surface failed: {e}; falling back to scatter")
 
-        # Overlay actual observations
         ax.scatter(
             xs,
             ys,
@@ -365,14 +427,14 @@ def aggregate_contour(
         if not rendered_surface:
             sc = ax.scatter(xs, ys, c=zs, cmap=cmap, vmin=1.0, vmax=10.0, s=0)
             cbar = plt.colorbar(sc, ax=ax, ticks=range(1, 11))
-            cbar.set_label("Mean satisfaction (1-10)")
+            cbar.set_label("Satisfaction")
 
     ax.set_xlabel("Sparse fraction")
-    ax.set_ylabel("Avg relevance (1-10)")
+    ax.set_ylabel("Sparse contribution lift")
     ax.set_title(
-        f"Aggregate - sparse fraction vs avg relevance, color=satisfaction ({n_prompts} prompts)"
+        f"Aggregate - sparse fraction vs sparse lift, color=satisfaction ({n_prompts} prompts)"
     )
-    ax.set_ylim(0.5, 10.5)
+    ax.set_ylim(0.0, 2.0)
 
     if raw_points:
         xs_arr = np.array([p[0] for p in raw_points])
@@ -382,7 +444,8 @@ def aggregate_contour(
 
     fig.tight_layout()
 
-    path = os.path.join(run_dir, "report_assets", "aggregate_contour.png")
+    fname = f"aggregate_contour{'_' + suffix if suffix else ''}.png"
+    path = os.path.join(run_dir, "report_assets", fname)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -395,40 +458,198 @@ def aggregate_table_csv(
     all_critiques: List[Dict[str, Any]],
     all_sparse_fractions: List[str],
     topk: int = 0,
+    suffix: str = "",
 ) -> str:
-    """Aggregate CSV: sparse_frac, satisfaction, avg_relevance, dense_rel, sparse_rel."""
-    path = os.path.join(run_dir, "report_assets", "aggregate_table.csv")
+    """Aggregate CSV: sparse_frac, satisfaction, sparse_mass, dense_mass, sparse_lift, sparse_satisfaction_component."""
+    fname = f"aggregate_table{'_' + suffix if suffix else ''}.csv"
+    path = os.path.join(run_dir, "report_assets", fname)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["sparse_frac", "satisfaction", "avg_relevance",
-                         "avg_relevance_dense", "avg_relevance_sparse"])
-        fracs = sorted({_norm_frac(c.get("sparse_fraction", "")) for c in all_critiques},
-                       key=_sparse_fraction_to_float)
+        writer.writerow(["sparse_frac", "satisfaction", "sparse_mass", "dense_mass",
+                         "sparse_lift", "sparse_satisfaction_component"])
+        fracs = sorted(
+            {_norm_frac(c.get("sparse_fraction", "")) for c in all_critiques},
+            key=_sparse_fraction_to_float,
+        )
         for frac in fracs:
             sat_vals: List[float] = []
-            rel_vals: List[float] = []
-            d_vals: List[float] = []
-            s_vals: List[float] = []
+            sm_vals: List[float] = []
+            dm_vals: List[float] = []
+            lift_vals: List[float] = []
+            ssc_vals: List[float] = []
             for c in all_critiques:
                 if _norm_frac(c.get("sparse_fraction", "")) != frac:
                     continue
                 s = _get_satisfaction(c)
                 if s >= 1:
                     sat_vals.append(float(s))
-                r = _get_avg_relevance(c)
-                if not np.isnan(r):
-                    rel_vals.append(r)
-                d, sp = _get_avg_relevance_by_source(c)
-                if not np.isnan(d):
-                    d_vals.append(d)
-                if not np.isnan(sp):
-                    s_vals.append(sp)
+                sm, dm = _get_mass_metrics(c)
+                if not np.isnan(sm):
+                    sm_vals.append(sm)
+                if not np.isnan(dm):
+                    dm_vals.append(dm)
+                lift = _get_sparse_lift(c)
+                if not np.isnan(lift):
+                    lift_vals.append(lift)
+                ssc = _get_sparse_satisfaction_component(c)
+                if not np.isnan(ssc):
+                    ssc_vals.append(ssc)
             writer.writerow([
                 frac,
-                f"{np.mean(sat_vals):.2f}" if sat_vals else "",
-                f"{np.mean(rel_vals):.2f}" if rel_vals else "",
-                f"{np.mean(d_vals):.2f}" if d_vals else "",
-                f"{np.mean(s_vals):.2f}" if s_vals else "",
+                f"{np.mean(sat_vals):.3f}" if sat_vals else "",
+                f"{np.mean(sm_vals):.3f}" if sm_vals else "",
+                f"{np.mean(dm_vals):.3f}" if dm_vals else "",
+                f"{np.mean(lift_vals):.3f}" if lift_vals else "",
+                f"{np.mean(ssc_vals):.3f}" if ssc_vals else "",
             ])
+    return path
+
+
+def aggregate_bars(
+    run_dir: str,
+    all_critiques: List[Dict[str, Any]],
+) -> Tuple[str, str]:
+    """Two grouped bar charts comparing sparse collections.
+
+    Bar 1: x=sparse_fraction, grouped=sparse_collection, y=mean satisfaction
+    Bar 2: x=sparse_fraction, grouped=sparse_collection, y=sparse_satisfaction_component
+    Returns (path_satisfaction, path_sparse_satisfaction_component).
+    """
+    collections: List[str] = []
+    seen_cols: set = set()
+    for c in all_critiques:
+        col = c.get("sparse_collection", "")
+        if col not in seen_cols:
+            seen_cols.add(col)
+            collections.append(col)
+
+    fracs = sorted(
+        {_norm_frac(c.get("sparse_fraction", "")) for c in all_critiques},
+        key=_sparse_fraction_to_float,
+    )
+
+    sat_data: Dict[str, Dict[str, List[float]]] = {col: {} for col in collections}
+    ssc_data: Dict[str, Dict[str, List[float]]] = {col: {} for col in collections}
+
+    for c in all_critiques:
+        col = c.get("sparse_collection", "")
+        frac = _norm_frac(c.get("sparse_fraction", ""))
+        sat = _get_satisfaction(c)
+        if sat >= 1:
+            sat_data[col].setdefault(frac, []).append(sat)
+        ssc = _get_sparse_satisfaction_component(c)
+        if not np.isnan(ssc):
+            ssc_data[col].setdefault(frac, []).append(ssc)
+
+    os.makedirs(os.path.join(run_dir, "report_assets"), exist_ok=True)
+
+    def _draw_grouped_bar(
+        data: Dict[str, Dict[str, List[float]]],
+        ylabel: str,
+        title: str,
+        fname: str,
+        ylim: Optional[Tuple[float, float]],
+    ) -> str:
+        n_cols = len(collections)
+        x = np.arange(len(fracs))
+        width = 0.8 / max(n_cols, 1)
+        offsets = np.linspace(-(n_cols - 1) / 2, (n_cols - 1) / 2, n_cols) * width
+        colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]
+
+        fig, ax = plt.subplots(figsize=(max(len(fracs) * 1.2 + 2, 6), 5))
+        for i, col in enumerate(collections):
+            means = [
+                float(np.mean(data[col][f])) if data[col].get(f) else float("nan")
+                for f in fracs
+            ]
+            bars = ax.bar(x + offsets[i], means, width=width, color=colors[i % len(colors)],
+                          edgecolor="white", label=col)
+            for bar, val in zip(bars, means):
+                if not np.isnan(val):
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
+                            f"{val:.2f}", ha="center", va="bottom", fontsize=7)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"{float(f):.2f}" for f in fracs], fontsize=9)
+        ax.set_xlabel("Sparse fraction")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.legend(loc="upper right", fontsize=9)
+        if ylim is not None:
+            ax.set_ylim(*ylim)
+        fig.tight_layout()
+        path = os.path.join(run_dir, "report_assets", fname)
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        return path
+
+    path1 = _draw_grouped_bar(
+        sat_data,
+        ylabel="Satisfaction",
+        title="Mean satisfaction by sparse fraction and collection",
+        fname="aggregate_bar_satisfaction.png",
+        ylim=(0, 10),
+    )
+    path2 = _draw_grouped_bar(
+        ssc_data,
+        ylabel="Sparse-supported satisfaction",
+        title="Sparse satisfaction component by sparse fraction and collection",
+        fname="aggregate_bar_sparse_satisfaction_component.png",
+        ylim=None,
+    )
+    return path1, path2
+
+
+def aggregate_satisfaction_histograms(
+    run_dir: str,
+    all_critiques: List[Dict[str, Any]],
+) -> str:
+    """Satisfaction histogram per collection, pooled across all sparse fractions."""
+    collections: List[str] = []
+    seen_cols: set = set()
+    for c in all_critiques:
+        col = c.get("sparse_collection", "")
+        if col not in seen_cols:
+            seen_cols.add(col)
+            collections.append(col)
+
+    sat_by_col: Dict[str, List[float]] = {col: [] for col in collections}
+    for c in all_critiques:
+        col = c.get("sparse_collection", "")
+        sat = _get_satisfaction(c)
+        if sat >= 1:
+            sat_by_col[col].append(sat)
+
+    n_cols = len(collections)
+    colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]
+    bins = np.arange(0.5, 11.5, 1.0)
+
+    fig, axes = plt.subplots(1, n_cols, figsize=(5 * n_cols, 4), sharey=True)
+    if n_cols == 1:
+        axes = [axes]
+
+    for ax, col, color in zip(axes, collections, colors):
+        vals = np.array(sat_by_col[col])
+        ax.hist(vals, bins=bins, color=color, edgecolor="white", linewidth=0.6)
+        ax.set_xlim(0.5, 10.5)
+        ax.set_xticks(range(1, 11))
+        ax.set_xlabel("Satisfaction")
+        ax.set_title(col)
+        n = len(vals)
+        if n:
+            ax.axvline(float(np.mean(vals)), color="black", linestyle="--",
+                       linewidth=1.2, label=f"mean {np.mean(vals):.2f}")
+            ax.legend(fontsize=8)
+        ax.text(0.02, 0.97, f"n={n}", transform=ax.transAxes,
+                va="top", ha="left", fontsize=8)
+
+    axes[0].set_ylabel("Count")
+    fig.suptitle("Satisfaction distribution by collection (all sparse fractions)")
+    fig.tight_layout()
+
+    path = os.path.join(run_dir, "report_assets", "aggregate_hist_satisfaction.png")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     return path

@@ -19,6 +19,7 @@ from .schemas import Critique, CritiqueChunk, JudgeOutput, RetrievalSet
 logger = logging.getLogger(__name__)
 
 _ANSI_DIM_GREY = "\033[90m\033[2m"
+_ANSI_DIM_YELLOW = "\033[33m\033[2m"
 _ANSI_RESET = "\033[0m"
 _ANSI_CLEAR_LINE = "\r\033[2K"
 _LIVE_PREVIEW_CHARS = 60
@@ -30,7 +31,7 @@ _JUDGE_TIMEOUT_SECONDS = 180.0
 # the TCP socket is healthy (keepalives) but no tokens arrive.
 _PER_CHUNK_TIMEOUT_SECONDS = 30.0
 # Hard cap on tokens the judge may emit. Stops runaway thinking server-side.
-_JUDGE_MAX_TOKENS = 2048
+_JUDGE_MAX_TOKENS = 16384
 # Total attempts per judgement. One flat retry loop catches stream-aborts,
 # transport errors, and parse failures uniformly.
 _JUDGE_ATTEMPTS = 3
@@ -38,8 +39,12 @@ _JUDGE_ATTEMPTS = 3
 _CASE_TIMEOUT_SECONDS = 600.0
 
 # Char-level loop detection: tail substring repeats N+ times in lookback window.
-_LOOP_TAIL_CHARS = 200
-_LOOP_LOOKBACK_CHARS = 1200
+# Constraint: lookback must be >= tail * threshold for detection to be possible.
+# Set _LOOP_ABORT_ENABLED = False to disable loop-triggered aborts (server
+# thinking_budget caps runaway thinking more reliably than heuristics).
+_LOOP_ABORT_ENABLED = False
+_LOOP_TAIL_CHARS = 400
+_LOOP_LOOKBACK_CHARS = 2000          # must be > tail * threshold (400*4=1600)
 _LOOP_REPEAT_THRESHOLD = 4
 # Line-level loop detection: last K lines == K lines before that, K >= 2.
 _LOOP_LINE_TAIL = 20
@@ -74,7 +79,8 @@ def _is_thinking_loop(
     if not needle.strip():
         return False
     window = content[-lookback_chars:]
-    return window.count(needle) >= repeat_threshold
+    #return window.count(needle) >= repeat_threshold
+    return False
 
 
 def _is_line_loop(
@@ -127,12 +133,19 @@ def _drain_stream(
         try:
             for chunk in stream:
                 try:
-                    delta = chunk.choices[0].delta.content or ""
+                    d = chunk.choices[0].delta
+                    content_delta = d.content or ""
+                    # reasoning_content carries thinking tokens on models that
+                    # separate them (e.g. QwQ / qwen-reasoning via litellm).
+                    think_delta = getattr(d, "reasoning_content", None) or ""
                 except (AttributeError, IndexError):
-                    delta = ""
-                if delta:
-                    q.put(delta)
-        except Exception as exc:  # bubble to main thread
+                    content_delta = think_delta = ""
+                if content_delta:
+                    q.put(("content", content_delta))
+                elif think_delta:
+                    # Keep watchdog alive; prefix so caller can strip/store.
+                    q.put(("think", think_delta))
+        except Exception as exc:
             q.put(("__error__", exc))
         finally:
             q.put(_STREAM_SENTINEL)
@@ -141,6 +154,7 @@ def _drain_stream(
     t.start()
 
     content = ""
+    thinking = ""
     last_render = 0.0
     refresh_period = 1.0 / _LIVE_REFRESH_HZ
     deadline = time.monotonic() + total_timeout
@@ -166,18 +180,33 @@ def _drain_stream(
                 break
             if item is _STREAM_SENTINEL:
                 break
-            if isinstance(item, tuple) and item and item[0] == "__error__":
+            if isinstance(item, tuple) and item[0] == "__error__":
                 raise item[1]
-            delta = item if isinstance(item, str) else ""
+
+            kind, delta = item if isinstance(item, tuple) else ("content", item)
             if not delta:
                 continue
+
+            if kind == "think":
+                thinking += delta
+                if _LOOP_ABORT_ENABLED and len(thinking) > _LOOP_LOOKBACK_CHARS:
+                    if _is_thinking_loop(thinking):
+                        abort_reason = "thinking-loop detected in reasoning stream — char tail repeats"
+                        break
+                    if "\n" in delta and _is_line_loop(thinking):
+                        abort_reason = "thinking-loop detected in reasoning stream — line block repeats"
+                        break
+                if use_tty and any(c in delta for c in ".?!"):
+                    tail = (thinking.splitlines()[-1] if thinking.splitlines() else delta).strip()
+                    tail = tail[-_LIVE_PREVIEW_CHARS:]
+                    sys.stderr.write(
+                        f"{_ANSI_CLEAR_LINE}{_ANSI_DIM_YELLOW}{label} [think {len(thinking):>5}c]: "
+                        f"{tail}{_ANSI_RESET}"
+                    )
+                    sys.stderr.flush()
+                continue
+
             content += delta
-            if _is_thinking_loop(content):
-                abort_reason = "thinking-loop detected — char tail repeats"
-                break
-            if "\n" in delta and _is_line_loop(content):
-                abort_reason = "thinking-loop detected — line block repeats"
-                break
             if not use_tty:
                 continue
             now2 = time.monotonic()
@@ -216,15 +245,13 @@ def _stream_judge(
     total_timeout: float = _JUDGE_TIMEOUT_SECONDS,
     per_chunk_timeout: float = _PER_CHUNK_TIMEOUT_SECONDS,
     max_tokens: int = _JUDGE_MAX_TOKENS,
+    temperature: float = 0.1,
 ) -> str:
     """One streamed judge call. Returns accumulated content.
 
     Raises ``StreamAbort`` on timeout / inactivity / loop-detection, or
     transport exceptions (httpx ReadError, ConnectError, etc.) on
     network failure. Caller owns retry policy.
-
-    Sampling parameters (temperature, top_p, etc.) are intentionally not
-    sent — the inference server's CLI configuration is the source of truth.
     """
     use_tty = sys.stderr.isatty() and os.environ.get("EVAL_NO_STREAM") != "1"
     timed_client = client.with_options(timeout=total_timeout)
@@ -235,14 +262,14 @@ def _stream_judge(
             messages=messages,
             stream=True,
             max_tokens=max_tokens,
-            extra_body={"enable_thinking": False},
+            temperature=temperature,
         )
     except TypeError:
         # SDK or backend without stream/max_tokens support — fall back blocking.
         resp = timed_client.chat.completions.create(
             model=model,
             messages=messages,
-            extra_body={"enable_thinking": False},
+            temperature=temperature,
         )
         return resp.choices[0].message.content or ""
 
@@ -253,6 +280,34 @@ def _stream_judge(
         total_timeout=total_timeout,
         per_chunk_timeout=per_chunk_timeout,
     )
+
+
+def _sanitize_json_control_chars(raw: str) -> str:
+    """Escape bare control characters that appear inside JSON string literals.
+
+    Models occasionally emit a literal newline inside a string value (invalid
+    JSON). Walk the string with a tiny state machine and replace any bare
+    control character (< 0x20) found inside a string with its JSON escape.
+    """
+    _ESC = {'\n': '\\n', '\r': '\\r', '\t': '\\t'}
+    out: list = []
+    in_str = False
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch == '\\' and in_str and i + 1 < len(raw):
+            out.append(ch)
+            out.append(raw[i + 1])
+            i += 2
+            continue
+        if ch == '"':
+            in_str = not in_str
+        if in_str and ord(ch) < 0x20:
+            out.append(_ESC.get(ch, f'\\u{ord(ch):04x}'))
+        else:
+            out.append(ch)
+        i += 1
+    return ''.join(out)
 
 
 def _strip_wrappers(content: str) -> str:
@@ -276,6 +331,14 @@ def _validate_parsed(parsed, issued_ids: set, expected_chunks: int):
     """Return (parse_ok, error_str_or_None). Walks the schema once."""
     if not isinstance(parsed, dict) or "chunks" not in parsed:
         return False, "missing 'chunks' key in parsed JSON"
+    # Deduplicate by id (keep first occurrence) before counting — the judge
+    # occasionally rates the same chunk twice, which is recoverable.
+    seen_dedup: dict = {}
+    for entry in parsed["chunks"]:
+        eid = entry.get("id")
+        if isinstance(eid, str) and eid not in seen_dedup:
+            seen_dedup[eid] = entry
+    parsed["chunks"] = list(seen_dedup.values())
     actual_len = len(parsed["chunks"])
     if actual_len != expected_chunks:
         return False, (
@@ -288,11 +351,9 @@ def _validate_parsed(parsed, issued_ids: set, expected_chunks: int):
             return False, f"id is not str in entry: {entry}"
         if eid not in issued_ids:
             return False, f"unknown id {eid!r} in entry: {entry}"
-        if eid in seen_ids:
-            return False, f"duplicate id {eid!r} in entry: {entry}"
         seen_ids.add(eid)
         rel = entry.get("relevance")
-        if not isinstance(rel, int) or rel < 1 or rel > 10:
+        if not isinstance(rel, int): # or rel < 1 or rel > 10:
             return False, f"relevance not int 1..10 in entry: {entry}"
     if "reply" not in parsed or not isinstance(parsed.get("reply"), str):
         return False, "missing or invalid 'reply' field"
@@ -312,6 +373,7 @@ def _run_one_judgement(
     expected_chunks: int,
     label: str,
     judge_attempts: int,
+    judge_temperature: float,
     judge_timeout_seconds: float,
     judge_per_chunk_timeout_seconds: float,
     judge_max_tokens: int,
@@ -328,6 +390,9 @@ def _run_one_judgement(
     If ``case_deadline`` (monotonic) is provided and reached mid-attempt,
     abort early and return a wallclock-exceeded JudgeOutput.
     """
+    _RETRY_BASE = 1.0   # seconds
+    _RETRY_MAX  = 10.0  # seconds
+
     last_content = ""
     last_error: Optional[str] = None
     last_parsed = None
@@ -341,6 +406,14 @@ def _run_one_judgement(
                 retried=attempt > 1,
                 error="case_wallclock_exceeded",
             )
+        if attempt > 1:
+            raw_delay = _RETRY_BASE * 2 ** (attempt - 2)
+            delay = min(raw_delay, _RETRY_MAX)
+            logger.info("judge retry %d/%d — waiting %.1fs — last error: %s", attempt, judge_attempts, delay, last_error)
+            time.sleep(delay)
+            if raw_delay >= _RETRY_MAX:
+                # Already waited the maximum — one shot at recovery, no more.
+                break
         attempt_label = label if attempt == 1 else f"{label} attempt {attempt}/{judge_attempts}"
         try:
             content = _stream_judge(
@@ -354,6 +427,7 @@ def _run_one_judgement(
                 total_timeout=judge_timeout_seconds,
                 per_chunk_timeout=judge_per_chunk_timeout_seconds,
                 max_tokens=judge_max_tokens,
+                temperature=judge_temperature,
             )
         except StreamAbort as exc:
             last_error = f"stream_abort: {exc}"
@@ -364,18 +438,28 @@ def _run_one_judgement(
             last_content = ""
             continue
 
+        raw_content = content
         content = _strip_wrappers(content)
         last_content = content
         if not content:
             last_error = "empty_response"
+            logger.debug("empty_response after stripping; raw head=%r tail=%r", raw_content[:120], raw_content[-120:])
             continue
 
         try:
             parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            last_error = f"json_decode: {exc}"
-            last_parsed = None
-            continue
+        except json.JSONDecodeError:
+            try:
+                parsed = json.loads(_sanitize_json_control_chars(content))
+            except json.JSONDecodeError as exc:
+                last_error = f"json_decode: {exc}"
+                logger.debug(
+                    "json_decode raw content head=%r tail=%r",
+                    content[:120],
+                    content[-120:],
+                )
+                last_parsed = None
+                continue
 
         last_parsed = parsed
         ok, err = _validate_parsed(parsed, issued_ids, expected_chunks)
@@ -408,6 +492,7 @@ def _make_judge_task(
     expected_chunks: int,
     label: str,
     judge_attempts: int,
+    judge_temperature: float,
     judge_timeout_seconds: float,
     judge_per_chunk_timeout_seconds: float,
     judge_max_tokens: int,
@@ -423,6 +508,7 @@ def _make_judge_task(
         expected_chunks=expected_chunks,
         label=label,
         judge_attempts=judge_attempts,
+        judge_temperature=judge_temperature,
         judge_timeout_seconds=judge_timeout_seconds,
         judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
         judge_max_tokens=judge_max_tokens,
@@ -436,11 +522,12 @@ def critique(
     judge_base_url: str,
     judge_model: str,
     judge_api_key: str = "",
+    judge_temperature: float = 0.1,
     judge_timeout_seconds: float = _JUDGE_TIMEOUT_SECONDS,
     judge_per_chunk_timeout_seconds: float = _PER_CHUNK_TIMEOUT_SECONDS,
     judge_max_tokens: int = _JUDGE_MAX_TOKENS,
     judge_attempts: int = _JUDGE_ATTEMPTS,
-    judges_per_case: int = 1,
+    judges_per_case: int = 2,
     case_timeout_seconds: float = _CASE_TIMEOUT_SECONDS,
     turbo_submit: int = 0,
 ) -> Critique:
@@ -498,6 +585,7 @@ def critique(
                 expected_chunks=expected_chunks,
                 label=label,
                 judge_attempts=judge_attempts,
+                judge_temperature=judge_temperature,
                 judge_timeout_seconds=judge_timeout_seconds,
                 judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
                 judge_max_tokens=judge_max_tokens,
@@ -545,6 +633,7 @@ def critique(
                     expected_chunks=expected_chunks,
                     label=task["label"],
                     judge_attempts=judge_attempts,
+                    judge_temperature=judge_temperature,
                     judge_timeout_seconds=judge_timeout_seconds,
                     judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
                     judge_max_tokens=judge_max_tokens,

@@ -1,0 +1,12 @@
+{
+  "collection": "sparse-only-256len",
+  "points_count": 189216,
+  "nonzero_counts": {
+    "mean": 165.4944085066802,
+    "median": 167.0,
+    "p10": 100.0,
+    "p90": 227.0,
+    "min": 16,
+    "max": 360
+  }
+}
