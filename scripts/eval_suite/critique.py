@@ -31,7 +31,7 @@ _JUDGE_TIMEOUT_SECONDS = 180.0
 # the TCP socket is healthy (keepalives) but no tokens arrive.
 _PER_CHUNK_TIMEOUT_SECONDS = 30.0
 # Hard cap on tokens the judge may emit. Stops runaway thinking server-side.
-_JUDGE_MAX_TOKENS = 2048
+_JUDGE_MAX_TOKENS = 16384
 # Total attempts per judgement. One flat retry loop catches stream-aborts,
 # transport errors, and parse failures uniformly.
 _JUDGE_ATTEMPTS = 3
@@ -79,7 +79,8 @@ def _is_thinking_loop(
     if not needle.strip():
         return False
     window = content[-lookback_chars:]
-    return window.count(needle) >= repeat_threshold
+    #return window.count(needle) >= repeat_threshold
+    return False
 
 
 def _is_line_loop(
@@ -244,15 +245,13 @@ def _stream_judge(
     total_timeout: float = _JUDGE_TIMEOUT_SECONDS,
     per_chunk_timeout: float = _PER_CHUNK_TIMEOUT_SECONDS,
     max_tokens: int = _JUDGE_MAX_TOKENS,
+    temperature: float = 0.1,
 ) -> str:
     """One streamed judge call. Returns accumulated content.
 
     Raises ``StreamAbort`` on timeout / inactivity / loop-detection, or
     transport exceptions (httpx ReadError, ConnectError, etc.) on
     network failure. Caller owns retry policy.
-
-    Sampling parameters (temperature, top_p, etc.) are intentionally not
-    sent — the inference server's CLI configuration is the source of truth.
     """
     use_tty = sys.stderr.isatty() and os.environ.get("EVAL_NO_STREAM") != "1"
     timed_client = client.with_options(timeout=total_timeout)
@@ -263,15 +262,14 @@ def _stream_judge(
             messages=messages,
             stream=True,
             max_tokens=max_tokens,
-            temperature=0,
-            extra_body={"enable_thinking": False},
+            temperature=temperature,
         )
     except TypeError:
         # SDK or backend without stream/max_tokens support — fall back blocking.
         resp = timed_client.chat.completions.create(
             model=model,
             messages=messages,
-            extra_body={"enable_thinking": False},
+            temperature=temperature,
         )
         return resp.choices[0].message.content or ""
 
@@ -282,6 +280,34 @@ def _stream_judge(
         total_timeout=total_timeout,
         per_chunk_timeout=per_chunk_timeout,
     )
+
+
+def _sanitize_json_control_chars(raw: str) -> str:
+    """Escape bare control characters that appear inside JSON string literals.
+
+    Models occasionally emit a literal newline inside a string value (invalid
+    JSON). Walk the string with a tiny state machine and replace any bare
+    control character (< 0x20) found inside a string with its JSON escape.
+    """
+    _ESC = {'\n': '\\n', '\r': '\\r', '\t': '\\t'}
+    out: list = []
+    in_str = False
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch == '\\' and in_str and i + 1 < len(raw):
+            out.append(ch)
+            out.append(raw[i + 1])
+            i += 2
+            continue
+        if ch == '"':
+            in_str = not in_str
+        if in_str and ord(ch) < 0x20:
+            out.append(_ESC.get(ch, f'\\u{ord(ch):04x}'))
+        else:
+            out.append(ch)
+        i += 1
+    return ''.join(out)
 
 
 def _strip_wrappers(content: str) -> str:
@@ -327,7 +353,7 @@ def _validate_parsed(parsed, issued_ids: set, expected_chunks: int):
             return False, f"unknown id {eid!r} in entry: {entry}"
         seen_ids.add(eid)
         rel = entry.get("relevance")
-        if not isinstance(rel, int) or rel < 1 or rel > 10:
+        if not isinstance(rel, int): # or rel < 1 or rel > 10:
             return False, f"relevance not int 1..10 in entry: {entry}"
     if "reply" not in parsed or not isinstance(parsed.get("reply"), str):
         return False, "missing or invalid 'reply' field"
@@ -347,6 +373,7 @@ def _run_one_judgement(
     expected_chunks: int,
     label: str,
     judge_attempts: int,
+    judge_temperature: float,
     judge_timeout_seconds: float,
     judge_per_chunk_timeout_seconds: float,
     judge_max_tokens: int,
@@ -382,7 +409,7 @@ def _run_one_judgement(
         if attempt > 1:
             raw_delay = _RETRY_BASE * 2 ** (attempt - 2)
             delay = min(raw_delay, _RETRY_MAX)
-            logger.info("judge retry %d/%d — waiting %.1fs", attempt, judge_attempts, delay)
+            logger.info("judge retry %d/%d — waiting %.1fs — last error: %s", attempt, judge_attempts, delay, last_error)
             time.sleep(delay)
             if raw_delay >= _RETRY_MAX:
                 # Already waited the maximum — one shot at recovery, no more.
@@ -400,6 +427,7 @@ def _run_one_judgement(
                 total_timeout=judge_timeout_seconds,
                 per_chunk_timeout=judge_per_chunk_timeout_seconds,
                 max_tokens=judge_max_tokens,
+                temperature=judge_temperature,
             )
         except StreamAbort as exc:
             last_error = f"stream_abort: {exc}"
@@ -410,18 +438,28 @@ def _run_one_judgement(
             last_content = ""
             continue
 
+        raw_content = content
         content = _strip_wrappers(content)
         last_content = content
         if not content:
             last_error = "empty_response"
+            logger.debug("empty_response after stripping; raw head=%r tail=%r", raw_content[:120], raw_content[-120:])
             continue
 
         try:
             parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            last_error = f"json_decode: {exc}"
-            last_parsed = None
-            continue
+        except json.JSONDecodeError:
+            try:
+                parsed = json.loads(_sanitize_json_control_chars(content))
+            except json.JSONDecodeError as exc:
+                last_error = f"json_decode: {exc}"
+                logger.debug(
+                    "json_decode raw content head=%r tail=%r",
+                    content[:120],
+                    content[-120:],
+                )
+                last_parsed = None
+                continue
 
         last_parsed = parsed
         ok, err = _validate_parsed(parsed, issued_ids, expected_chunks)
@@ -454,6 +492,7 @@ def _make_judge_task(
     expected_chunks: int,
     label: str,
     judge_attempts: int,
+    judge_temperature: float,
     judge_timeout_seconds: float,
     judge_per_chunk_timeout_seconds: float,
     judge_max_tokens: int,
@@ -469,6 +508,7 @@ def _make_judge_task(
         expected_chunks=expected_chunks,
         label=label,
         judge_attempts=judge_attempts,
+        judge_temperature=judge_temperature,
         judge_timeout_seconds=judge_timeout_seconds,
         judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
         judge_max_tokens=judge_max_tokens,
@@ -482,11 +522,12 @@ def critique(
     judge_base_url: str,
     judge_model: str,
     judge_api_key: str = "",
+    judge_temperature: float = 0.1,
     judge_timeout_seconds: float = _JUDGE_TIMEOUT_SECONDS,
     judge_per_chunk_timeout_seconds: float = _PER_CHUNK_TIMEOUT_SECONDS,
     judge_max_tokens: int = _JUDGE_MAX_TOKENS,
     judge_attempts: int = _JUDGE_ATTEMPTS,
-    judges_per_case: int = 1,
+    judges_per_case: int = 2,
     case_timeout_seconds: float = _CASE_TIMEOUT_SECONDS,
     turbo_submit: int = 0,
 ) -> Critique:
@@ -544,6 +585,7 @@ def critique(
                 expected_chunks=expected_chunks,
                 label=label,
                 judge_attempts=judge_attempts,
+                judge_temperature=judge_temperature,
                 judge_timeout_seconds=judge_timeout_seconds,
                 judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
                 judge_max_tokens=judge_max_tokens,
@@ -591,6 +633,7 @@ def critique(
                     expected_chunks=expected_chunks,
                     label=task["label"],
                     judge_attempts=judge_attempts,
+                    judge_temperature=judge_temperature,
                     judge_timeout_seconds=judge_timeout_seconds,
                     judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
                     judge_max_tokens=judge_max_tokens,

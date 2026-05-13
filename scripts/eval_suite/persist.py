@@ -25,9 +25,10 @@ def _retrieval_path(prompt_index: int, sparse_k: int, run_dir: str) -> str:
     return os.path.join(run_dir, _RETRIEVALS_DIR, f"{slug}.json")
 
 
-def _critique_path(prompt_index: int, sparse_k: int, run_dir: str) -> str:
+def _critique_path(prompt_index: int, sparse_k: int, run_dir: str, tag: str = "") -> str:
     slug = _slug_case(prompt_index, sparse_k)
-    return os.path.join(run_dir, _CRITIQUES_DIR, f"{slug}.json")
+    suffix = f"_{tag}" if tag else ""
+    return os.path.join(run_dir, _CRITIQUES_DIR, f"{slug}{suffix}.json")
 
 
 def write_json_atomic(path: str, data: Dict[str, Any]) -> None:
@@ -59,10 +60,10 @@ def write_retrieval(retrieval: RetrievalSet, run_dir: str) -> str:
     return path
 
 
-def write_critique(critique: Critique, run_dir: str) -> str:
-    """Write critique JSON, return path. One file per (prompt_index, sparse_k);
+def write_critique(critique: Critique, run_dir: str, tag: str = "") -> str:
+    """Write critique JSON, return path. One file per (prompt_index, sparse_k[, tag]);
     multi-sample runs hold all judge_outputs in the file's list."""
-    path = _critique_path(critique.prompt_index, critique.sparse_k, run_dir)
+    path = _critique_path(critique.prompt_index, critique.sparse_k, run_dir, tag=tag)
     write_json_atomic(path, critique.to_dict())
     return path
 
@@ -75,10 +76,10 @@ def write_config(snapshot: ConfigSnapshot, run_dir: str) -> str:
 
 
 def read_critique(
-    run_dir: str, prompt_index: int, sparse_k: int,
+    run_dir: str, prompt_index: int, sparse_k: int, tag: str = "",
 ) -> Optional[Dict[str, Any]]:
-    """Read a critique JSON by prompt_index + sparse_k."""
-    path = _critique_path(prompt_index, sparse_k, run_dir)
+    """Read a critique JSON by prompt_index + sparse_k (+ optional tag)."""
+    path = _critique_path(prompt_index, sparse_k, run_dir, tag=tag)
     if not os.path.exists(path):
         return None
     with open(path, "r", encoding="utf-8") as f:

@@ -1,18 +1,34 @@
-* Tasks
-  * You are a test subject tasked with evaluating a prompt using a listing of chunks of knowledge of varying content and utility to formulate a sincere reply.
-  * We'll also need from you numeric scores from 1-10 for how useful each chunk was in shaping a worthwhile reply.
-  * Last of all, please rate on a scale of 1-10 satisfaction, i.e. how effectively you believe the results address the prompt.
-* You will use the JSON schema below to reply with nothing else prepended or appended.
-  * Echo each ID exactly as given; outputting exactly one entry per chunk.
-  * Square brackets in the schema are placeholders.
+* Task: Evaluate a prompt using a listing of chunks of unsourced knowledge assumed equally credible.
+* Scoring
+  * Per-chunk numeric scores from our scale of 1-10 for "relevance," which is the utility of the chunk—specifically how much substantive information it provides to construct your final answer to the prompt under evaluation.
+  * For "satisfaction," please rate on our scale of 1-10 how effectively you believe the results enable properly and fully addressing the prompt's ask.
+  * To score satisfaction, first form your own answer to the prompt using the given chunks, then evaluate what it does well and where gaps can't be filled.
+  * **NOTE:** A chunk that merely mentions relevant topics in its title or opening sentence scores lower than one that provides substantive content you are able to use to shape a quality reply.
+* Scoring Guidance
+  1. No useful fodder for the prompt.
+  2. Incidental overlap in vocabulary or topic, but no usable support.
+  3. Weak topical signal; may name a related concept but provides little or no answerable content.
+  4. Partial applicability; supports a small part of the prompt or frames the topic, but remains too thin for a useful answer.
+  5. Some useful information; supports one important aspect of the prompt but leaves major requirements unanswered.
+  6. Useful partial body of facts; enables a cautious answer, but at least one central requirement is missing, vague, or unsupported.
+  7. Good fodder; supports most of the prompt, though one important gap or uncertainty remains.
+  8. Strong support; enables a solid answer with only minor caveats or missing detail.
+  9. Very strong argument; directly supports nearly all of the prompt with specific, usable content.
+  10. Comprehensive, air-tight reply; fully and directly supports the prompt’s ask without needing outside inference or qualification.
+* Formatting
+  * You will use the JSON schema below to reply with nothing else prepended or appended.
+    * Echo each ID exactly as given; outputting exactly one entry per chunk.
+    * Schema notation
+      * Square brackets in the schema keys are placeholders.
+      * The "..." just implies there's an arbitrary number of chunks after the first one in our example.
 
 ```json
 {
   "chunks": [
-    {"id": "[id]", "relevance": [1-10 score], "reason": "[One sentence weighing pros and cons of the reference]"},
+    {"id": "[id]", "relevance": [1-10 score], "reason": "[One sentence your score for this chunk based on how well its content facilitates a reply]"},
     ...
   ],
-  "reply": "[Well-resoned reply answering with up to four sentences max with no markdown formatting or outline styling]",
+  "reply": "[Well-reasoned reply answering with up to four sentences max with no markdown formatting or outline styling]",
   "satisfaction": [1-10 score]
 }
 ```

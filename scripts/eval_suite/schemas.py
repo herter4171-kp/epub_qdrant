@@ -146,14 +146,16 @@ class ConfigSnapshot:
     judge_model: str
     judge_api_key: Optional[str]
     output_root: str
+    judge_temperature: float = 0.1
     judge_timeout_seconds: float = 180.0
     judge_per_chunk_timeout_seconds: float = 30.0
     judge_max_tokens: int = 2048
     judge_attempts: int = 3
-    judges_per_case: int = 1
+    judges_per_case: int = 2
     case_timeout_seconds: float = 600.0
     turbo_submit: int = 0  # batch size for parallel judge submissions (0 = serial)
     sparse_only: bool = True  # use /embed_sae (True) vs /embed_sparse (False)
+    sparse_collection_control: Optional[str] = None  # if set, also run this collection with SPLADE embeds
     prompts: List[str] = field(default_factory=list)
     system_prompt: str = ""
 

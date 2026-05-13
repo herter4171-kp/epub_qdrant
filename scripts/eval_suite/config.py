@@ -30,6 +30,7 @@ class ResolvedConfig:
     judge_model: str
     judge_api_key: str
     output_root: str
+    judge_temperature: float
     judge_timeout_seconds: float
     judge_per_chunk_timeout_seconds: float
     judge_max_tokens: int
@@ -39,6 +40,7 @@ class ResolvedConfig:
     turbo_submit: int  # batch size for parallel judge submissions (0 = serial)
     case_batch_size: int  # batch size for parallel case submissions (0 = serial)
     sparse_only: bool  # use /embed_sae (True) vs /embed_sparse (False)
+    sparse_collection_control: Optional[str]  # if set, also run with SPLADE embeds
     _run_dir: str = ""  # set at runtime, not part of snapshot
 
     def to_snapshot(self) -> ConfigSnapshot:
@@ -57,6 +59,7 @@ class ResolvedConfig:
             judge_model=self.judge_model,
             judge_api_key=self.judge_api_key,
             output_root=self.output_root,
+            judge_temperature=self.judge_temperature,
             judge_timeout_seconds=self.judge_timeout_seconds,
             judge_per_chunk_timeout_seconds=self.judge_per_chunk_timeout_seconds,
             judge_max_tokens=self.judge_max_tokens,
@@ -65,6 +68,7 @@ class ResolvedConfig:
             case_timeout_seconds=self.case_timeout_seconds,
             turbo_submit=self.turbo_submit,
             sparse_only=self.sparse_only,
+            sparse_collection_control=self.sparse_collection_control,
         )
 
 
@@ -96,6 +100,8 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
     parser.add_argument("--judge-model", type=str, required=False)
     parser.add_argument("--judge-api-key", type=str, required=False)
     parser.add_argument("--output-root", type=str, required=False)
+    parser.add_argument("--judge-temperature", type=float, required=False, default=None,
+                        help="Sampling temperature for judge LLM (default 0.1).")
     parser.add_argument("--judge-timeout-seconds", type=float, required=False, default=None,
                         help="Total wall-clock cap per judge response (default 180).")
     parser.add_argument("--judge-per-chunk-timeout-seconds", type=float, required=False, default=None,
@@ -106,7 +112,7 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
                         help="Total attempts per judgement (single flat retry loop covering "
                              "timeout/loop/transport/parse failures). Default 3.")
     parser.add_argument("--judges-per-case", type=int, required=False, default=None,
-                        help="Number of independent judge runs per (prompt, sparse_k) case for noise characterization. Default 1.")
+                        help="Number of independent judge runs per (prompt, sparse_k) case for noise characterization. Default 2.")
     parser.add_argument("--case-timeout-seconds", type=float, required=False, default=None,
                         help="Hard wall-clock cap per case across all judges + retries. "
                              "When exceeded, remaining judge slots are filled with "
@@ -122,6 +128,11 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
     parser.add_argument("--sparse-only", action="store_true", default=True,
                         help="Use SAE sparse vectors (/embed_sae) for sparse retrieval. "
                              "Default True. Use --no-sparse-only to fall back to /embed_sparse.")
+    parser.add_argument("--sparse-collection-control", type=str, required=False, default=None,
+                        help="Optional control sparse collection (SPLADE). When set, each case "
+                             "is run twice: once against --sparse-collection (variable, SAE embeds, "
+                             "suffix _variable) and once against this collection (control, SPLADE "
+                             "embeds, suffix _control).")
     args = parser.parse_args(argv)
 
     topk = args.topk or int(os.environ.get("EVAL_TOPK", 0))
@@ -188,6 +199,9 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         env_val = os.environ.get(env_key)
         return int(env_val) if env_val else default
 
+    judge_temperature = _resolve_float(
+        args.judge_temperature, "JUDGE_TEMPERATURE", 0.1,
+    )
     judge_timeout_seconds = _resolve_float(
         args.judge_timeout_seconds, "JUDGE_TIMEOUT_SECONDS", 180.0,
     )
@@ -201,7 +215,7 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         args.judge_attempts, "JUDGE_ATTEMPTS", 3,
     )
     judges_per_case = _resolve_int(
-        args.judges_per_case, "JUDGES_PER_CASE", 1,
+        args.judges_per_case, "JUDGES_PER_CASE", 2,
     )
     case_timeout_seconds = _resolve_float(
         args.case_timeout_seconds, "CASE_TIMEOUT_SECONDS", 600.0,
@@ -216,6 +230,7 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         parser.error(f"--case-batch-size must be >= 0, got {case_batch_size}")
 
     sparse_only = args.sparse_only
+    sparse_collection_control = args.sparse_collection_control or os.environ.get("SPARSE_COLLECTION_CONTROL") or None
 
     if judge_timeout_seconds <= 0:
         parser.error(f"--judge-timeout-seconds must be > 0, got {judge_timeout_seconds}")
@@ -248,6 +263,7 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         judge_model=judge_model,
         judge_api_key=judge_api_key,
         output_root=output_root,
+        judge_temperature=judge_temperature,
         judge_timeout_seconds=judge_timeout_seconds,
         judge_per_chunk_timeout_seconds=judge_per_chunk_timeout_seconds,
         judge_max_tokens=judge_max_tokens,
@@ -257,4 +273,5 @@ def resolve_config(argv: list, env: dict = None) -> ResolvedConfig:
         turbo_submit=turbo_submit,
         case_batch_size=case_batch_size,
         sparse_only=sparse_only,
+        sparse_collection_control=sparse_collection_control,
     )

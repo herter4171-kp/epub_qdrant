@@ -130,15 +130,18 @@ def _run_single_case(
     dense_k,
     embeddings,
     config,
+    sparse_collection,
+    tag,
     system_prompt,
     judges_per_case,
     done,
     total_configs,
     failures_path,
 ) -> _CaseResult:
-    """Run one (prompt, sparse_k) case: retrieve + critique."""
+    """Run one (prompt, sparse_k, collection) case: retrieve + critique."""
+    tag_label = f" [{tag}]" if tag else ""
     prefix = _c(
-        f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}]",
+        f"[{done}/{total_configs} sk={sparse_k}/{config.topk} frac={sparse_frac}{tag_label}]",
         _ANSI_CYAN,
     )
     _RETRIEVAL_ATTEMPTS = 2
@@ -157,7 +160,7 @@ def _run_single_case(
                 sparse_k=sparse_k,
                 qdrant_url=config.qdrant_url,
                 dense_collection=config.dense_collection,
-                sparse_collection=config.sparse_collection,
+                sparse_collection=sparse_collection,
                 dense_vector_name=config.dense_vector_name,
                 topk=config.topk,
             )
@@ -211,6 +214,7 @@ def _run_single_case(
             judge_base_url=config.judge_base_url,
             judge_model=config.judge_model,
             judge_api_key=config.judge_api_key,
+            judge_temperature=config.judge_temperature,
             judge_timeout_seconds=config.judge_timeout_seconds,
             judge_per_chunk_timeout_seconds=config.judge_per_chunk_timeout_seconds,
             judge_max_tokens=config.judge_max_tokens,
@@ -219,7 +223,7 @@ def _run_single_case(
             case_timeout_seconds=config.case_timeout_seconds,
             turbo_submit=config.turbo_submit,
         )
-        critique_path = write_critique(c, config._run_dir)
+        critique_path = write_critique(c, config._run_dir, tag=tag)
 
         outs = c.judge_outputs or []
         ok_n = sum(1 for jo in outs if jo and jo.parse_ok)
@@ -323,36 +327,48 @@ def run_eval(argv: list = None) -> None:
     # Sweep grid
     sparse_k_values = sweep_grid(config.topk, config.sparse_step)
     judges_per_case = config.judges_per_case
-    total_configs = len(prompts) * len(sparse_k_values)
 
     # Store run_dir on config for _run_single_case to use
     object.__setattr__(config, '_run_dir', run_dir)
 
-    # Build list of all cases to run
+    # Collections: (tag, sparse_collection, sparse_only_flag)
+    # Variable always uses SAE embeds; control (if configured) always uses SPLADE embeds.
+    use_tags = config.sparse_collection_control is not None
+    collections = [("variable" if use_tags else "", config.sparse_collection, True)]
+    if config.sparse_collection_control:
+        collections.append(("control", config.sparse_collection_control, False))
+
+    # Embedding cache: (prompt.text, sparse_only) -> {"dense": [...], "sparse": {...}}
+    # Dense vectors are shared across collections; sparse vectors depend on sparse_only.
+    embed_cache: dict = {}
+    sparse_only_flags = {col_sparse_only for _, _, col_sparse_only in collections}
+    for prompt in prompts:
+        texts = [prompt.text]
+        dense_vecs = dense_embed(config.embed_url, texts)
+        dense_vec = dense_vecs[0] if dense_vecs else []
+        for flag in sparse_only_flags:
+            key = (prompt.text, flag)
+            if key not in embed_cache:
+                if flag:
+                    sparse_vecs = sparse_embed_sae(config.embed_url, texts)
+                else:
+                    sparse_vecs = sparse_embed(config.embed_url, texts)
+                embed_cache[key] = {
+                    "dense": dense_vec,
+                    "sparse": sparse_vecs[0] if sparse_vecs else {"indices": [], "values": []},
+                }
+
+    # Build flat list of all cases: (prompt, sparse_k, sparse_frac, dense_k, sparse_col, tag, embed_key)
     cases = []
-    for prompt in prompts:
-        for sparse_k in sparse_k_values:
-            dense_k = config.topk - sparse_k
-            sparse_frac = f"{sparse_k / config.topk:.2f}"
-            cases.append((prompt, sparse_k, sparse_frac, dense_k))
+    for tag, sparse_col, col_sparse_only in collections:
+        for prompt in prompts:
+            for sparse_k in sparse_k_values:
+                dense_k = config.topk - sparse_k
+                sparse_frac = f"{sparse_k / config.topk:.2f}"
+                embed_key = (prompt.text, col_sparse_only)
+                cases.append((prompt, sparse_k, sparse_frac, dense_k, sparse_col, tag, embed_key))
 
-    # Embedding cache: (text, embed_url) -> {"dense": [...], "sparse": {...}}
-    embed_cache = {}
-    for prompt in prompts:
-        cache_key = (prompt.text, config.embed_url)
-        if cache_key not in embed_cache:
-            texts = [prompt.text]
-            dense_vecs = dense_embed(config.embed_url, texts)
-            if config.sparse_only:
-                sparse_vecs = sparse_embed_sae(config.embed_url, texts)
-            else:
-                sparse_vecs = sparse_embed(config.embed_url, texts)
-            embed_cache[cache_key] = {
-                "dense": dense_vecs[0] if dense_vecs else [],
-                "sparse": sparse_vecs[0] if sparse_vecs else {"indices": [], "values": []},
-            }
-
-    # Run cases in batches
+    total_configs = len(cases)
     case_batch_size = config.case_batch_size
     all_results: list[_CaseResult] = []
     done = 0
@@ -366,8 +382,8 @@ def run_eval(argv: list = None) -> None:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
-            for idx, (prompt, sparse_k, sparse_frac, dense_k) in enumerate(cases):
-                embeddings = embed_cache[(prompt.text, config.embed_url)]
+            for idx, (prompt, sparse_k, sparse_frac, dense_k, sparse_col, tag, embed_key) in enumerate(cases):
+                embeddings = embed_cache[embed_key]
                 future = executor.submit(
                     _run_single_case,
                     prompt=prompt,
@@ -376,6 +392,8 @@ def run_eval(argv: list = None) -> None:
                     dense_k=dense_k,
                     embeddings=embeddings,
                     config=config,
+                    sparse_collection=sparse_col,
+                    tag=tag,
                     system_prompt=system_prompt,
                     judges_per_case=judges_per_case,
                     done=idx + 1,
@@ -384,17 +402,16 @@ def run_eval(argv: list = None) -> None:
                 )
                 futures.append(future)
 
-            # Collect results as they complete
             for future in futures:
                 result = future.result()
                 all_results.append(result)
                 if result.ok_n == 0:
                     missing += 1
     else:
-        # Serial mode (original behavior)
-        for idx, (prompt, sparse_k, sparse_frac, dense_k) in enumerate(cases):
+        # Serial mode
+        for idx, (prompt, sparse_k, sparse_frac, dense_k, sparse_col, tag, embed_key) in enumerate(cases):
             done += 1
-            embeddings = embed_cache[(prompt.text, config.embed_url)]
+            embeddings = embed_cache[embed_key]
             result = _run_single_case(
                 prompt=prompt,
                 sparse_k=sparse_k,
@@ -402,6 +419,8 @@ def run_eval(argv: list = None) -> None:
                 dense_k=dense_k,
                 embeddings=embeddings,
                 config=config,
+                sparse_collection=sparse_col,
+                tag=tag,
                 system_prompt=system_prompt,
                 judges_per_case=judges_per_case,
                 done=done,
@@ -412,10 +431,12 @@ def run_eval(argv: list = None) -> None:
             if result.ok_n == 0:
                 missing += 1
 
+    n_collections = len(collections)
     # Report
     print(
-        f"\nRun complete. {len(prompts)} prompts x {len(sparse_k_values)} sparse-fractions "
-        f"x {judges_per_case} judges/case = {total_configs} configs. {missing} missing."
+        f"\nRun complete. {n_collections} collection(s) x {len(prompts)} prompts x "
+        f"{len(sparse_k_values)} sparse-fractions x {judges_per_case} judges/case = "
+        f"{total_configs} configs. {missing} missing."
     )
     print("Building report...", end=" ")
     report_path = build_report(run_dir)

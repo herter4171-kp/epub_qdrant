@@ -15,9 +15,14 @@ from .plotting import (
     per_prompt_table_csv,
     aggregate_contour,
     aggregate_table_csv,
+    aggregate_bars,
+    aggregate_satisfaction_histograms,
     _get_satisfaction,
     _get_avg_relevance,
     _get_avg_relevance_by_source,
+    _get_mass_metrics,
+    _get_sparse_lift,
+    _get_sparse_satisfaction_component,
     _norm_frac,
 )
 
@@ -30,8 +35,7 @@ def _sparse_fractions_set(critiques: List[Dict]) -> List[str]:
 
 
 def _get_judge_reply(critique: Dict) -> str:
-    """Reply from the first parsed judgement (legacy or new). Returns ""
-    when nothing parsed."""
+    """Reply from the first parsed judgement (legacy or new). Returns "" when nothing parsed."""
     outs = critique.get("judge_outputs")
     if isinstance(outs, list):
         for jo in outs:
@@ -49,6 +53,71 @@ def _get_judge_reply(critique: Dict) -> str:
     return parsed.get("reply", "") or ""
 
 
+def _write_aggregate_section(
+    lines: List[str],
+    critiques: List[Dict],
+    run_dir: str,
+    sparse_fracs: List[str],
+    n_prompts: int,
+    label: str = "",
+    suffix: str = "",
+) -> None:
+    """Write one aggregate block (contour plot + table) into ``lines``.
+
+    ``label`` is shown as a sub-heading when non-empty, enabling the caller
+    to emit multiple aggregate sections (e.g. sparse-only, sae-sparse) by
+    calling this function once per subset. ``suffix`` disambiguates file names.
+
+    Frac=0.00 is excluded here; the underlying plotting functions also
+    enforce this, but filtering here keeps the table rows consistent.
+
+    Door is open for a future delta section: collect the per-frac dicts
+    from two calls and subtract.
+    """
+    import numpy as np
+
+    heading = f"## Aggregate{' — ' + label if label else ''}"
+    lines.append(f"\n{heading}\n\n")
+
+    contour_fname = f"aggregate_contour{'_' + suffix if suffix else ''}.png"
+    aggregate_contour(run_dir, critiques, sparse_fracs, n_prompts, suffix=suffix)
+    lines.append(f"![Aggregate contour]({os.path.join('report_assets', contour_fname)}){{ width=80% }}\n\n")
+
+    aggregate_table_csv(run_dir, critiques, sparse_fracs, suffix=suffix)
+
+    lines.append("| sparse_frac | satisfaction | sparse_mass | dense_mass | sparse_lift | sparse_sat_component |\n")
+    lines.append("|------|------|------|------|------|------|\n")
+    for frac in sparse_fracs:
+        sat_vals: List[float] = []
+        sm_vals: List[float] = []
+        dm_vals: List[float] = []
+        lift_vals: List[float] = []
+        ssc_vals: List[float] = []
+        for c in critiques:
+            if _norm_frac(c.get("sparse_fraction", "")) != frac:
+                continue
+            s = _get_satisfaction(c)
+            if s >= 1:
+                sat_vals.append(float(s))
+            sm, dm = _get_mass_metrics(c)
+            if not np.isnan(sm):
+                sm_vals.append(sm)
+            if not np.isnan(dm):
+                dm_vals.append(dm)
+            lift = _get_sparse_lift(c)
+            if not np.isnan(lift):
+                lift_vals.append(lift)
+            ssc = _get_sparse_satisfaction_component(c)
+            if not np.isnan(ssc):
+                ssc_vals.append(ssc)
+        sat_s = f"{np.mean(sat_vals):.2f}" if sat_vals else ""
+        sm_s = f"{np.mean(sm_vals):.3f}" if sm_vals else ""
+        dm_s = f"{np.mean(dm_vals):.3f}" if dm_vals else ""
+        lift_s = f"{np.mean(lift_vals):.3f}" if lift_vals else ""
+        ssc_s = f"{np.mean(ssc_vals):.3f}" if ssc_vals else ""
+        lines.append(f"| {frac} | {sat_s} | {sm_s} | {dm_s} | {lift_s} | {ssc_s} |\n")
+
+
 def build_report(run_dir: str) -> str:
     """Build report.md. Returns path."""
     report_path = os.path.join(run_dir, "report.md")
@@ -60,6 +129,7 @@ def build_report(run_dir: str) -> str:
         return report_path
 
     all_sparse_fractions = _sparse_fractions_set(all_critiques)
+    agg_sparse_fractions = all_sparse_fractions
     topk = max((c.get("topk", 6) for c in all_critiques), default=6)
 
     prompt_critiques: Dict[int, List[Dict]] = {}
@@ -85,6 +155,40 @@ def build_report(run_dir: str) -> str:
     lines.append(f"Total configurations: {n_prompts * len(all_sparse_fractions)}\n")
     lines.append(f"Missing configurations: {failures_count}\n")
 
+    # Aggregate section(s) before per-prompt data.
+    # Group by sparse_collection so variable and control get separate blocks.
+    collections_seen: list = []
+    seen_set: set = set()
+    for c in all_critiques:
+        col = c.get("sparse_collection", "")
+        if col not in seen_set:
+            seen_set.add(col)
+            collections_seen.append(col)
+
+    if len(collections_seen) <= 1:
+        # Single collection — one unlabelled aggregate block.
+        _write_aggregate_section(
+            lines, all_critiques, run_dir, agg_sparse_fractions, n_prompts,
+        )
+    else:
+        for col in collections_seen:
+            subset = [c for c in all_critiques if c.get("sparse_collection", "") == col]
+            subset_fracs = _sparse_fractions_set(subset)
+            safe_suffix = col.replace("/", "_").replace(" ", "_")
+            _write_aggregate_section(
+                lines, subset, run_dir, subset_fracs, n_prompts,
+                label=col, suffix=safe_suffix,
+            )
+
+    # Aggregate comparison bar charts (all collections together).
+    lines.append("\n## Aggregate — Collection Comparison\n\n")
+    aggregate_satisfaction_histograms(run_dir, all_critiques)
+    bar_sat_path, bar_ssc_path = aggregate_bars(run_dir, all_critiques)
+    lines.append(f"![Satisfaction distribution by collection](report_assets/aggregate_hist_satisfaction.png){{ width=80% }}\n\n")
+    lines.append(f"![Mean satisfaction by collection](report_assets/aggregate_bar_satisfaction.png){{ width=80% }}\n\n")
+    lines.append(f"![Sparse-supported satisfaction by collection](report_assets/aggregate_bar_sparse_satisfaction_component.png){{ width=80% }}\n\n")
+
+    # Per-prompt sections
     for pi in sorted_indices:
         pc = prompt_critiques.get(pi, [])
         lines.append(f"\n## Prompt {pi:03d}\n")
@@ -110,39 +214,6 @@ def build_report(run_dir: str) -> str:
             lines.append(f"| {frac} | {reply_display} |\n")
         lines.append("\n")
 
-    aggregate_table_csv(run_dir, all_critiques, all_sparse_fractions)
-    aggregate_contour(run_dir, all_critiques, all_sparse_fractions, n_prompts)
-
-    lines.append("\n## Aggregate\n\n")
-    lines.append("![Aggregate contour](report_assets/aggregate_contour.png){ width=80% }\n\n")
-    lines.append("| sparse_frac | satisfaction | avg_relevance | dense_rel | sparse_rel |\n")
-    lines.append("|------|------|------|------|------|\n")
-    for frac in all_sparse_fractions:
-        import numpy as np
-        sat_vals: List[float] = []
-        rel_vals: List[float] = []
-        d_vals: List[float] = []
-        sp_vals: List[float] = []
-        for c in all_critiques:
-            if _norm_frac(c.get("sparse_fraction", "")) != frac:
-                continue
-            s = _get_satisfaction(c)
-            if s >= 1:
-                sat_vals.append(float(s))
-            r = _get_avg_relevance(c)
-            if not np.isnan(r):
-                rel_vals.append(r)
-            d, sp = _get_avg_relevance_by_source(c)
-            if not np.isnan(d):
-                d_vals.append(d)
-            if not np.isnan(sp):
-                sp_vals.append(sp)
-        sat_s = f"{np.mean(sat_vals):.2f}" if sat_vals else ""
-        rel_s = f"{np.mean(rel_vals):.2f}" if rel_vals else ""
-        d_s = f"{np.mean(d_vals):.2f}" if d_vals else ""
-        sp_s = f"{np.mean(sp_vals):.2f}" if sp_vals else ""
-        lines.append(f"| {frac} | {sat_s} | {rel_s} | {d_s} | {sp_s} |\n")
-
     lines.append("\n## Missing Configurations\n")
     total_configs = n_prompts * len(all_sparse_fractions)
     present_configs = len({(c.get("prompt_index", 0), _norm_frac(c.get("sparse_fraction", "")))
@@ -160,6 +231,7 @@ def build_report(run_dir: str) -> str:
         lines.append(f"Topk: {config_data.get('topk', '?')}\n")
         lines.append(f"Sparse step: {config_data.get('sparse_step', '?')}\n")
         lines.append(f"Judge model: {config_data.get('judge_model', '?')}\n")
+        lines.append(f"Judge temperature: {config_data.get('judge_temperature', '?')}\n")
         lines.append(f"Judge base URL: {config_data.get('judge_base_url', '?')}\n")
         lines.append(f"Embed URL: {config_data.get('embed_url', '?')}\n")
         lines.append(f"Timestamp: {config_data.get('timestamp_utc', '?')}\n")
@@ -186,11 +258,7 @@ def render_pdf(
     md_filename: str = "report.md",
     engine: Optional[str] = None,
 ) -> Optional[str]:
-    """Render report.md -> report.pdf via pandoc. Returns PDF path or None.
-
-    Auto-picks engine when not specified. Skips with a warning if pandoc
-    or no engine available.
-    """
+    """Render report.md -> report.pdf via pandoc. Returns PDF path or None."""
     if not shutil.which("pandoc"):
         logger.warning("pandoc not on PATH; skipping PDF render")
         return None
@@ -218,7 +286,6 @@ def render_pdf(
         "-V", "geometry:margin=0.75in",
     ]
     if chosen in ("pdflatex", "xelatex", "lualatex"):
-        # Float placement: keep figures where written, prevent drift.
         cmd += ["-V", "figure-pos=H"]
 
     try:
